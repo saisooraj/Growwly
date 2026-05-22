@@ -24,7 +24,16 @@ export default function LoginPage() {
     }
   }
 
-  if (loading) return null
+  if (loading) return (
+    <div className="min-h-screen bg-[#06030F] flex items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-12 h-12 rounded-2xl flex items-center justify-center animate-pulse bg-gradient-to-br from-brand-500 to-fuchsia-500 shadow-lg shadow-brand-500/30">
+          <TrendingUp size={24} className="text-white" />
+        </div>
+        <p className="text-sm text-slate-400 font-medium">Loading Growwly...</p>
+      </div>
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-[#06030F] flex items-center justify-center p-4 relative overflow-hidden">

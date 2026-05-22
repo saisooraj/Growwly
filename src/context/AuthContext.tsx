@@ -25,38 +25,38 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
 })
 
-function isMobile() {
-  return /Mobi|Android|iPhone|iPad|iPod/i.test(
-    typeof navigator !== 'undefined' ? navigator.userAgent : ''
-  )
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let unsub: (() => void) | null = null
-
-    // Wait for redirect result FIRST, then start auth listener
-    // This prevents the flash-to-null that causes blank screen on mobile
+    // Handle any pending redirect result first, then listen for auth state
     getRedirectResult(auth)
       .catch(() => {})
       .finally(() => {
-        unsub = onAuthStateChanged(auth, (u) => {
+        const unsub = onAuthStateChanged(auth, (u) => {
           setUser(u)
           setLoading(false)
         })
+        return unsub
       })
-
-    return () => { unsub?.() }
   }, [])
 
   async function signInWithGoogle() {
-    if (isMobile()) {
-      await signInWithRedirect(auth, googleProvider)
-    } else {
+    try {
+      // Try popup first — works on desktop and most mobile browsers
       await signInWithPopup(auth, googleProvider)
+    } catch (err: any) {
+      // Popup blocked (common on mobile) — fall back to redirect
+      if (
+        err?.code === 'auth/popup-blocked' ||
+        err?.code === 'auth/popup-closed-by-user' ||
+        err?.code === 'auth/cancelled-popup-request'
+      ) {
+        await signInWithRedirect(auth, googleProvider)
+      } else {
+        throw err
+      }
     }
   }
 
