@@ -7,12 +7,19 @@ import { Toaster } from 'react-hot-toast'
 export const metadata: Metadata = {
   title: 'Growwly – Personal Finance Tracker',
   description: 'Track expenses, plan budgets, and grow your finances.',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Growwly',
+  },
 }
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
+  themeColor: '#7c3aed',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
