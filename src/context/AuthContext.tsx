@@ -36,14 +36,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Handle redirect result when returning from Google on mobile
-    getRedirectResult(auth).catch(() => {})
+    let unsub: (() => void) | null = null
 
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u)
-      setLoading(false)
-    })
-    return unsub
+    // Wait for redirect result FIRST, then start auth listener
+    // This prevents the flash-to-null that causes blank screen on mobile
+    getRedirectResult(auth)
+      .catch(() => {})
+      .finally(() => {
+        unsub = onAuthStateChanged(auth, (u) => {
+          setUser(u)
+          setLoading(false)
+        })
+      })
+
+    return () => { unsub?.() }
   }, [])
 
   async function signInWithGoogle() {
