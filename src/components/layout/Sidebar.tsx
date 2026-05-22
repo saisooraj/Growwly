@@ -37,7 +37,7 @@ export default function Sidebar() {
   const isHighExpense = settings?.financialMode === 'high-expense'
 
   return (
-    <aside className="hidden lg:flex flex-col w-64 min-h-screen bg-[#0A0B14] text-white border-r border-[#151728]">
+    <aside className="hidden lg:flex flex-col w-64 h-screen sticky top-0 bg-[#0A0B14] text-white border-r border-[#151728] flex-shrink-0">
       {/* Logo */}
       <div className="px-6 py-5 border-b border-[#151728]">
         <div className="flex items-center gap-2.5">

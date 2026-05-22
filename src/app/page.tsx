@@ -12,6 +12,7 @@ import CashFlowChart from '@/components/dashboard/CashFlowChart'
 import WeeklyTracker from '@/components/dashboard/WeeklyTracker'
 import AlertsPanel from '@/components/dashboard/AlertsPanel'
 import EmergencyFundCard from '@/components/dashboard/EmergencyFundCard'
+import QuoteCard from '@/components/dashboard/QuoteCard'
 import MonthlyRecap from '@/components/dashboard/MonthlyRecap'
 import RecurringPromptModal from '@/components/dashboard/RecurringPromptModal'
 import TransactionList from '@/components/transactions/TransactionList'
@@ -33,6 +34,7 @@ export default function DashboardPage() {
         </div>
       ) : (
         <div className="space-y-5">
+          <QuoteCard />
           <AlertsPanel />
           <SummaryCards />
 
