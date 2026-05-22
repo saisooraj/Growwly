@@ -4,6 +4,8 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import {
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   User,
 } from 'firebase/auth'
@@ -23,11 +25,20 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
 })
 
+function isMobile() {
+  return /Mobi|Android|iPhone|iPad|iPod/i.test(
+    typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  )
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Handle redirect result when returning from Google on mobile
+    getRedirectResult(auth).catch(() => {})
+
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u)
       setLoading(false)
@@ -36,7 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   async function signInWithGoogle() {
-    await signInWithPopup(auth, googleProvider)
+    if (isMobile()) {
+      await signInWithRedirect(auth, googleProvider)
+    } else {
+      await signInWithPopup(auth, googleProvider)
+    }
   }
 
   async function logout() {
