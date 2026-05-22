@@ -6,8 +6,6 @@ import {
   signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
-  setPersistence,
-  browserSessionPersistence,
   signOut,
   User,
 } from 'firebase/auth'
@@ -16,51 +14,61 @@ import { auth, googleProvider } from '@/lib/firebase'
 interface AuthContextType {
   user: User | null
   loading: boolean
-  signInWithGoogle: () => void   // intentionally NOT async — preserves Safari gesture context
+  authError: string | null
+  signInWithGoogle: () => void
   logout: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  authError: null,
   signInWithGoogle: () => {},
   logout: async () => {},
 })
 
-const POPUP_FALLBACK_CODES = new Set([
-  'auth/popup-blocked',
-  'auth/popup-closed-by-user',
-  'auth/cancelled-popup-request',
-  'auth/operation-not-supported-in-this-environment', // iOS Safari throws this
-])
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Handle pending redirect result first, then start auth listener
+    // Set up auth listener immediately
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u)
+      setLoading(false)
+    })
+
+    // Process any pending redirect result (fires onAuthStateChanged if successful)
     getRedirectResult(auth)
-      .catch(() => {})
-      .finally(() => {
-        const unsub = onAuthStateChanged(auth, (u) => {
-          setUser(u)
-          setLoading(false)
-        })
-        return unsub
+      .then((result) => {
+        if (result?.user) setAuthError(null)
       })
+      .catch((err) => {
+        // Surface the real error so we can debug
+        setAuthError(`redirect_error: ${err?.code ?? err?.message ?? 'unknown'}`)
+        setLoading(false)
+      })
+
+    return unsub
   }, [])
 
-  // NOT async — must call signInWithPopup synchronously within the user-gesture
-  // stack so Safari doesn't consider it a non-gesture popup and block it
   function signInWithGoogle() {
-    signInWithPopup(auth, googleProvider).catch((err) => {
-      if (POPUP_FALLBACK_CODES.has(err?.code)) {
-        // Popup blocked or unsupported (common on iOS Safari) — use redirect
-        // Session persistence avoids ITP restrictions on localStorage
-        setPersistence(auth, browserSessionPersistence)
-          .then(() => signInWithRedirect(auth, googleProvider))
-          .catch(() => {})
+    setAuthError(null)
+    signInWithPopup(auth, googleProvider).catch((popupErr) => {
+      const code = popupErr?.code ?? ''
+      // Surface popup error for debugging
+      setAuthError(`popup_error: ${code}`)
+
+      const shouldRedirect =
+        code === 'auth/popup-blocked' ||
+        code === 'auth/popup-closed-by-user' ||
+        code === 'auth/cancelled-popup-request' ||
+        code === 'auth/operation-not-supported-in-this-environment'
+
+      if (shouldRedirect) {
+        setAuthError(`popup_failed(${code})_trying_redirect`)
+        signInWithRedirect(auth, googleProvider)
       }
     })
   }
@@ -70,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, loading, authError, signInWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   )
