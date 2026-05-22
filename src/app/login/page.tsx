@@ -16,9 +16,9 @@ export default function LoginPage() {
     if (!loading && user) router.replace('/')
   }, [user, loading])
 
-  async function handleLogin() {
+  function handleLogin() {
     try {
-      await signInWithGoogle()
+      signInWithGoogle() // not awaited — must stay synchronous for iOS Safari popup gesture
     } catch {
       toast.error('Sign-in failed. Try again.')
     }
