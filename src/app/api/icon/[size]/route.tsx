@@ -5,22 +5,24 @@ export const runtime = 'edge'
 
 export async function GET(_: NextRequest, { params }: { params: { size: string } }) {
   const size = parseInt(params.size) || 192
-  const radius = Math.round(size * 0.22)
-  const fontSize = Math.round(size * 0.55)
 
   return new ImageResponse(
     <div
       style={{
-        background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
         width: size,
         height: size,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: radius,
+        background: '#06030F',
       }}
     >
-      <span style={{ color: 'white', fontSize, fontWeight: 900, lineHeight: 1 }}>G</span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="https://growwly-v1.vercel.app/logo.png"
+        alt="Growwly"
+        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+      />
     </div>,
     { width: size, height: size }
   )

@@ -8,16 +8,20 @@ export default function AppleIcon() {
   return new ImageResponse(
     <div
       style={{
-        background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
         width: '100%',
         height: '100%',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        borderRadius: 40,
+        background: '#06030F',
       }}
     >
-      <span style={{ color: 'white', fontSize: 110, fontWeight: 900 }}>G</span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="https://growwly-v1.vercel.app/logo.png"
+        alt="Growwly"
+        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+      />
     </div>,
     { ...size }
   )
