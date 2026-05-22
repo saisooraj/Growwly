@@ -12,6 +12,8 @@ import CashFlowChart from '@/components/dashboard/CashFlowChart'
 import WeeklyTracker from '@/components/dashboard/WeeklyTracker'
 import AlertsPanel from '@/components/dashboard/AlertsPanel'
 import EmergencyFundCard from '@/components/dashboard/EmergencyFundCard'
+import MonthlyRecap from '@/components/dashboard/MonthlyRecap'
+import RecurringPromptModal from '@/components/dashboard/RecurringPromptModal'
 import TransactionList from '@/components/transactions/TransactionList'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import { Plus } from 'lucide-react'
@@ -69,6 +71,8 @@ export default function DashboardPage() {
       </button>
 
       <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />
+      <MonthlyRecap />
+      <RecurringPromptModal />
     </AppShell>
   )
 }

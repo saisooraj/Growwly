@@ -6,6 +6,7 @@ import type {
   Borrowing,
   EmergencyFund,
   UserSettings,
+  SavingsGoal,
 } from '@/types'
 import { getCurrentMonth } from '@/lib/utils'
 
@@ -16,6 +17,7 @@ interface AppState {
   borrowings: Borrowing[]
   emergencyFund: EmergencyFund | null
   settings: UserSettings | null
+  savingsGoals: SavingsGoal[]
   selectedMonth: string
   loading: boolean
   initialized: boolean
@@ -26,6 +28,7 @@ interface AppState {
   setBorrowings: (b: Borrowing[]) => void
   setEmergencyFund: (e: EmergencyFund | null) => void
   setSettings: (s: UserSettings | null) => void
+  setSavingsGoals: (g: SavingsGoal[]) => void
   setSelectedMonth: (m: string) => void
   setLoading: (l: boolean) => void
   setInitialized: (i: boolean) => void
@@ -39,6 +42,7 @@ export const useAppStore = create<AppState>((set) => ({
   borrowings: [],
   emergencyFund: null,
   settings: null,
+  savingsGoals: [],
   selectedMonth: getCurrentMonth(),
   loading: false,
   initialized: false,
@@ -49,6 +53,7 @@ export const useAppStore = create<AppState>((set) => ({
   setBorrowings: (borrowings) => set({ borrowings }),
   setEmergencyFund: (emergencyFund) => set({ emergencyFund }),
   setSettings: (settings) => set({ settings }),
+  setSavingsGoals: (savingsGoals) => set({ savingsGoals }),
   setSelectedMonth: (selectedMonth) => set({ selectedMonth }),
   setLoading: (loading) => set({ loading }),
   setInitialized: (initialized) => set({ initialized }),
@@ -60,6 +65,7 @@ export const useAppStore = create<AppState>((set) => ({
       borrowings: [],
       emergencyFund: null,
       settings: null,
+      savingsGoals: [],
       selectedMonth: getCurrentMonth(),
       initialized: false,
     }),

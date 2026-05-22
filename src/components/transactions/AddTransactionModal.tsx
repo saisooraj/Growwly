@@ -2,13 +2,13 @@
 
 import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { X, Plus } from 'lucide-react'
+import { X, RefreshCw } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { format } from 'date-fns'
 import { addTransaction, updateTransaction } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/utils'
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, buildMonthlySummary, getCurrentMonth } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
 import type { Transaction, TransactionType } from '@/types'
 import toast from 'react-hot-toast'
@@ -20,6 +20,7 @@ interface FormData {
   date: string
   notes: string
   projectId: string
+  isRecurring: boolean
 }
 
 interface Props {
@@ -31,7 +32,7 @@ interface Props {
 export default function AddTransactionModal({ open, onClose, editTx }: Props) {
   const { user } = useAuth()
   const refresh = useRefreshData()
-  const projects = useAppStore((s) => s.projects)
+  const { projects, budgets, transactions } = useAppStore()
 
   const { register, handleSubmit, watch, reset, formState: { isSubmitting } } = useForm<FormData>({
     defaultValues: {
@@ -41,21 +42,40 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
       date: editTx?.date ?? format(new Date(), 'yyyy-MM-dd'),
       notes: editTx?.notes ?? '',
       projectId: editTx?.projectId ?? '',
+      isRecurring: editTx?.isRecurring ?? false,
     },
   })
 
   const txType = watch('type')
   const categories = txType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
 
+  function checkBudgetAlert(category: string, addedAmount: number, date: string) {
+    const month = date.slice(0, 7)
+    const budget = budgets.find(b => b.month === month && b.category === category)
+    if (!budget || budget.planned === 0) return
+    const summary = buildMonthlySummary(transactions, month)
+    const alreadySpent = summary.byCategory[category as keyof typeof summary.byCategory] ?? 0
+    const newTotal = alreadySpent + addedAmount
+    const pct = (newTotal / budget.planned) * 100
+    if (pct >= 100) {
+      toast.error(`🔴 Over budget on ${category}! Spent ₹${Math.round(newTotal).toLocaleString('en-IN')} of ₹${budget.planned.toLocaleString('en-IN')}`, { duration: 5000 })
+    } else if (pct >= 80) {
+      toast(`⚠️ ${Math.round(pct)}% of ${category} budget used`, { duration: 4000, icon: '🟡' })
+    }
+  }
+
   async function onSubmit(data: FormData) {
     if (!user) return
     try {
+      const dateStr = data.date
       const payload = {
         type: data.type,
         amount: Number(data.amount),
         category: data.category as Transaction['category'],
-        date: data.date,
+        date: dateStr,
         notes: data.notes,
+        isRecurring: data.isRecurring,
+        ...(data.isRecurring ? { recurringDay: new Date(dateStr).getDate() } : {}),
         ...(data.projectId ? { projectId: data.projectId } : {}),
       }
       if (editTx) {
@@ -64,6 +84,9 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
       } else {
         await addTransaction(user.uid, payload)
         toast.success('Transaction added')
+        if (data.type === 'expense') {
+          checkBudgetAlert(data.category, Number(data.amount), dateStr)
+        }
       }
       await refresh()
       reset()
@@ -183,6 +206,20 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                       {...register('notes')}
                     />
                   </div>
+
+                  {/* Recurring toggle */}
+                  <label className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-[#1a1d30] cursor-pointer hover:bg-slate-100 dark:hover:bg-[#1e2238] transition-colors">
+                    <input type="checkbox" {...register('isRecurring')} className="sr-only" />
+                    <div className={`w-9 h-5 rounded-full transition-colors flex items-center px-0.5 ${watch('isRecurring') ? 'bg-brand-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                      <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${watch('isRecurring') ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                        <RefreshCw size={13} className="text-brand-500" /> Repeat monthly
+                      </p>
+                      <p className="text-xs text-slate-400">We'll remind you to log this every month</p>
+                    </div>
+                  </label>
 
                   <button
                     type="submit"

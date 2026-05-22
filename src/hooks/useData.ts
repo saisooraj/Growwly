@@ -10,6 +10,7 @@ import {
   getUserBorrowings,
   getEmergencyFund,
   getUserSettings,
+  getUserSavingsGoals,
 } from '@/lib/firestore'
 
 export function useData() {
@@ -21,6 +22,7 @@ export function useData() {
     setBorrowings,
     setEmergencyFund,
     setSettings,
+    setSavingsGoals,
     setLoading,
     setInitialized,
     initialized,
@@ -38,7 +40,7 @@ export function useData() {
       if (!user) return
       setLoading(true)
       try {
-        const [txs, budgets, projects, borrowings, ef, settings] =
+        const [txs, budgets, projects, borrowings, ef, settings, goals] =
           await Promise.all([
             getUserTransactions(user.uid),
             getUserBudgets(user.uid),
@@ -46,6 +48,7 @@ export function useData() {
             getUserBorrowings(user.uid),
             getEmergencyFund(user.uid),
             getUserSettings(user.uid),
+            getUserSavingsGoals(user.uid),
           ])
         setTransactions(txs)
         setBudgets(budgets)
@@ -53,6 +56,7 @@ export function useData() {
         setBorrowings(borrowings)
         setEmergencyFund(ef)
         setSettings(settings)
+        setSavingsGoals(goals)
         setInitialized(true)
       } finally {
         setLoading(false)
@@ -72,6 +76,7 @@ export function useRefreshData() {
     setBorrowings,
     setEmergencyFund,
     setSettings,
+    setSavingsGoals,
     setLoading,
     setInitialized,
   } = useAppStore()
@@ -81,7 +86,7 @@ export function useRefreshData() {
     setInitialized(false)
     setLoading(true)
     try {
-      const [txs, budgets, projects, borrowings, ef, settings] =
+      const [txs, budgets, projects, borrowings, ef, settings, goals] =
         await Promise.all([
           getUserTransactions(user.uid),
           getUserBudgets(user.uid),
@@ -89,6 +94,7 @@ export function useRefreshData() {
           getUserBorrowings(user.uid),
           getEmergencyFund(user.uid),
           getUserSettings(user.uid),
+          getUserSavingsGoals(user.uid),
         ])
       setTransactions(txs)
       setBudgets(budgets)
@@ -96,6 +102,7 @@ export function useRefreshData() {
       setBorrowings(borrowings)
       setEmergencyFund(ef)
       setSettings(settings)
+      setSavingsGoals(goals)
       setInitialized(true)
     } finally {
       setLoading(false)

@@ -28,6 +28,18 @@ export interface Transaction {
   createdAt: string
   projectId?: string
   isRecurring?: boolean
+  recurringDay?: number // day-of-month to repeat (1–31)
+}
+
+export interface SavingsGoal {
+  id: string
+  userId: string
+  name: string
+  emoji: string
+  targetAmount: number
+  currentAmount: number
+  targetDate?: string // YYYY-MM-DD
+  createdAt: string
 }
 
 export interface Budget {

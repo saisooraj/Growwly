@@ -18,6 +18,7 @@ import type {
   Borrowing,
   EmergencyFund,
   UserSettings,
+  SavingsGoal,
 } from '@/types'
 
 // ── Transactions ────────────────────────────────────────────────────────────
@@ -197,6 +198,39 @@ export async function setUserSettings(
       updatedAt: new Date().toISOString(),
     })
   }
+}
+
+// ── Savings Goals ─────────────────────────────────────────────────────────────
+
+export async function addSavingsGoal(
+  userId: string,
+  data: Omit<SavingsGoal, 'id' | 'userId' | 'createdAt'>
+): Promise<string> {
+  const ref = await addDoc(collection(db, 'savingsGoals'), {
+    ...data,
+    userId,
+    createdAt: new Date().toISOString(),
+  })
+  return ref.id
+}
+
+export async function updateSavingsGoal(
+  id: string,
+  data: Partial<SavingsGoal>
+): Promise<void> {
+  await updateDoc(doc(db, 'savingsGoals', id), data)
+}
+
+export async function deleteSavingsGoal(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'savingsGoals', id))
+}
+
+export async function getUserSavingsGoals(userId: string): Promise<SavingsGoal[]> {
+  const q = query(collection(db, 'savingsGoals'), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as SavingsGoal))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
 }
 
 // ── Backup / Restore ─────────────────────────────────────────────────────────

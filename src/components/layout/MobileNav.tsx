@@ -6,7 +6,7 @@ import {
   LayoutDashboard,
   ArrowLeftRight,
   CalendarDays,
-  LineChart,
+  Target,
   HandCoins,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -15,7 +15,7 @@ const NAV = [
   { href: '/',             icon: LayoutDashboard, label: 'Home' },
   { href: '/transactions', icon: ArrowLeftRight,  label: 'Txns' },
   { href: '/planning',     icon: CalendarDays,    label: 'Plan' },
-  { href: '/market',       icon: LineChart,       label: 'Market' },
+  { href: '/goals',        icon: Target,          label: 'Goals' },
   { href: '/borrowings',   icon: HandCoins,       label: 'Borrow' },
 ]
 

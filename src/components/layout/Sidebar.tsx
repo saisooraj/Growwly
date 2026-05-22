@@ -12,6 +12,7 @@ import {
   TrendingUp,
   Flame,
   LineChart,
+  Target,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
@@ -22,6 +23,7 @@ const NAV = [
   { href: '/',             icon: LayoutDashboard, label: 'Dashboard' },
   { href: '/transactions', icon: ArrowLeftRight,  label: 'Transactions' },
   { href: '/planning',     icon: CalendarDays,    label: 'Planning' },
+  { href: '/goals',        icon: Target,          label: 'Savings Goals' },
   { href: '/projects',     icon: FolderKanban,    label: 'Projects' },
   { href: '/borrowings',   icon: HandCoins,       label: 'Borrowings' },
   { href: '/market',       icon: LineChart,       label: 'Market Watch' },

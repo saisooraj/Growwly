@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Trash2, Edit2, CheckCircle } from 'lucide-react'
+import { Trash2, Edit2, CheckCircle, MessageCircle } from 'lucide-react'
 import { deleteBorrowing, updateBorrowing } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
 import { useAppStore } from '@/store/appStore'
@@ -18,6 +18,14 @@ const STATUS_STYLES = {
   pending: 'bg-yellow-100 text-yellow-700',
   partial: 'bg-blue-100 text-blue-700',
   repaid: 'bg-green-100 text-green-700',
+}
+
+function buildWhatsAppLink(b: Borrowing): string {
+  const outstanding = b.amount - b.repaidAmount
+  const msg = b.type === 'lent'
+    ? `Hi ${b.person}, just a reminder that you owe me ₹${outstanding.toLocaleString('en-IN')}${b.description ? ` for ${b.description}` : ''}. Please let me know when you can repay. Thanks!`
+    : `Hi ${b.person}, I still owe you ₹${outstanding.toLocaleString('en-IN')}${b.description ? ` for ${b.description}` : ''}. I'll arrange to repay soon.`
+  return `https://wa.me/?text=${encodeURIComponent(msg)}`
 }
 
 export default function BorrowingsList({ onEdit }: Props) {
@@ -98,9 +106,20 @@ export default function BorrowingsList({ onEdit }: Props) {
                 )}
                 <div className="flex gap-1">
                   {b.status !== 'repaid' && (
-                    <button onClick={() => markRepaid(b)} className="p-1.5 rounded-lg hover:bg-green-100 text-slate-400 hover:text-green-600">
-                      <CheckCircle size={14} />
-                    </button>
+                    <>
+                      <button onClick={() => markRepaid(b)} className="p-1.5 rounded-lg hover:bg-green-100 text-slate-400 hover:text-green-600" title="Mark repaid">
+                        <CheckCircle size={14} />
+                      </button>
+                      <a
+                        href={buildWhatsAppLink(b)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 rounded-lg hover:bg-green-100 text-slate-400 hover:text-green-600"
+                        title="Send WhatsApp reminder"
+                      >
+                        <MessageCircle size={14} />
+                      </a>
+                    </>
                   )}
                   <button onClick={() => onEdit(b)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
                     <Edit2 size={14} />
