@@ -1,0 +1,256 @@
+import {
+  collection,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  getDocs,
+  query,
+  where,
+  setDoc,
+  getDoc,
+} from 'firebase/firestore'
+import { db } from './firebase'
+import type {
+  Transaction,
+  Budget,
+  Project,
+  Borrowing,
+  EmergencyFund,
+  UserSettings,
+} from '@/types'
+
+// ── Transactions ────────────────────────────────────────────────────────────
+
+export async function addTransaction(
+  userId: string,
+  data: Omit<Transaction, 'id' | 'userId' | 'createdAt'>
+): Promise<string> {
+  const ref = await addDoc(collection(db, 'transactions'), {
+    ...data,
+    userId,
+    createdAt: new Date().toISOString(),
+  })
+  return ref.id
+}
+
+export async function updateTransaction(
+  id: string,
+  data: Partial<Transaction>
+): Promise<void> {
+  await updateDoc(doc(db, 'transactions', id), data)
+}
+
+export async function deleteTransaction(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'transactions', id))
+}
+
+export async function getUserTransactions(
+  userId: string
+): Promise<Transaction[]> {
+  const q = query(collection(db, 'transactions'), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as Transaction))
+    .sort((a, b) => b.date.localeCompare(a.date))
+}
+
+// ── Budgets ──────────────────────────────────────────────────────────────────
+
+export async function setBudget(
+  userId: string,
+  month: string,
+  category: string,
+  planned: number
+): Promise<void> {
+  const id = `${userId}_${month}_${category.replace(/\s+/g, '_').replace(/\//g, '-')}`
+  await setDoc(doc(db, 'budgets', id), {
+    userId,
+    month,
+    category,
+    planned,
+    createdAt: new Date().toISOString(),
+  })
+}
+
+export async function getUserBudgets(userId: string): Promise<Budget[]> {
+  const q = query(
+    collection(db, 'budgets'),
+    where('userId', '==', userId)
+  )
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Budget))
+}
+
+// ── Projects ─────────────────────────────────────────────────────────────────
+
+export async function addProject(
+  userId: string,
+  data: Omit<Project, 'id' | 'userId' | 'createdAt'>
+): Promise<string> {
+  const ref = await addDoc(collection(db, 'projects'), {
+    ...data,
+    userId,
+    createdAt: new Date().toISOString(),
+  })
+  return ref.id
+}
+
+export async function updateProject(
+  id: string,
+  data: Partial<Project>
+): Promise<void> {
+  await updateDoc(doc(db, 'projects', id), data)
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'projects', id))
+}
+
+export async function getUserProjects(userId: string): Promise<Project[]> {
+  const q = query(collection(db, 'projects'), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as Project))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+// ── Borrowings ───────────────────────────────────────────────────────────────
+
+export async function addBorrowing(
+  userId: string,
+  data: Omit<Borrowing, 'id' | 'userId' | 'createdAt'>
+): Promise<string> {
+  const ref = await addDoc(collection(db, 'borrowings'), {
+    ...data,
+    userId,
+    createdAt: new Date().toISOString(),
+  })
+  return ref.id
+}
+
+export async function updateBorrowing(
+  id: string,
+  data: Partial<Borrowing>
+): Promise<void> {
+  await updateDoc(doc(db, 'borrowings', id), data)
+}
+
+export async function deleteBorrowing(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'borrowings', id))
+}
+
+export async function getUserBorrowings(userId: string): Promise<Borrowing[]> {
+  const q = query(collection(db, 'borrowings'), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as Borrowing))
+    .sort((a, b) => b.date.localeCompare(a.date))
+}
+
+// ── Emergency Fund ───────────────────────────────────────────────────────────
+
+export async function getEmergencyFund(
+  userId: string
+): Promise<EmergencyFund | null> {
+  const ref = doc(db, 'emergencyFunds', userId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) return null
+  return { id: snap.id, ...snap.data() } as EmergencyFund
+}
+
+export async function setEmergencyFund(
+  userId: string,
+  data: Omit<EmergencyFund, 'id' | 'userId'>
+): Promise<void> {
+  await setDoc(doc(db, 'emergencyFunds', userId), {
+    ...data,
+    userId,
+    lastUpdated: new Date().toISOString(),
+  })
+}
+
+// ── User Settings ─────────────────────────────────────────────────────────────
+
+export async function getUserSettings(
+  userId: string
+): Promise<UserSettings | null> {
+  const ref = doc(db, 'userSettings', userId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) return null
+  return { id: snap.id, ...snap.data() } as UserSettings
+}
+
+export async function setUserSettings(
+  userId: string,
+  data: Partial<UserSettings>
+): Promise<void> {
+  const ref = doc(db, 'userSettings', userId)
+  const existing = await getDoc(ref)
+  if (existing.exists()) {
+    await updateDoc(ref, { ...data, updatedAt: new Date().toISOString() })
+  } else {
+    await setDoc(ref, {
+      ...data,
+      userId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+  }
+}
+
+// ── Backup / Restore ─────────────────────────────────────────────────────────
+
+export async function exportAllUserData(userId: string) {
+  const [transactions, budgets, projects, borrowings, emergencyFund, settings] =
+    await Promise.all([
+      getUserTransactions(userId),
+      getUserBudgets(userId),
+      getUserProjects(userId),
+      getUserBorrowings(userId),
+      getEmergencyFund(userId),
+      getUserSettings(userId),
+    ])
+  return {
+    exportedAt: new Date().toISOString(),
+    userId,
+    transactions,
+    budgets,
+    projects,
+    borrowings,
+    emergencyFund,
+    settings,
+  }
+}
+
+export async function importAllUserData(
+  userId: string,
+  data: Awaited<ReturnType<typeof exportAllUserData>>
+): Promise<void> {
+  const batch: Promise<unknown>[] = []
+
+  for (const t of data.transactions) {
+    const { id, ...rest } = t
+    batch.push(setDoc(doc(db, 'transactions', id), { ...rest, userId }))
+  }
+  for (const b of data.budgets) {
+    const { id, ...rest } = b
+    batch.push(setDoc(doc(db, 'budgets', id), { ...rest, userId }))
+  }
+  for (const p of data.projects) {
+    const { id, ...rest } = p
+    batch.push(setDoc(doc(db, 'projects', id), { ...rest, userId }))
+  }
+  for (const borrow of data.borrowings) {
+    const { id, ...rest } = borrow
+    batch.push(setDoc(doc(db, 'borrowings', id), { ...rest, userId }))
+  }
+  if (data.emergencyFund) {
+    batch.push(setEmergencyFund(userId, data.emergencyFund))
+  }
+  if (data.settings) {
+    batch.push(setUserSettings(userId, data.settings))
+  }
+
+  await Promise.all(batch)
+}

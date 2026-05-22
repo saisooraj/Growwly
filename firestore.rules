@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: user is authenticated
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Helper: requesting user owns the doc
+    function isOwner(userId) {
+      return isAuth() && request.auth.uid == userId;
+    }
+
+    // Transactions
+    match /transactions/{docId} {
+      allow read, delete: if isAuth() && resource.data.userId == request.auth.uid;
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuth() && resource.data.userId == request.auth.uid;
+    }
+
+    // Budgets  (id format: userId_month_category)
+    match /budgets/{docId} {
+      allow read, delete: if isAuth() && resource.data.userId == request.auth.uid;
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuth() && resource.data.userId == request.auth.uid;
+    }
+
+    // Projects
+    match /projects/{docId} {
+      allow read, delete: if isAuth() && resource.data.userId == request.auth.uid;
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuth() && resource.data.userId == request.auth.uid;
+    }
+
+    // Borrowings
+    match /borrowings/{docId} {
+      allow read, delete: if isAuth() && resource.data.userId == request.auth.uid;
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuth() && resource.data.userId == request.auth.uid;
+    }
+
+    // Emergency Fund (doc id = userId)
+    match /emergencyFunds/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // User Settings (doc id = userId)
+    match /userSettings/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}

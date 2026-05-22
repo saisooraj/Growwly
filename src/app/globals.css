@@ -1,0 +1,118 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  html { color-scheme: light dark; }
+  body {
+    @apply bg-slate-50 dark:bg-[#08090F] text-slate-900 dark:text-slate-100 font-sans;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl shadow-sm p-5;
+    background-color: white;
+    border: 1px solid #f1f5f9;
+  }
+  .card-sm {
+    @apply rounded-xl shadow-sm p-4;
+    background-color: white;
+    border: 1px solid #f1f5f9;
+  }
+  .btn-primary {
+    @apply bg-brand-600 hover:bg-brand-700 text-white font-medium px-4 py-2 rounded-xl transition-colors duration-150 flex items-center gap-2 text-sm;
+  }
+  .btn-secondary {
+    @apply bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium px-4 py-2 rounded-xl transition-colors duration-150 flex items-center gap-2 text-sm;
+  }
+  .btn-danger {
+    @apply bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400 font-medium px-4 py-2 rounded-xl transition-colors duration-150 flex items-center gap-2 text-sm;
+  }
+  .input {
+    @apply w-full px-3 py-2 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all;
+    background-color: #f8fafc;
+    border-color: #e2e8f0;
+    color: #0f172a;
+  }
+  .label {
+    @apply block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wide;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+}
+
+/* ── Dark mode: card / card-sm base ── */
+.dark .card,
+.dark .card-sm {
+  background-color: #0F1120;
+  border-color: #1E2140;
+}
+
+/* ── Dark mode: input ── */
+.dark .input {
+  background-color: #1a1d30;
+  border-color: #2d3155;
+  color: #f1f5f9;
+}
+.dark .input::placeholder { color: #64748b; }
+
+/* ── Dark mode cascade: slate text inside cards ── */
+.dark .card .text-slate-900, .dark .card-sm .text-slate-900,
+.dark .card .text-slate-800, .dark .card-sm .text-slate-800,
+.dark .card .text-slate-700, .dark .card-sm .text-slate-700 { color: #f1f5f9; }
+
+.dark .card .text-slate-600, .dark .card-sm .text-slate-600,
+.dark .card .text-slate-500, .dark .card-sm .text-slate-500 { color: #94a3b8; }
+
+.dark .card .text-slate-400, .dark .card-sm .text-slate-400 { color: #64748b; }
+.dark .card .text-slate-300, .dark .card-sm .text-slate-300 { color: #475569; }
+
+/* ── Dark mode cascade: keep semantic colours vibrant ── */
+.dark .card .text-green-600,  .dark .card-sm .text-green-600,
+.dark .card .text-green-700,  .dark .card-sm .text-green-700  { color: #4ade80; }
+.dark .card .text-red-500,    .dark .card-sm .text-red-500,
+.dark .card .text-red-600,    .dark .card-sm .text-red-600    { color: #f87171; }
+.dark .card .text-yellow-600, .dark .card-sm .text-yellow-600,
+.dark .card .text-yellow-700, .dark .card-sm .text-yellow-700 { color: #facc15; }
+.dark .card .text-orange-500, .dark .card-sm .text-orange-500 { color: #fb923c; }
+.dark .card .text-blue-500,   .dark .card-sm .text-blue-500,
+.dark .card .text-blue-600,   .dark .card-sm .text-blue-600   { color: #60a5fa; }
+.dark .card .text-brand-600,  .dark .card-sm .text-brand-600,
+.dark .card .text-brand-500,  .dark .card-sm .text-brand-500  { color: #a78bfa; }
+
+/* ── Dark mode cascade: bg overrides inside cards ── */
+.dark .card .bg-white,     .dark .card-sm .bg-white     { background-color: #161932; }
+.dark .card .bg-slate-50,  .dark .card-sm .bg-slate-50  { background-color: #161932; }
+.dark .card .bg-slate-100, .dark .card-sm .bg-slate-100 { background-color: #1e2241; }
+
+.dark .card .bg-green-50,  .dark .card-sm .bg-green-50  { background-color: rgba(5,46,22,.55); }
+.dark .card .bg-red-50,    .dark .card-sm .bg-red-50    { background-color: rgba(69,10,10,.55); }
+.dark .card .bg-yellow-50, .dark .card-sm .bg-yellow-50 { background-color: rgba(66,32,6,.55); }
+.dark .card .bg-orange-50, .dark .card-sm .bg-orange-50 { background-color: rgba(67,20,7,.55); }
+.dark .card .bg-blue-50,   .dark .card-sm .bg-blue-50   { background-color: rgba(8,47,73,.55); }
+.dark .card .bg-brand-50,  .dark .card-sm .bg-brand-50  { background-color: rgba(46,16,101,.55); }
+
+/* ── Dark mode cascade: hover states inside cards ── */
+.dark .card .hover\:bg-slate-50:hover,
+.dark .card-sm .hover\:bg-slate-50:hover,
+.dark .card .hover\:bg-slate-100:hover,
+.dark .card-sm .hover\:bg-slate-100:hover { background-color: #161932; }
+
+/* ── Dark mode cascade: borders inside cards ── */
+.dark .card .border-slate-100, .dark .card-sm .border-slate-100,
+.dark .card .border-slate-200, .dark .card-sm .border-slate-200 { border-color: #28305a; }
+.dark .card .border-green-200, .dark .card-sm .border-green-200 { border-color: rgba(6,78,59,.5); }
+.dark .card .border-red-200,   .dark .card-sm .border-red-200   { border-color: rgba(127,29,29,.5); }
+.dark .card .border-yellow-200,.dark .card-sm .border-yellow-200{ border-color: rgba(113,63,18,.5); }
+
+/* ── Custom scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #7c3aed55; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #7c3aed99; }
