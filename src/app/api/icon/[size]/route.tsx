@@ -19,7 +19,7 @@ export async function GET(_: NextRequest, { params }: { params: { size: string }
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="https://growwly-v1.vercel.app/logo.png"
+        src="https://growwly-v1.vercel.app/icon.png"
         alt="Growwly"
         style={{ width: '100%', height: '100%', objectFit: 'contain' }}
       />
