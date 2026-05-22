@@ -48,7 +48,7 @@ export function useData() {
             getUserBorrowings(user.uid),
             getEmergencyFund(user.uid),
             getUserSettings(user.uid),
-            getUserSavingsGoals(user.uid),
+            getUserSavingsGoals(user.uid).catch(() => []),
           ])
         setTransactions(txs)
         setBudgets(budgets)
@@ -94,7 +94,7 @@ export function useRefreshData() {
           getUserBorrowings(user.uid),
           getEmergencyFund(user.uid),
           getUserSettings(user.uid),
-          getUserSavingsGoals(user.uid),
+          getUserSavingsGoals(user.uid).catch(() => []),
         ])
       setTransactions(txs)
       setBudgets(budgets)
