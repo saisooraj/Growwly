@@ -9,7 +9,7 @@ import { TrendingUp, ShieldCheck, BarChart3, Wallet, Zap } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
-  const { user, loading, authError, signInWithGoogle } = useAuth()
+  const { user, loading, signInWithGoogle } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
@@ -101,12 +101,6 @@ export default function LoginPage() {
             Data secured with Firebase · Never shared
           </p>
 
-          {/* Debug: shows exact error on mobile so we can diagnose */}
-          {authError && (
-            <p className="text-center text-xs text-red-400 mt-3 break-all bg-red-500/10 rounded-lg p-2">
-              {authError}
-            </p>
-          )}
         </div>
 
         <p className="text-center text-xs text-slate-600 mt-6">

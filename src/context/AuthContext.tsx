@@ -14,7 +14,6 @@ import { auth, googleProvider } from '@/lib/firebase'
 interface AuthContextType {
   user: User | null
   loading: boolean
-  authError: string | null
   signInWithGoogle: () => void
   logout: () => Promise<void>
 }
@@ -22,7 +21,6 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  authError: null,
   signInWithGoogle: () => {},
   logout: async () => {},
 })
@@ -30,36 +28,21 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const [authError, setAuthError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Set up auth listener immediately
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u)
       setLoading(false)
     })
 
-    // Process any pending redirect result (fires onAuthStateChanged if successful)
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user) setAuthError(null)
-      })
-      .catch((err) => {
-        // Surface the real error so we can debug
-        setAuthError(`redirect_error: ${err?.code ?? err?.message ?? 'unknown'}`)
-        setLoading(false)
-      })
+    getRedirectResult(auth).catch(() => {})
 
     return unsub
   }, [])
 
   function signInWithGoogle() {
-    setAuthError(null)
-    signInWithPopup(auth, googleProvider).catch((popupErr) => {
-      const code = popupErr?.code ?? ''
-      // Surface popup error for debugging
-      setAuthError(`popup_error: ${code}`)
-
+    signInWithPopup(auth, googleProvider).catch((err) => {
+      const code = err?.code ?? ''
       const shouldRedirect =
         code === 'auth/popup-blocked' ||
         code === 'auth/popup-closed-by-user' ||
@@ -67,7 +50,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         code === 'auth/operation-not-supported-in-this-environment'
 
       if (shouldRedirect) {
-        setAuthError(`popup_failed(${code})_trying_redirect`)
         signInWithRedirect(auth, googleProvider)
       }
     })
@@ -78,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, authError, signInWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, loading, signInWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   )
