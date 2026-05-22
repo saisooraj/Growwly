@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import MobileNav from './MobileNav'
 import AuthGuard from '@/components/ui/AuthGuard'
+import ChatBot from '@/components/chat/ChatBot'
 
 interface Props {
   title: string
@@ -22,6 +23,7 @@ export default function AppShell({ title, children }: Props) {
           </main>
         </div>
         <MobileNav />
+        <ChatBot />
       </div>
     </AuthGuard>
   )
