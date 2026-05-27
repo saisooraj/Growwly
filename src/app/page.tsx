@@ -14,6 +14,7 @@ import CategoryPieChart from '@/components/dashboard/CategoryPieChart'
 import WeeklyTracker from '@/components/dashboard/WeeklyTracker'
 import QuickActions from '@/components/dashboard/QuickActions'
 import MonthlyRecap from '@/components/dashboard/MonthlyRecap'
+import UpcomingCard from '@/components/dashboard/UpcomingCard'
 import RecurringPromptModal from '@/components/dashboard/RecurringPromptModal'
 import TransactionList from '@/components/transactions/TransactionList'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
@@ -87,6 +88,9 @@ export default function DashboardPage() {
             <QuickActions />
             <BorrowedStat />
           </div>
+
+          {/* Row 6: Upcoming expenses */}
+          <UpcomingCard />
 
           {/* Row 6: Recent transactions */}
           <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

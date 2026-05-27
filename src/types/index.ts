@@ -116,6 +116,18 @@ export interface UserSettings {
   updatedAt: string
 }
 
+export interface UpcomingExpense {
+  id: string
+  userId: string
+  label: string
+  amount: number
+  dueDate: string       // YYYY-MM-DD
+  category?: Category
+  notes?: string
+  isRecurring?: boolean // auto-copy to next month
+  createdAt: string
+}
+
 export interface MonthlySummary {
   month: string
   totalIncome: number

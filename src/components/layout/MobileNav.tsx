@@ -6,16 +6,16 @@ import {
   LayoutDashboard,
   ArrowLeftRight,
   CalendarDays,
+  CalendarClock,
   Target,
-  LineChart,
 } from 'lucide-react'
 
 const NAV = [
   { href: '/',             icon: LayoutDashboard, label: 'Home' },
   { href: '/transactions', icon: ArrowLeftRight,  label: 'Txns' },
   { href: '/planning',     icon: CalendarDays,    label: 'Plan' },
+  { href: '/upcoming',     icon: CalendarClock,   label: 'Upcoming' },
   { href: '/goals',        icon: Target,          label: 'Goals' },
-  { href: '/market',       icon: LineChart,       label: 'Market' },
 ]
 
 export default function MobileNav() {

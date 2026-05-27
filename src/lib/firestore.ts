@@ -19,6 +19,7 @@ import type {
   EmergencyFund,
   UserSettings,
   SavingsGoal,
+  UpcomingExpense,
 } from '@/types'
 
 // ── Transactions ────────────────────────────────────────────────────────────
@@ -301,4 +302,35 @@ export async function importAllUserData(
   }
 
   await Promise.all(batch)
+}
+
+// ── Upcoming Expenses ─────────────────────────────────────────────────────────
+
+export async function getUserUpcoming(userId: string): Promise<UpcomingExpense[]> {
+  const q = query(collection(db, 'upcoming'), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }) as UpcomingExpense)
+}
+
+export async function addUpcoming(
+  userId: string,
+  data: Omit<UpcomingExpense, 'id' | 'userId' | 'createdAt'>
+): Promise<string> {
+  const ref = await addDoc(collection(db, 'upcoming'), {
+    ...data,
+    userId,
+    createdAt: new Date().toISOString(),
+  })
+  return ref.id
+}
+
+export async function updateUpcoming(
+  id: string,
+  data: Partial<UpcomingExpense>
+): Promise<void> {
+  await updateDoc(doc(db, 'upcoming', id), data)
+}
+
+export async function deleteUpcoming(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'upcoming', id))
 }
