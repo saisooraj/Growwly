@@ -8,11 +8,12 @@ import { addTransaction, updateTransaction } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import {
-  EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_KINDS,
+  TRANSFER_KINDS,
   buildMonthlySummary,
 } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
-import type { Transaction, TransactionType, TransferKind, Category } from '@/types'
+import CategoryPicker from '@/components/transactions/CategoryPicker'
+import type { Transaction, TransactionType, TransferKind } from '@/types'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -35,7 +36,7 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
   const [txType, setTxType]           = useState<TransactionType>(editTx?.type ?? 'expense')
   const [transferKind, setTransferKind] = useState<TransferKind>(editTx?.transferKind ?? 'loan_repayment_received')
   const [amount, setAmount]           = useState(editTx ? String(editTx.amount) : '')
-  const [category, setCategory]       = useState<Category>(editTx?.category ?? 'Living Expenses')
+  const [category, setCategory]       = useState<string>(editTx?.category ?? 'Food & Dining')
   const [date, setDate]               = useState(editTx?.date ?? format(new Date(), 'yyyy-MM-dd'))
   const [notes, setNotes]             = useState(editTx?.notes ?? '')
   const [projectId, setProjectId]     = useState(editTx?.projectId ?? '')
@@ -48,15 +49,13 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
       setTxType(editTx?.type ?? 'expense')
       setTransferKind(editTx?.transferKind ?? 'loan_repayment_received')
       setAmount(editTx ? String(editTx.amount) : '')
-      setCategory(editTx?.category ?? 'Living Expenses')
+      setCategory(editTx?.category ?? 'Food & Dining')
       setDate(editTx?.date ?? format(new Date(), 'yyyy-MM-dd'))
       setNotes(editTx?.notes ?? '')
       setProjectId(editTx?.projectId ?? '')
       setIsRecurring(editTx?.isRecurring ?? false)
     }
   }, [open, editTx])
-
-  const categories = txType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
 
   function checkBudgetAlert(cat: string, addedAmount: number, d: string) {
     const month = d.slice(0, 7)
@@ -87,7 +86,7 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
         ...(isRecurring ? { recurringDay: new Date(date).getDate() } : {}),
         ...(txType === 'transfer'
           ? { transferKind, category: 'Other' }
-          : { category: category as Transaction['category'] }),
+          : { category }),
         ...(projectId && txType === 'expense' ? { projectId } : {}),
       }
 
@@ -250,15 +249,11 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                   {txType !== 'transfer' && (
                     <div>
                       <label className="label">Category</label>
-                      <select
-                        className="input"
+                      <CategoryPicker
                         value={category}
-                        onChange={e => setCategory(e.target.value as Category)}
-                      >
-                        {categories.map(c => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </select>
+                        onChange={setCategory}
+                        type={txType === 'income' ? 'income' : 'expense'}
+                      />
                     </div>
                   )}
 

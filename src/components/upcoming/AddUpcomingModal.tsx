@@ -7,8 +7,8 @@ import { format, addMonths } from 'date-fns'
 import { addUpcoming, updateUpcoming } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/utils'
-import type { UpcomingExpense, Category } from '@/types'
+import CategoryPicker from '@/components/transactions/CategoryPicker'
+import type { UpcomingExpense } from '@/types'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -27,7 +27,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
   const [label, setLabel]           = useState('')
   const [amount, setAmount]         = useState('')
   const [dueDate, setDueDate]       = useState(defaultDate)
-  const [category, setCategory]     = useState<Category>('Living Expenses')
+  const [category, setCategory]     = useState<string>('Food & Dining')
   const [notes, setNotes]           = useState('')
   const [isRecurring, setRecurring] = useState(false)
   const [saving, setSaving]         = useState(false)
@@ -41,7 +41,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
       setLabel(editItem?.label ?? '')
       setAmount(editItem ? String(editItem.amount) : '')
       setDueDate(editItem?.dueDate ?? defaultDate)
-      setCategory((editItem?.category as Category) ?? (ft === 'income' ? 'Other Income' : 'Living Expenses'))
+      setCategory(editItem?.category ?? (ft === 'income' ? 'Other Income' : 'Food & Dining'))
       setNotes(editItem?.notes ?? '')
       setRecurring(editItem?.isRecurring ?? false)
     }
@@ -49,7 +49,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
 
   function handleFlowTypeChange(ft: 'expense' | 'income') {
     setFlowType(ft)
-    setCategory(ft === 'income' ? 'Other Income' : 'Living Expenses')
+    setCategory(ft === 'income' ? 'Other Income' : 'Food & Dining')
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -194,15 +194,11 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
 
                   <div>
                     <label className="label">Category</label>
-                    <select
-                      className="input"
+                    <CategoryPicker
                       value={category}
-                      onChange={e => setCategory(e.target.value as Category)}
-                    >
-                      {(isIncome ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map(c => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+                      onChange={setCategory}
+                      type={isIncome ? 'income' : 'expense'}
+                    />
                   </div>
 
                   <div>

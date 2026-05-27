@@ -5,20 +5,7 @@ export type TransferKind =
   | 'loan_repayment_received'
   | 'savings_transfer'
 
-export type Category =
-  | 'Living Expenses'
-  | 'Rent / Deposit'
-  | 'SIP / Investments'
-  | 'Gold'
-  | 'Construction'
-  | 'Family Events'
-  | 'Borrowed / Loan'
-  | 'Emergency Fund'
-  | 'Salary'
-  | 'Freelance'
-  | 'Business'
-  | 'Other Income'
-  | 'Other'
+export type Category = string
 
 export type FinancialMode = 'normal' | 'high-expense'
 
