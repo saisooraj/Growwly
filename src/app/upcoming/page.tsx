@@ -4,15 +4,15 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useMemo } from 'react'
 import { format, parseISO, isPast, isThisMonth, differenceInDays } from 'date-fns'
-import { Plus, CalendarClock, Repeat, Pencil, Trash2, CheckCircle2 } from 'lucide-react'
+import { Plus, CalendarClock, Repeat, Pencil, Trash2, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
 import AddUpcomingModal from '@/components/upcoming/AddUpcomingModal'
 import LogPaymentModal from '@/components/upcoming/LogPaymentModal'
 import { useAppStore } from '@/store/appStore'
-import { deleteUpcoming } from '@/lib/firestore'
+import { deleteUpcoming, deleteUpcomingPayment } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
 import { formatCurrencyFull, CATEGORY_COLORS } from '@/lib/utils'
-import type { UpcomingExpense } from '@/types'
+import type { UpcomingExpense, UpcomingPayment } from '@/types'
 import toast from 'react-hot-toast'
 
 export default function UpcomingPage() {
@@ -118,6 +118,7 @@ export default function UpcomingPage() {
                       key={item.id}
                       item={item}
                       paid={paidByItem.get(item.id) ?? 0}
+                      payments={upcomingPayments.filter(p => p.upcomingId === item.id)}
                       onEdit={() => setEditItem(item)}
                       onDelete={() => handleDelete(item)}
                       onLogPayment={() => setPayItem(item)}
@@ -160,12 +161,14 @@ export default function UpcomingPage() {
 interface NoteCardProps {
   item: UpcomingExpense
   paid: number
+  payments: UpcomingPayment[]
   onEdit: () => void
   onDelete: () => void
   onLogPayment: () => void
 }
 
-function NoteCard({ item, paid, onEdit, onDelete, onLogPayment }: NoteCardProps) {
+function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: NoteCardProps) {
+  const refresh   = useRefreshData()
   const color     = CATEGORY_COLORS[item.category ?? ''] ?? '#94a3b8'
   const due       = parseISO(item.dueDate)
   const overdue   = isPast(due) && !isThisMonth(due)
@@ -175,9 +178,24 @@ function NoteCard({ item, paid, onEdit, onDelete, onLogPayment }: NoteCardProps)
   const pct       = item.amount > 0 ? Math.min(100, (paid / item.amount) * 100) : 0
   const fulfilled = pct >= 100
 
+  const [showPayments, setShowPayments] = useState(false)
+  const [editPay, setEditPay]           = useState<UpcomingPayment | null>(null)
+
   const urgencyColor = overdue ? 'var(--bad-ink)' : soon ? 'var(--warn-ink)' : 'var(--text-3)'
 
+  async function handleDeletePayment(p: UpcomingPayment) {
+    if (!confirm('Remove this payment entry?')) return
+    try {
+      await deleteUpcomingPayment(p.id)
+      await refresh()
+      toast.success('Payment removed')
+    } catch {
+      toast.error('Failed to remove')
+    }
+  }
+
   return (
+    <>
     <div className="card" style={{
       display: 'flex', flexDirection: 'column', gap: 10,
       borderLeft: `3px solid ${fulfilled ? 'var(--good)' : color}`,
@@ -228,6 +246,74 @@ function NoteCard({ item, paid, onEdit, onDelete, onLogPayment }: NoteCardProps)
         </div>
       )}
 
+      {/* Payments log toggle */}
+      {payments.length > 0 && (
+        <button
+          onClick={() => setShowPayments(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            background: 'none', border: 'none', cursor: 'pointer',
+            padding: '4px 0', color: 'var(--text-3)', fontSize: 11.5,
+          }}
+        >
+          {showPayments ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          {payments.length} payment{payments.length > 1 ? 's' : ''} logged
+        </button>
+      )}
+
+      {/* Expanded payments list */}
+      {showPayments && (
+        <div style={{
+          display: 'flex', flexDirection: 'column', gap: 1,
+          marginTop: 2,
+          borderTop: '1px solid var(--border)',
+          paddingTop: 8,
+        }}>
+          {[...payments].sort((a, b) => b.date.localeCompare(a.date)).map(p => (
+            <div key={p.id} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '6px 8px', borderRadius: 8,
+              background: 'var(--surface-2)',
+              marginBottom: 4,
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className="display-num" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                    {formatCurrencyFull(p.amount)}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                    {format(parseISO(p.date), 'dd MMM yyyy')}
+                  </span>
+                </div>
+                {p.notes && (
+                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.notes}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                <button
+                  onClick={() => setEditPay(p)}
+                  style={{ padding: 4, borderRadius: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
+                  onClick={() => handleDeletePayment(p)}
+                  style={{ padding: 4, borderRadius: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--bad)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Footer */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
         <span style={{ fontSize: 11.5, color: urgencyColor, fontWeight: overdue || soon ? 500 : 400 }}>
@@ -244,5 +330,15 @@ function NoteCard({ item, paid, onEdit, onDelete, onLogPayment }: NoteCardProps)
         )}
       </div>
     </div>
+
+    {/* Edit payment modal — self-contained per card */}
+    <LogPaymentModal
+      open={!!editPay}
+      onClose={() => setEditPay(null)}
+      item={item}
+      alreadyPaid={paid}
+      editPayment={editPay}
+    />
+    </>
   )
 }

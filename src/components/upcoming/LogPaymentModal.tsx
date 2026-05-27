@@ -4,11 +4,11 @@ import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { X, IndianRupee } from 'lucide-react'
 import { format } from 'date-fns'
-import { addUpcomingPayment, addTransaction } from '@/lib/firestore'
+import { addUpcomingPayment, addTransaction, updateUpcomingPayment } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import { formatCurrencyFull } from '@/lib/utils'
-import type { UpcomingExpense } from '@/types'
+import type { UpcomingExpense, UpcomingPayment } from '@/types'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -16,12 +16,14 @@ interface Props {
   onClose: () => void
   item: UpcomingExpense | null
   alreadyPaid: number
+  editPayment?: UpcomingPayment | null
 }
 
-export default function LogPaymentModal({ open, onClose, item, alreadyPaid }: Props) {
+export default function LogPaymentModal({ open, onClose, item, alreadyPaid, editPayment }: Props) {
   const { user } = useAuth()
   const refresh  = useRefreshData()
 
+  const isEditing = !!editPayment
   const remaining = item ? Math.max(0, item.amount - alreadyPaid) : 0
 
   const [amount, setAmount]       = useState('')
@@ -32,41 +34,55 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid }: Pr
 
   useEffect(() => {
     if (open) {
-      setAmount(remaining > 0 ? String(remaining) : '')
-      setDate(format(new Date(), 'yyyy-MM-dd'))
-      setNotes('')
-      setAlsoLog(true)
+      if (editPayment) {
+        setAmount(String(editPayment.amount))
+        setDate(editPayment.date)
+        setNotes(editPayment.notes ?? '')
+      } else {
+        setAmount(remaining > 0 ? String(remaining) : '')
+        setDate(format(new Date(), 'yyyy-MM-dd'))
+        setNotes('')
+        setAlsoLog(true)
+      }
     }
-  }, [open, remaining])
+  }, [open, editPayment, remaining])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!user || !item || !amount || Number(amount) <= 0) return
     setSaving(true)
     try {
-      let linkedTransactionId: string | undefined
-
-      if (alsoLog) {
-        linkedTransactionId = await addTransaction(user.uid, {
-          type: 'expense',
+      if (isEditing && editPayment) {
+        await updateUpcomingPayment(editPayment.id, {
           amount: Number(amount),
-          category: item.category ?? 'Other',
           date,
-          notes: notes || `Payment towards: ${item.label}`,
-          isRecurring: false,
+          notes,
+        })
+      } else {
+        let linkedTransactionId: string | undefined
+
+        if (alsoLog) {
+          linkedTransactionId = await addTransaction(user.uid, {
+            type: 'expense',
+            amount: Number(amount),
+            category: item.category ?? 'Other',
+            date,
+            notes: notes || `Payment towards: ${item.label}`,
+            isRecurring: false,
+          })
+        }
+
+        await addUpcomingPayment(user.uid, {
+          upcomingId: item.id,
+          amount: Number(amount),
+          date,
+          notes,
+          ...(linkedTransactionId ? { linkedTransactionId } : {}),
         })
       }
 
-      await addUpcomingPayment(user.uid, {
-        upcomingId: item.id,
-        amount: Number(amount),
-        date,
-        notes,
-        ...(linkedTransactionId ? { linkedTransactionId } : {}),
-      })
-
       await refresh()
-      toast.success('Payment logged')
+      toast.success(isEditing ? 'Payment updated' : 'Payment logged')
       onClose()
     } catch (err) {
       console.error(err)
@@ -108,7 +124,7 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid }: Pr
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
                   <div>
                     <Dialog.Title style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>
-                      Log payment
+                      {isEditing ? 'Edit payment' : 'Log payment'}
                     </Dialog.Title>
                     <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{item.label}</p>
                   </div>
@@ -186,8 +202,8 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid }: Pr
                     />
                   </div>
 
-                  {/* Also log as transaction toggle */}
-                  <label style={{
+                  {/* Also log as transaction toggle — new payments only */}
+                  {!isEditing && <label style={{
                     display: 'flex', alignItems: 'center', gap: 12,
                     padding: 12, borderRadius: 10, cursor: 'pointer',
                     background: alsoLog ? 'var(--brand-soft)' : 'var(--surface-2)',
@@ -213,7 +229,7 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid }: Pr
                       </div>
                       <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 1 }}>Adds to your monthly spending</div>
                     </div>
-                  </label>
+                  </label>}
 
                   <button
                     type="submit"
@@ -221,7 +237,7 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid }: Pr
                     className="btn-primary"
                     style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: 14, opacity: saving ? 0.6 : 1 }}
                   >
-                    {saving ? 'Saving…' : 'Log payment'}
+                    {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Log payment'}
                   </button>
                 </form>
               </Dialog.Panel>

@@ -356,6 +356,13 @@ export async function addUpcomingPayment(
   return ref.id
 }
 
+export async function updateUpcomingPayment(
+  id: string,
+  data: Partial<UpcomingPayment>
+): Promise<void> {
+  await updateDoc(doc(db, 'upcomingPayments', id), data)
+}
+
 export async function deleteUpcomingPayment(id: string): Promise<void> {
   await deleteDoc(doc(db, 'upcomingPayments', id))
 }
