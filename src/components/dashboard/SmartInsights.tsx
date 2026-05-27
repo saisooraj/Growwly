@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { buildMonthlySummary, formatCurrency, getLast6Months } from '@/lib/utils'
+import Link from 'next/link'
 import {
   TrendingDown, TrendingUp, Zap, Sparkles, ArrowDownRight,
   ShieldCheck, Wallet,
@@ -14,6 +15,7 @@ interface Alert {
   title: string
   detail: string
   cta: string
+  href: string
 }
 
 function InsightCard({ a }: { a: Alert }) {
@@ -48,9 +50,13 @@ function InsightCard({ a }: { a: Alert }) {
         <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', lineHeight: 1.35 }}>{a.title}</div>
         <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2, lineHeight: 1.35 }}>{a.detail}</div>
       </div>
-      <button className="btn btn-sm btn-ghost" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+      <Link
+        href={a.href}
+        className="btn btn-sm btn-ghost"
+        style={{ whiteSpace: 'nowrap', flexShrink: 0, textDecoration: 'none' }}
+      >
         {a.cta} →
-      </button>
+      </Link>
     </div>
   )
 }
@@ -75,6 +81,7 @@ export default function SmartInsights() {
         title: 'Cash deficit this month',
         detail: `Spending exceeds income by ${formatCurrency(Math.abs(cur.net))}`,
         cta: 'Review',
+        href: '/transactions',
       })
     }
 
@@ -89,6 +96,7 @@ export default function SmartInsights() {
           title: `${b.category} over budget`,
           detail: `Exceeded plan by ${formatCurrency(actual - b.planned)}`,
           cta: 'Budget',
+          href: '/planning',
         })
       }
     }
@@ -103,6 +111,7 @@ export default function SmartInsights() {
           title: 'Emergency fund is low',
           detail: `At ${pct.toFixed(0)}% — consider rebuilding`,
           cta: 'Top up',
+          href: '/planning',
         })
       }
     }
@@ -118,6 +127,7 @@ export default function SmartInsights() {
           title: `Savings rate ${sr.toFixed(1)}%`,
           detail: prevSr !== null ? `${sr > prevSr ? '+' : ''}${(sr - prevSr).toFixed(1)}% vs last month` : 'Strong discipline',
           cta: 'Goals',
+          href: '/goals',
         })
       } else if (sr < 10 && sr >= 0) {
         result.push({
@@ -126,6 +136,7 @@ export default function SmartInsights() {
           title: `Low savings rate (${sr.toFixed(1)}%)`,
           detail: 'Aim for at least 20% of income',
           cta: 'Plan',
+          href: '/planning',
         })
       }
     }
@@ -141,6 +152,7 @@ export default function SmartInsights() {
           title: `Spending up ${pct.toFixed(0)}% vs last month`,
           detail: `${formatCurrency(diff)} more than previous month`,
           cta: 'Txns',
+          href: '/transactions',
         })
       } else if (pct < -10) {
         result.push({
@@ -149,6 +161,7 @@ export default function SmartInsights() {
           title: `Spending down ${Math.abs(pct).toFixed(0)}% vs last month`,
           detail: `Saved ${formatCurrency(Math.abs(diff))} compared to last month`,
           cta: 'Review',
+          href: '/transactions',
         })
       }
     }
