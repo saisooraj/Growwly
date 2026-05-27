@@ -51,7 +51,7 @@ export default function MobileNav() {
 
   return (
     <nav
-      className="lg:hidden"
+      className="flex lg:hidden"
       style={{
         position: 'fixed', bottom: 12, left: 12, right: 12, zIndex: 50,
         background: 'color-mix(in oklch, var(--surface) 92%, transparent)',
@@ -60,9 +60,8 @@ export default function MobileNav() {
         border: '1px solid var(--border)',
         borderRadius: 18,
         boxShadow: 'var(--shadow-lg)',
-        display: 'flex',
         alignItems: 'stretch',
-      } as React.CSSProperties}
+      }}
     >
       {/* Left fade */}
       <div style={{
