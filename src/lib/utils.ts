@@ -62,6 +62,7 @@ export function buildMonthlySummary(
   let totalExpenses = 0
 
   for (const t of monthTxs) {
+    if (t.type === 'transfer') continue  // transfers are not P&L
     if (t.type === 'income') {
       totalIncome += t.amount
     } else {
@@ -102,6 +103,27 @@ export const STATUS_COLORS = {
   'warning':  { bg: 'bg-yellow-100', text: 'text-yellow-700', dot: 'bg-yellow-500', label: '🟡 Slightly Over' },
   'over':     { bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-500', label: '🔴 Over Budget' },
 } as const
+
+export const TRANSFER_KINDS = [
+  {
+    id: 'loan_given' as const,
+    label: 'Loan Given',
+    sub: 'You lent money to someone',
+    dir: 'out' as const,
+  },
+  {
+    id: 'loan_repayment_received' as const,
+    label: 'Repayment Received',
+    sub: 'Someone paid you back',
+    dir: 'in' as const,
+  },
+  {
+    id: 'savings_transfer' as const,
+    label: 'Savings / Investment',
+    sub: 'Moved to savings or investment account',
+    dir: 'out' as const,
+  },
+] as const
 
 export const EXPENSE_CATEGORIES: Category[] = [
   'Living Expenses',

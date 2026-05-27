@@ -13,10 +13,11 @@ interface StatProps {
   icon: React.ReactNode
   maskable?: boolean
   masked?: boolean
+  maskSub?: boolean
   onToggleMask?: () => void
 }
 
-function Stat({ label, value, sub, tone = 'neutral', icon, maskable, masked, onToggleMask }: StatProps) {
+function Stat({ label, value, sub, tone = 'neutral', icon, maskable, masked, maskSub, onToggleMask }: StatProps) {
   const accentColor =
     tone === 'good'    ? 'var(--good)' :
     tone === 'bad'     ? 'var(--bad)'  :
@@ -45,7 +46,9 @@ function Stat({ label, value, sub, tone = 'neutral', icon, maskable, masked, onT
       <div className="display-num" style={{ fontSize: 30, lineHeight: 1, color: 'var(--text)' }}>
         {masked ? '₹ ••••••' : value}
       </div>
-      <div style={{ fontSize: 12, color: 'var(--text-3)' }}>{sub}</div>
+      <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+        {masked && maskSub ? '•••••••' : sub}
+      </div>
     </div>
   )
 }
@@ -101,6 +104,7 @@ export default function SummaryCards() {
         icon={<ArrowDown size={14} />}
         maskable
         masked={maskExpense}
+        maskSub={totalBudget > 0}
         onToggleMask={() => setMaskExpense(v => !v)}
       />
       <Stat

@@ -1,27 +1,19 @@
 'use client'
 
-import { Fragment, useState } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { X, RefreshCw } from 'lucide-react'
-import { useForm } from 'react-hook-form'
+import { X, RefreshCw, ArrowDownLeft, ArrowUpRight, ArrowLeftRight } from 'lucide-react'
 import { format } from 'date-fns'
 import { addTransaction, updateTransaction } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, buildMonthlySummary, getCurrentMonth } from '@/lib/utils'
+import {
+  EXPENSE_CATEGORIES, INCOME_CATEGORIES, TRANSFER_KINDS,
+  buildMonthlySummary,
+} from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
-import type { Transaction, TransactionType } from '@/types'
+import type { Transaction, TransactionType, TransferKind, Category } from '@/types'
 import toast from 'react-hot-toast'
-
-interface FormData {
-  type: TransactionType
-  amount: string
-  category: string
-  date: string
-  notes: string
-  projectId: string
-  isRecurring: boolean
-}
 
 interface Props {
   open: boolean
@@ -29,130 +21,214 @@ interface Props {
   editTx?: Transaction | null
 }
 
+const TYPE_TABS: { id: TransactionType; label: string; icon: React.ReactNode }[] = [
+  { id: 'expense', label: 'Expense',  icon: <ArrowUpRight size={14} /> },
+  { id: 'income',  label: 'Income',   icon: <ArrowDownLeft size={14} /> },
+  { id: 'transfer',label: 'Transfer', icon: <ArrowLeftRight size={14} /> },
+]
+
 export default function AddTransactionModal({ open, onClose, editTx }: Props) {
   const { user } = useAuth()
   const refresh = useRefreshData()
   const { projects, budgets, transactions } = useAppStore()
 
-  const { register, handleSubmit, watch, reset, formState: { isSubmitting } } = useForm<FormData>({
-    defaultValues: {
-      type: editTx?.type ?? 'expense',
-      amount: editTx ? String(editTx.amount) : '',
-      category: editTx?.category ?? 'Living Expenses',
-      date: editTx?.date ?? format(new Date(), 'yyyy-MM-dd'),
-      notes: editTx?.notes ?? '',
-      projectId: editTx?.projectId ?? '',
-      isRecurring: editTx?.isRecurring ?? false,
-    },
-  })
+  const [txType, setTxType]           = useState<TransactionType>(editTx?.type ?? 'expense')
+  const [transferKind, setTransferKind] = useState<TransferKind>(editTx?.transferKind ?? 'loan_repayment_received')
+  const [amount, setAmount]           = useState(editTx ? String(editTx.amount) : '')
+  const [category, setCategory]       = useState<Category>(editTx?.category ?? 'Living Expenses')
+  const [date, setDate]               = useState(editTx?.date ?? format(new Date(), 'yyyy-MM-dd'))
+  const [notes, setNotes]             = useState(editTx?.notes ?? '')
+  const [projectId, setProjectId]     = useState(editTx?.projectId ?? '')
+  const [isRecurring, setIsRecurring] = useState(editTx?.isRecurring ?? false)
+  const [saving, setSaving]           = useState(false)
 
-  const txType = watch('type')
+  // Reset when editTx changes or modal opens
+  useEffect(() => {
+    if (open) {
+      setTxType(editTx?.type ?? 'expense')
+      setTransferKind(editTx?.transferKind ?? 'loan_repayment_received')
+      setAmount(editTx ? String(editTx.amount) : '')
+      setCategory(editTx?.category ?? 'Living Expenses')
+      setDate(editTx?.date ?? format(new Date(), 'yyyy-MM-dd'))
+      setNotes(editTx?.notes ?? '')
+      setProjectId(editTx?.projectId ?? '')
+      setIsRecurring(editTx?.isRecurring ?? false)
+    }
+  }, [open, editTx])
+
   const categories = txType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
 
-  function checkBudgetAlert(category: string, addedAmount: number, date: string) {
-    const month = date.slice(0, 7)
-    const budget = budgets.find(b => b.month === month && b.category === category)
+  function checkBudgetAlert(cat: string, addedAmount: number, d: string) {
+    const month = d.slice(0, 7)
+    const budget = budgets.find(b => b.month === month && b.category === cat)
     if (!budget || budget.planned === 0) return
     const summary = buildMonthlySummary(transactions, month)
-    const alreadySpent = summary.byCategory[category as keyof typeof summary.byCategory] ?? 0
+    const alreadySpent = summary.byCategory[cat as keyof typeof summary.byCategory] ?? 0
     const newTotal = alreadySpent + addedAmount
     const pct = (newTotal / budget.planned) * 100
     if (pct >= 100) {
-      toast.error(`🔴 Over budget on ${category}! Spent ₹${Math.round(newTotal).toLocaleString('en-IN')} of ₹${budget.planned.toLocaleString('en-IN')}`, { duration: 5000 })
+      toast.error(`Over budget on ${cat}! ₹${Math.round(newTotal).toLocaleString('en-IN')} of ₹${budget.planned.toLocaleString('en-IN')}`, { duration: 5000 })
     } else if (pct >= 80) {
-      toast(`⚠️ ${Math.round(pct)}% of ${category} budget used`, { duration: 4000, icon: '🟡' })
+      toast(`${Math.round(pct)}% of ${cat} budget used`, { duration: 4000 })
     }
   }
 
-  async function onSubmit(data: FormData) {
-    if (!user) return
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!user || !amount || Number(amount) <= 0) return
+    setSaving(true)
     try {
-      const dateStr = data.date
-      const payload = {
-        type: data.type,
-        amount: Number(data.amount),
-        category: data.category as Transaction['category'],
-        date: dateStr,
-        notes: data.notes,
-        isRecurring: data.isRecurring,
-        ...(data.isRecurring ? { recurringDay: new Date(dateStr).getDate() } : {}),
-        ...(data.projectId ? { projectId: data.projectId } : {}),
+      const payload: Partial<Transaction> = {
+        type: txType,
+        amount: Number(amount),
+        date,
+        notes,
+        isRecurring,
+        ...(isRecurring ? { recurringDay: new Date(date).getDate() } : {}),
+        ...(txType === 'transfer'
+          ? { transferKind, category: 'Other' }
+          : { category: category as Transaction['category'] }),
+        ...(projectId && txType === 'expense' ? { projectId } : {}),
       }
+
       if (editTx) {
         await updateTransaction(editTx.id, payload)
         toast.success('Transaction updated')
       } else {
-        await addTransaction(user.uid, payload)
-        toast.success('Transaction added')
-        if (data.type === 'expense') {
-          checkBudgetAlert(data.category, Number(data.amount), dateStr)
-        }
+        await addTransaction(user.uid, payload as Omit<Transaction, 'id' | 'userId' | 'createdAt'>)
+        toast.success(txType === 'transfer' ? 'Transfer logged' : 'Transaction added')
+        if (txType === 'expense') checkBudgetAlert(category, Number(amount), date)
       }
       await refresh()
-      reset()
       onClose()
     } catch {
       toast.error('Something went wrong')
+    } finally {
+      setSaving(false)
     }
   }
 
-  function handleClose() {
-    reset()
-    onClose()
-  }
+  const selectedKind = TRANSFER_KINDS.find(k => k.id === transferKind)
 
   return (
     <Transition appear show={open} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={handleClose}>
+      <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={onClose}>
         <Transition.Child
           as={Fragment}
           enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
           leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
         </Transition.Child>
 
-        <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-end sm:items-center justify-center p-4">
+        <div style={{ position: 'fixed', inset: 0, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', minHeight: '100%', alignItems: 'flex-end', justifyContent: 'center', padding: 16 }}
+               className="sm:items-center">
             <Transition.Child
               as={Fragment}
-              enter="ease-out duration-200" enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-              enterTo="opacity-100 translate-y-0 sm:scale-100"
-              leave="ease-in duration-150" leaveFrom="opacity-100 translate-y-0 sm:scale-100"
-              leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              enter="ease-out duration-200"
+              enterFrom="opacity-0 translate-y-4"
+              enterTo="opacity-100 translate-y-0"
+              leave="ease-in duration-150"
+              leaveFrom="opacity-100 translate-y-0"
+              leaveTo="opacity-0 translate-y-4"
             >
-              <Dialog.Panel className="w-full max-w-md bg-white dark:bg-[#0F1120] border border-transparent dark:border-[#1E2140] rounded-2xl shadow-xl overflow-hidden">
+              <Dialog.Panel style={{
+                width: '100%', maxWidth: 440,
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-xl)',
+                boxShadow: 'var(--shadow-lg)',
+                overflow: 'hidden',
+              }}>
                 {/* Header */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-                  <Dialog.Title className="text-base font-semibold text-slate-800">
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '16px 20px',
+                  borderBottom: '1px solid var(--border)',
+                }}>
+                  <Dialog.Title style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
                     {editTx ? 'Edit Transaction' : 'Add Transaction'}
                   </Dialog.Title>
-                  <button onClick={handleClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
-                    <X size={18} />
+                  <button
+                    onClick={onClose}
+                    style={{ padding: 6, borderRadius: 8, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                  >
+                    <X size={16} />
                   </button>
                 </div>
 
-                <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
-                  {/* Type Toggle */}
-                  <div>
-                    <label className="label">Type</label>
-                    <div className="flex gap-2">
-                      {(['expense', 'income'] as const).map((t) => (
-                        <label key={t} className="flex-1">
-                          <input type="radio" value={t} {...register('type')} className="sr-only" />
-                          <div className={`text-center py-2.5 rounded-xl text-sm font-medium cursor-pointer border-2 transition-all ${
-                            txType === t
-                              ? t === 'expense'
-                                ? 'border-red-500 bg-red-50 text-red-600'
-                                : 'border-green-500 bg-green-50 text-green-600'
-                              : 'border-slate-200 text-slate-500 hover:border-slate-300'
-                          }`}>
-                            {t === 'expense' ? '↑ Expense' : '↓ Income'}
-                          </div>
-                        </label>
-                      ))}
-                    </div>
+                <form onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+                  {/* Type tabs */}
+                  <div style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 12, background: 'var(--surface-2)' }}>
+                    {TYPE_TABS.map(tab => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setTxType(tab.id)}
+                        style={{
+                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          padding: '8px 10px', borderRadius: 9, border: 'none', cursor: 'pointer',
+                          fontSize: 13, fontWeight: 500,
+                          background: txType === tab.id ? 'var(--surface)' : 'transparent',
+                          color: txType === tab.id
+                            ? tab.id === 'expense' ? 'var(--bad-ink)'
+                            : tab.id === 'income'  ? 'var(--good-ink)'
+                            : 'var(--info-ink)'
+                            : 'var(--text-3)',
+                          boxShadow: txType === tab.id ? 'var(--shadow-sm)' : 'none',
+                          transition: 'all .15s',
+                        }}
+                      >
+                        {tab.icon}
+                        {tab.label}
+                      </button>
+                    ))}
                   </div>
+
+                  {/* Transfer kind selector */}
+                  {txType === 'transfer' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label className="label">Transfer type</label>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {TRANSFER_KINDS.map(k => (
+                          <button
+                            key={k.id}
+                            type="button"
+                            onClick={() => setTransferKind(k.id)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 12,
+                              padding: '10px 14px', borderRadius: 10,
+                              border: `1px solid ${transferKind === k.id ? 'var(--brand)' : 'var(--border)'}`,
+                              background: transferKind === k.id ? 'var(--brand-soft)' : 'var(--surface)',
+                              cursor: 'pointer', textAlign: 'left', transition: 'all .15s',
+                            }}
+                          >
+                            <div style={{
+                              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                              background: transferKind === k.id ? 'var(--brand)' : 'var(--surface-2)',
+                              color: transferKind === k.id ? '#fff' : 'var(--text-3)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              {k.dir === 'in'
+                                ? <ArrowDownLeft size={15} />
+                                : <ArrowUpRight size={15} />
+                              }
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 500, color: transferKind === k.id ? 'var(--brand-ink)' : 'var(--text)' }}>
+                                {k.label}
+                              </div>
+                              <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 1 }}>{k.sub}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Amount */}
                   <div>
@@ -162,34 +238,53 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                       step="0.01"
                       min="0"
                       placeholder="0"
-                      className="input text-lg font-semibold"
-                      {...register('amount', { required: true, min: 0.01 })}
+                      className="input"
+                      style={{ fontSize: 18, fontWeight: 600 }}
+                      value={amount}
+                      onChange={e => setAmount(e.target.value)}
+                      required
                     />
                   </div>
 
-                  {/* Category */}
-                  <div>
-                    <label className="label">Category</label>
-                    <select className="input" {...register('category', { required: true })}>
-                      {categories.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
-                  </div>
+                  {/* Category (income/expense only) */}
+                  {txType !== 'transfer' && (
+                    <div>
+                      <label className="label">Category</label>
+                      <select
+                        className="input"
+                        value={category}
+                        onChange={e => setCategory(e.target.value as Category)}
+                      >
+                        {categories.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {/* Date */}
                   <div>
                     <label className="label">Date</label>
-                    <input type="date" className="input" {...register('date', { required: true })} />
+                    <input
+                      type="date"
+                      className="input"
+                      value={date}
+                      onChange={e => setDate(e.target.value)}
+                      required
+                    />
                   </div>
 
-                  {/* Project (optional) */}
+                  {/* Project (expense only) */}
                   {txType === 'expense' && projects.length > 0 && (
                     <div>
                       <label className="label">Link to Project (optional)</label>
-                      <select className="input" {...register('projectId')}>
+                      <select
+                        className="input"
+                        value={projectId}
+                        onChange={e => setProjectId(e.target.value)}
+                      >
                         <option value="">None</option>
-                        {projects.map((p) => (
+                        {projects.map(p => (
                           <option key={p.id} value={p.id}>{p.name}</option>
                         ))}
                       </select>
@@ -198,35 +293,79 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
 
                   {/* Notes */}
                   <div>
-                    <label className="label">Notes</label>
+                    <label className="label">
+                      {txType === 'transfer' ? 'Who / what for' : 'Notes'}
+                    </label>
                     <input
                       type="text"
-                      placeholder="Optional note..."
+                      placeholder={
+                        txType === 'transfer'
+                          ? selectedKind?.dir === 'in' ? 'e.g. Rahul paid back' : 'e.g. Lent to Priya'
+                          : 'Optional note...'
+                      }
                       className="input"
-                      {...register('notes')}
+                      value={notes}
+                      onChange={e => setNotes(e.target.value)}
                     />
                   </div>
 
-                  {/* Recurring toggle */}
-                  <label className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-[#1a1d30] cursor-pointer hover:bg-slate-100 dark:hover:bg-[#1e2238] transition-colors">
-                    <input type="checkbox" {...register('isRecurring')} className="sr-only" />
-                    <div className={`w-9 h-5 rounded-full transition-colors flex items-center px-0.5 ${watch('isRecurring') ? 'bg-brand-500' : 'bg-slate-300 dark:bg-slate-600'}`}>
-                      <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${watch('isRecurring') ? 'translate-x-4' : 'translate-x-0'}`} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                        <RefreshCw size={13} className="text-brand-500" /> Repeat monthly
+                  {/* Recurring (income/expense only) */}
+                  {txType !== 'transfer' && (
+                    <label style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: 12, borderRadius: 10, cursor: 'pointer',
+                      background: 'var(--surface-2)', border: '1px solid var(--border)',
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={isRecurring}
+                        onChange={e => setIsRecurring(e.target.checked)}
+                        style={{ display: 'none' }}
+                      />
+                      {/* Toggle */}
+                      <div style={{
+                        width: 36, height: 20, borderRadius: 999, flexShrink: 0,
+                        background: isRecurring ? 'var(--brand)' : 'var(--border-strong)',
+                        position: 'relative', transition: 'background .2s',
+                      }}>
+                        <div style={{
+                          position: 'absolute', top: 2, left: isRecurring ? 18 : 2,
+                          width: 16, height: 16, borderRadius: '50%',
+                          background: '#fff', transition: 'left .2s',
+                          boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+                        }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <RefreshCw size={12} style={{ color: 'var(--brand)' }} />
+                          Repeat monthly
+                        </div>
+                        <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 1 }}>
+                          We&apos;ll remind you to log this every month
+                        </div>
+                      </div>
+                    </label>
+                  )}
+
+                  {/* Transfer note */}
+                  {txType === 'transfer' && (
+                    <div style={{
+                      padding: '10px 14px', borderRadius: 10,
+                      background: 'var(--info-soft)', border: '1px solid transparent',
+                    }}>
+                      <p style={{ fontSize: 12, color: 'var(--info-ink)', lineHeight: 1.5 }}>
+                        Transfers are <strong>excluded from income and expense totals</strong> — they won&apos;t affect your savings rate, health score, or budget tracking.
                       </p>
-                      <p className="text-xs text-slate-400">We'll remind you to log this every month</p>
                     </div>
-                  </label>
+                  )}
 
                   <button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="btn-primary w-full justify-center py-3 text-base disabled:opacity-60"
+                    disabled={saving || !amount || Number(amount) <= 0}
+                    className="btn-primary"
+                    style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: 14, opacity: saving ? 0.6 : 1 }}
                   >
-                    {isSubmitting ? 'Saving...' : editTx ? 'Update' : 'Add Transaction'}
+                    {saving ? 'Saving...' : editTx ? 'Update' : txType === 'transfer' ? 'Log Transfer' : 'Add Transaction'}
                   </button>
                 </form>
               </Dialog.Panel>

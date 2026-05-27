@@ -1,4 +1,9 @@
-export type TransactionType = 'income' | 'expense'
+export type TransactionType = 'income' | 'expense' | 'transfer'
+
+export type TransferKind =
+  | 'loan_given'
+  | 'loan_repayment_received'
+  | 'savings_transfer'
 
 export type Category =
   | 'Living Expenses'
@@ -29,6 +34,8 @@ export interface Transaction {
   projectId?: string
   isRecurring?: boolean
   recurringDay?: number // day-of-month to repeat (1–31)
+  transferKind?: TransferKind
+  borrowingId?: string  // optional link to a Borrowing record
 }
 
 export interface SavingsGoal {

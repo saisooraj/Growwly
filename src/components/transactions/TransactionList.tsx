@@ -2,108 +2,125 @@
 
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Edit2, Trash2, TrendingUp, TrendingDown } from 'lucide-react'
+import { TrendingUp, TrendingDown, ArrowLeftRight } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
-import { deleteTransaction } from '@/lib/firestore'
-import { useRefreshData } from '@/hooks/useData'
-import { formatCurrencyFull, CATEGORY_COLORS, getTransactionsForMonth } from '@/lib/utils'
+import { formatCurrencyFull, CATEGORY_COLORS, getTransactionsForMonth, TRANSFER_KINDS } from '@/lib/utils'
 import type { Transaction } from '@/types'
-import AddTransactionModal from './AddTransactionModal'
-import toast from 'react-hot-toast'
+import TransactionDetailModal from './TransactionDetailModal'
 
 interface Props {
   filterMonth?: boolean
   limit?: number
+  transactions?: Transaction[]  // optional override (for filtered views)
 }
 
-export default function TransactionList({ filterMonth = false, limit }: Props) {
-  const { transactions, selectedMonth } = useAppStore()
-  const refresh = useRefreshData()
-  const [editTx, setEditTx] = useState<Transaction | null>(null)
+function transferLabel(tx: Transaction): string {
+  return TRANSFER_KINDS.find(k => k.id === tx.transferKind)?.label ?? 'Transfer'
+}
 
-  const list = filterMonth
-    ? getTransactionsForMonth(transactions, selectedMonth)
-    : transactions
+function transferDir(tx: Transaction): 'in' | 'out' {
+  return TRANSFER_KINDS.find(k => k.id === tx.transferKind)?.dir ?? 'out'
+}
 
+export default function TransactionList({ filterMonth = false, limit, transactions: txOverride }: Props) {
+  const { transactions: storeTxs, selectedMonth } = useAppStore()
+  const [selected, setSelected] = useState<Transaction | null>(null)
+
+  const base = txOverride ?? (filterMonth
+    ? getTransactionsForMonth(storeTxs, selectedMonth)
+    : storeTxs)
+
+  const list = [...base].sort((a, b) => b.date.localeCompare(a.date))
   const shown = limit ? list.slice(0, limit) : list
-
-  async function handleDelete(id: string) {
-    if (!confirm('Delete this transaction?')) return
-    try {
-      await deleteTransaction(id)
-      await refresh()
-      toast.success('Deleted')
-    } catch {
-      toast.error('Failed to delete')
-    }
-  }
 
   if (shown.length === 0) {
     return (
-      <div className="py-12 text-center">
-        <p className="text-slate-400 text-sm">No transactions found.</p>
+      <div style={{ padding: '40px 0', textAlign: 'center' }}>
+        <p style={{ color: 'var(--text-3)', fontSize: 13 }}>No transactions found.</p>
       </div>
     )
   }
 
   return (
     <>
-      <div className="space-y-2">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {shown.map((tx) => {
-          const color = CATEGORY_COLORS[tx.category] ?? '#94a3b8'
+          const isTransfer = tx.type === 'transfer'
+          const isIncome   = tx.type === 'income'
+          const color      = isTransfer ? 'var(--info)' : (CATEGORY_COLORS[tx.category] ?? '#94a3b8')
+          const dir        = isTransfer ? transferDir(tx) : (isIncome ? 'in' : 'out')
+          const label      = isTransfer ? transferLabel(tx) : tx.category
+
+          const amountColor = isTransfer
+            ? dir === 'in' ? 'var(--good-ink)' : 'var(--text-2)'
+            : isIncome ? 'var(--good-ink)' : 'var(--text)'
+
+          const prefix = (isTransfer ? dir === 'in' : isIncome) ? '+' : '−'
+
           return (
-            <div key={tx.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors group">
-              <div
-                className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: color + '20' }}
-              >
-                {tx.type === 'income'
-                  ? <TrendingUp size={16} style={{ color }} />
-                  : <TrendingDown size={16} style={{ color }} />
+            <button
+              key={tx.id}
+              onClick={() => setSelected(tx)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 12px', borderRadius: 12,
+                background: 'transparent', border: 'none',
+                cursor: 'pointer', textAlign: 'left', width: '100%',
+                transition: 'background .12s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              {/* Icon */}
+              <div style={{
+                width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                background: color + '20',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {isTransfer
+                  ? <ArrowLeftRight size={15} style={{ color }} />
+                  : isIncome
+                    ? <TrendingUp size={15} style={{ color }} />
+                    : <TrendingDown size={15} style={{ color }} />
                 }
               </div>
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-slate-800 truncate">{tx.category}</span>
-                  {tx.notes && (
-                    <span className="text-xs text-slate-400 truncate hidden sm:block">— {tx.notes}</span>
+              {/* Label + date */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {label}
+                  </span>
+                  {isTransfer && (
+                    <span className="pill info" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0 }}>transfer</span>
+                  )}
+                  {tx.isRecurring && (
+                    <span className="pill" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0 }}>recurring</span>
                   )}
                 </div>
-                <p className="text-xs text-slate-400">
-                  {format(parseISO(tx.date), 'dd MMM yyyy')}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className={`text-sm font-semibold ${tx.type === 'income' ? 'text-green-600' : 'text-slate-800'}`}>
-                  {tx.type === 'income' ? '+' : '-'}{formatCurrencyFull(tx.amount)}
-                </span>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => setEditTx(tx)}
-                    className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400"
-                  >
-                    <Edit2 size={13} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(tx.id)}
-                    className="p-1.5 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-500"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                  <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                    {format(parseISO(tx.date), 'dd MMM yyyy')}
+                  </span>
+                  {tx.notes && (
+                    <span style={{ fontSize: 11.5, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          className="hidden sm:inline">
+                      · {tx.notes}
+                    </span>
+                  )}
                 </div>
               </div>
-            </div>
+
+              {/* Amount */}
+              <span className="num" style={{ fontSize: 13, fontWeight: 600, color: amountColor, flexShrink: 0 }}>
+                {prefix}{formatCurrencyFull(tx.amount)}
+              </span>
+            </button>
           )
         })}
       </div>
 
-      <AddTransactionModal
-        open={!!editTx}
-        onClose={() => setEditTx(null)}
-        editTx={editTx}
-      />
+      <TransactionDetailModal tx={selected} onClose={() => setSelected(null)} />
     </>
   )
 }

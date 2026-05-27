@@ -2,10 +2,10 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState } from 'react'
-import { format, parseISO } from 'date-fns'
-import { TrendingUp, TrendingDown, Plus, Filter, Download } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { Download, Plus, SlidersHorizontal } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
+import TransactionList from '@/components/transactions/TransactionList'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import { useAppStore } from '@/store/appStore'
 import {
@@ -14,143 +14,159 @@ import {
   EXPENSE_CATEGORIES,
   INCOME_CATEGORIES,
   getTransactionsForMonth,
-  CATEGORY_COLORS,
 } from '@/lib/utils'
+import type { TransactionType } from '@/types'
+
+const TYPE_OPTS: { id: TransactionType | 'all'; label: string }[] = [
+  { id: 'all',      label: 'All' },
+  { id: 'expense',  label: 'Expenses' },
+  { id: 'income',   label: 'Income' },
+  { id: 'transfer', label: 'Transfers' },
+]
 
 export default function TransactionsPage() {
-  const [addOpen, setAddOpen] = useState(false)
-  const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all')
-  const [catFilter, setCatFilter] = useState<string>('all')
+  const [addOpen, setAddOpen]       = useState(false)
+  const [typeFilter, setTypeFilter] = useState<TransactionType | 'all'>('all')
+  const [catFilter, setCatFilter]   = useState<string>('all')
 
   const { transactions, selectedMonth } = useAppStore()
-  const summary = buildMonthlySummary(transactions, selectedMonth)
+  const summary  = buildMonthlySummary(transactions, selectedMonth)
   const monthTxs = getTransactionsForMonth(transactions, selectedMonth)
 
-  const filtered = monthTxs.filter((t) => {
-    if (typeFilter !== 'all' && t.type !== typeFilter) return false
-    if (catFilter !== 'all' && t.category !== catFilter) return false
-    return true
-  })
+  const filtered = useMemo(() => {
+    return monthTxs.filter(t => {
+      if (typeFilter !== 'all' && t.type !== typeFilter) return false
+      if (catFilter  !== 'all' && t.category !== catFilter) return false
+      return true
+    })
+  }, [monthTxs, typeFilter, catFilter])
 
   const allCats = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]
 
   function exportCSV() {
     const rows = [
-      ['Date', 'Type', 'Category', 'Amount', 'Notes'],
-      ...monthTxs.map((t) => [t.date, t.type, t.category, String(t.amount), t.notes]),
+      ['Date', 'Type', 'Category', 'Transfer Kind', 'Amount', 'Notes'],
+      ...monthTxs.map(t => [t.date, t.type, t.category, t.transferKind ?? '', String(t.amount), t.notes]),
     ]
-    const csv = rows.map((r) => r.map((cell) => `"${cell}"`).join(',')).join('\n')
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `transactions-${selectedMonth}.csv`
-    a.click()
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url; a.download = `transactions-${selectedMonth}.csv`; a.click()
     URL.revokeObjectURL(url)
   }
 
   return (
     <AppShell title="Transactions">
-      <div className="space-y-4">
-        {/* Summary */}
-        <div className="grid grid-cols-3 gap-3">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+
+        {/* Summary KPIs */}
+        <div className="grid grid-cols-3" style={{ gap: 'var(--row-gap)' }}>
           <div className="card-sm">
-            <p className="text-xs text-slate-500">Income</p>
-            <p className="text-lg font-bold text-green-600">{formatCurrencyFull(summary.totalIncome)}</p>
+            <div className="h-eyebrow" style={{ marginBottom: 8 }}>Income</div>
+            <div className="display-num" style={{ fontSize: 22, color: 'var(--good-ink)' }}>
+              {formatCurrencyFull(summary.totalIncome)}
+            </div>
           </div>
           <div className="card-sm">
-            <p className="text-xs text-slate-500">Expenses</p>
-            <p className="text-lg font-bold text-red-500">{formatCurrencyFull(summary.totalExpenses)}</p>
+            <div className="h-eyebrow" style={{ marginBottom: 8 }}>Expenses</div>
+            <div className="display-num" style={{ fontSize: 22, color: 'var(--bad-ink)' }}>
+              {formatCurrencyFull(summary.totalExpenses)}
+            </div>
           </div>
-          <div className={`card-sm ${summary.net < 0 ? 'bg-red-50' : ''}`}>
-            <p className="text-xs text-slate-500">Net</p>
-            <p className={`text-lg font-bold ${summary.net >= 0 ? 'text-brand-600' : 'text-red-500'}`}>
-              {formatCurrencyFull(summary.net)}
-            </p>
+          <div className="card-sm">
+            <div className="h-eyebrow" style={{ marginBottom: 8 }}>Net</div>
+            <div className="display-num" style={{ fontSize: 22, color: summary.net >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
+              {summary.net >= 0 ? '+' : '−'}{formatCurrencyFull(Math.abs(summary.net))}
+            </div>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="card-sm">
-          <div className="flex flex-wrap gap-2 items-center">
-            <Filter size={14} className="text-slate-400" />
-            <div className="flex gap-1">
-              {(['all', 'income', 'expense'] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTypeFilter(t)}
-                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                    typeFilter === t ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </button>
-              ))}
-            </div>
+        <div className="card-sm" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+          <SlidersHorizontal size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+
+          {/* Type filter pills */}
+          <div style={{ display: 'flex', gap: 4 }}>
+            {TYPE_OPTS.map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => setTypeFilter(opt.id)}
+                style={{
+                  padding: '4px 12px', borderRadius: 999,
+                  fontSize: 12, fontWeight: 500,
+                  border: typeFilter === opt.id ? 'none' : '1px solid var(--border)',
+                  background: typeFilter === opt.id ? 'var(--text)' : 'transparent',
+                  color: typeFilter === opt.id ? 'var(--bg)' : 'var(--text-2)',
+                  cursor: 'pointer', transition: 'all .15s',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Category filter (hidden for transfer/all) */}
+          {typeFilter !== 'transfer' && (
             <select
               value={catFilter}
-              onChange={(e) => setCatFilter(e.target.value)}
-              className="text-xs px-2 py-1.5 bg-slate-100 rounded-lg border-none focus:outline-none focus:ring-1 focus:ring-brand-400"
+              onChange={e => setCatFilter(e.target.value)}
+              style={{
+                fontSize: 12, padding: '5px 10px',
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border)',
+                borderRadius: 8, color: 'var(--text-2)',
+                outline: 'none', cursor: 'pointer',
+              }}
             >
               <option value="all">All Categories</option>
-              {allCats.map((c) => (
+              {allCats.map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
-            <button
-              onClick={exportCSV}
-              className="ml-auto flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors"
-            >
-              <Download size={13} /> Export CSV
-            </button>
+          )}
+
+          <button
+            onClick={exportCSV}
+            className="btn btn-sm btn-ghost"
+            style={{ marginLeft: 'auto', gap: 6 }}
+          >
+            <Download size={13} /> Export CSV
+          </button>
+        </div>
+
+        {/* Transaction list */}
+        <div className="card" style={{ padding: 0 }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
+              {filtered.length} transaction{filtered.length !== 1 ? 's' : ''}
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Click any row to view or edit</span>
+          </div>
+          <div style={{ padding: '8px 8px' }}>
+            <TransactionList transactions={filtered} />
           </div>
         </div>
 
-        {/* List */}
-        <div className="card">
-          <h3 className="text-sm font-semibold text-slate-700 mb-3">
-            {filtered.length} transaction{filtered.length !== 1 ? 's' : ''}
-          </h3>
-          {filtered.length === 0 ? (
-            <div className="py-12 text-center">
-              <p className="text-slate-400 text-sm">No transactions match your filters.</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {filtered.map((tx) => {
-                const color = CATEGORY_COLORS[tx.category] ?? '#94a3b8'
-                return (
-                  <div key={tx.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition-colors">
-                    <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: color + '20' }}>
-                      {tx.type === 'income'
-                        ? <TrendingUp size={16} style={{ color }} />
-                        : <TrendingDown size={16} style={{ color }} />
-                      }
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-slate-800 truncate">{tx.category}</span>
-                        {tx.notes && <span className="text-xs text-slate-400 truncate hidden sm:block">— {tx.notes}</span>}
-                      </div>
-                      <p className="text-xs text-slate-400">{format(parseISO(tx.date), 'dd MMM yyyy')}</p>
-                    </div>
-                    <span className={`text-sm font-semibold ${tx.type === 'income' ? 'text-green-600' : 'text-slate-800'}`}>
-                      {tx.type === 'income' ? '+' : '-'}{formatCurrencyFull(tx.amount)}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
       </div>
 
+      {/* FAB */}
       <button
         onClick={() => setAddOpen(true)}
-        className="fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-40 w-14 h-14 bg-brand-600 hover:bg-brand-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-105"
+        className="fixed right-4 bottom-24 lg:right-6 lg:bottom-6 z-40 flex items-center justify-center"
+        style={{
+          width: 56, height: 56, borderRadius: '50%',
+          background: 'var(--text)', color: 'var(--bg)',
+          border: 'none', cursor: 'pointer',
+          boxShadow: 'var(--shadow-lg), 0 0 0 6px color-mix(in oklch, var(--text) 8%, transparent)',
+          transition: 'transform .12s ease',
+        }}
+        onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.05)')}
+        onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
       >
         <Plus size={24} />
       </button>
+
       <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />
     </AppShell>
   )
