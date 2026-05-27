@@ -65,18 +65,15 @@ export default function Header({ title }: { title?: string }) {
         position: 'sticky', top: 0, zIndex: 5,
       }}
     >
-      {/* Mobile logo */}
-      <Link href="/" className="flex items-center lg:hidden" style={{ gap: 8, textDecoration: 'none' }}>
+      {/* Mobile logo — icon only to save header space */}
+      <Link href="/" className="flex items-center lg:hidden" style={{ textDecoration: 'none', flexShrink: 0 }}>
         <div style={{
-          width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+          width: 30, height: 30, borderRadius: 8,
           background: 'linear-gradient(135deg, var(--brand) 0%, var(--brand-deep) 100%)',
           color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <Leaf size={13} strokeWidth={2} />
+          <Leaf size={14} strokeWidth={2} />
         </div>
-        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.01em' }}>
-          Growwly
-        </span>
       </Link>
 
       {/* Desktop title block */}
