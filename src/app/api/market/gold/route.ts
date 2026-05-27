@@ -18,20 +18,22 @@ async function fetchIBJA(): Promise<IBJAEntry[]> {
   const entries: IBJAEntry[] = []
   // Each table row has: date, then Gold999 AM, Gold999 PM
   const dateBlocks = html.split(/<strong>\d{2}\/\d{2}\/\d{4}<\/strong>/)
-  const dateMatches = [...html.matchAll(/<strong>(\d{2}\/\d{2}\/\d{4})<\/strong>/g)]
+  const dateRe = /<strong>(\d{2}\/\d{2}\/\d{4})<\/strong>/g
+  const numRe  = /data-label="Gold 999">(\d+)</g
+  const dateMatches: string[] = []
+  let dm: RegExpExecArray | null
+  while ((dm = dateRe.exec(html)) !== null) dateMatches.push(dm[1])
 
   for (let i = 0; i < dateMatches.length; i++) {
-    const dateStr = dateMatches[i][1]
     const block = dateBlocks[i + 1] ?? ''
-    const nums = [...block.matchAll(/data-label="Gold 999">(\d+)</g)]
+    const nums: number[] = []
+    numRe.lastIndex = 0
+    let nm: RegExpExecArray | null
+    while ((nm = numRe.exec(block)) !== null) nums.push(parseInt(nm[1]))
     if (nums.length >= 2) {
-      entries.push({
-        date: dateStr,
-        am: parseInt(nums[0][1]),
-        pm: parseInt(nums[1][1]),
-      })
+      entries.push({ date: dateMatches[i], am: nums[0], pm: nums[1] })
     } else if (nums.length === 1) {
-      entries.push({ date: dateStr, am: parseInt(nums[0][1]), pm: parseInt(nums[0][1]) })
+      entries.push({ date: dateMatches[i], am: nums[0], pm: nums[0] })
     }
   }
   return entries
