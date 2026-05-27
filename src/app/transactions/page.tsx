@@ -61,7 +61,7 @@ export default function TransactionsPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
         {/* Summary KPIs */}
-        <div className="grid grid-cols-3" style={{ gap: 'var(--row-gap)' }}>
+        <div className="grid grid-cols-1 sm:grid-cols-3" style={{ gap: 'var(--row-gap)' }}>
           <div className="card-sm">
             <div className="h-eyebrow" style={{ marginBottom: 8 }}>Income</div>
             <div className="display-num" style={{ fontSize: 22, color: 'var(--good-ink)' }}>

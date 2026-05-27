@@ -8,21 +8,42 @@ export default function Icon() {
   return new ImageResponse(
     <div
       style={{
-        width: '100%',
-        height: '100%',
+        width: 32,
+        height: 32,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#06030F',
-        borderRadius: 6,
+        background: 'linear-gradient(135deg, #16a34a 0%, #0d6b2e 100%)',
+        borderRadius: 8,
       }}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="https://growwly-v1.vercel.app/icon.png"
-        alt="Growwly"
-        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-      />
+      {/* Sprout: stem + two leaves */}
+      <div style={{ display: 'flex', position: 'relative', width: 18, height: 20 }}>
+        {/* Stem */}
+        <div style={{
+          position: 'absolute', bottom: 0, left: '50%',
+          width: 2, height: 12,
+          background: 'rgba(255,255,255,0.9)',
+          borderRadius: 2,
+          transform: 'translateX(-50%)',
+        }} />
+        {/* Left leaf */}
+        <div style={{
+          position: 'absolute', bottom: 5, left: 0,
+          width: 9, height: 9,
+          background: 'rgba(255,255,255,0.95)',
+          borderRadius: '50% 50% 0 50%',
+          transform: 'rotate(-30deg)',
+        }} />
+        {/* Right leaf */}
+        <div style={{
+          position: 'absolute', bottom: 8, right: 0,
+          width: 9, height: 9,
+          background: 'rgba(255,255,255,0.95)',
+          borderRadius: '50% 50% 50% 0',
+          transform: 'rotate(30deg)',
+        }} />
+      </div>
     </div>,
     { ...size }
   )
