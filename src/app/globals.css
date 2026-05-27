@@ -356,6 +356,20 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 }
 
 /* ══════════════════════════════════════════
+   Mobile number overflow safeguards
+══════════════════════════════════════════ */
+
+/* Tighter padding in KPI cards on small phones */
+@media (max-width: 480px) {
+  .card-sm { padding: 12px 14px; }
+  /* Allow eyebrow labels to wrap so they don't overflow narrow cards */
+  .h-eyebrow { white-space: normal; line-height: 1.4; }
+}
+
+/* display-num already has overflow-wrap + word-break; also cap to parent */
+.display-num { max-width: 100%; }
+
+/* ══════════════════════════════════════════
    Animations
 ══════════════════════════════════════════ */
 @keyframes fadeUp {

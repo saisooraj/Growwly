@@ -71,17 +71,17 @@ export default function UpcomingPage() {
         {upcomingExpenses.length > 0 && (
           <div className="grid grid-cols-3" style={{ gap: 'var(--row-gap)' }}>
             <div className="card-sm">
-              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Going out <span style={{ fontWeight: 400, opacity: 0.6 }}>· all planned</span></div>
-              <div className="display-num" style={{ fontSize: 20, color: 'var(--bad-ink)' }}>{formatCurrencyFull(totalOut)}</div>
+              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Going out</div>
+              <div className="display-num" style={{ fontSize: 'clamp(13px, 3.8vw, 20px)', color: 'var(--bad-ink)' }}>{formatCurrencyFull(totalOut)}</div>
               {totalLogged > 0 && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{formatCurrencyFull(totalLogged)} logged</div>}
             </div>
             <div className="card-sm">
               <div className="h-eyebrow" style={{ marginBottom: 8 }}>Coming in</div>
-              <div className="display-num" style={{ fontSize: 20, color: 'var(--good-ink)' }}>{formatCurrencyFull(totalIn)}</div>
+              <div className="display-num" style={{ fontSize: 'clamp(13px, 3.8vw, 20px)', color: 'var(--good-ink)' }}>{formatCurrencyFull(totalIn)}</div>
             </div>
             <div className="card-sm">
-              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Net position</div>
-              <div className="display-num" style={{ fontSize: 20, color: netPosition >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
+              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Net</div>
+              <div className="display-num" style={{ fontSize: 'clamp(13px, 3.8vw, 20px)', color: netPosition >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
                 {netPosition >= 0 ? '+' : ''}{formatCurrencyFull(netPosition)}
               </div>
             </div>
@@ -237,7 +237,7 @@ function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: Note
 
       {/* Amount + remaining */}
       <div>
-        <div className="display-num" style={{ fontSize: 22, color: 'var(--text)', lineHeight: 1 }}>
+        <div className="display-num" style={{ fontSize: 'clamp(16px, 5vw, 22px)', color: 'var(--text)', lineHeight: 1 }}>
           {formatCurrencyFull(item.amount)}
         </div>
         {paid > 0 && (

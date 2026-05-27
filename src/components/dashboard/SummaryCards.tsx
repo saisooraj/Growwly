@@ -43,7 +43,7 @@ function Stat({ label, value, sub, tone = 'neutral', icon, maskable, masked, mas
           <span style={{ color: accentColor }}>{icon}</span>
         </div>
       </div>
-      <div className="display-num" style={{ fontSize: 30, lineHeight: 1, color: 'var(--text)' }}>
+      <div className="display-num" style={{ fontSize: 'clamp(18px, 5.5vw, 30px)', lineHeight: 1, color: 'var(--text)' }}>
         {masked ? '₹ ••••••' : value}
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-3)' }}>

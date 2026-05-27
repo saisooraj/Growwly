@@ -70,7 +70,7 @@ export default function UpcomingCard() {
           {/* Summary */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-              <span className="display-num" style={{ fontSize: 26, color: netPosition >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)', lineHeight: 1 }}>
+              <span className="display-num" style={{ fontSize: 'clamp(18px, 5vw, 26px)', color: netPosition >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)', lineHeight: 1 }}>
                 {netPosition >= 0 ? '+' : ''}{formatCurrencyFull(netPosition)}
               </span>
               <span style={{ fontSize: 12, color: 'var(--text-3)' }}>net</span>
