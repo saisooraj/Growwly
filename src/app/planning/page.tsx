@@ -11,13 +11,13 @@ export default function PlanningPage() {
     <AppShell title="Monthly Planning">
       <div className="max-w-2xl space-y-6">
         <div>
-          <p className="text-sm text-slate-500 mb-5">
+          <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>
             Set planned budgets per category. Click the edit icon to set or update amounts.
           </p>
           <BudgetPlanner />
         </div>
         <div>
-          <p className="text-sm text-slate-500 mb-3">Spending compared to last month.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 12 }}>Spending compared to last month.</p>
           <CategoryInsights />
         </div>
       </div>

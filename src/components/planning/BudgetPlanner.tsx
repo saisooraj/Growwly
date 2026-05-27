@@ -35,25 +35,27 @@ export default function BudgetPlanner() {
 
   const totalPlanned = Object.values(budgetMap).reduce((s, v) => s + v, 0)
   const totalActual = summary.totalExpenses
+  const variance = totalPlanned - totalActual
 
   return (
-    <div className="space-y-3">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Totals */}
-      <div className="grid grid-cols-3 gap-3 mb-2">
-        <div className="card-sm">
-          <p className="text-xs text-slate-500 mb-1">Total Planned</p>
-          <p className="text-lg font-bold text-slate-800">{formatCurrencyFull(totalPlanned)}</p>
-        </div>
-        <div className="card-sm">
-          <p className="text-xs text-slate-500 mb-1">Total Actual</p>
-          <p className="text-lg font-bold text-slate-800">{formatCurrencyFull(totalActual)}</p>
-        </div>
-        <div className={`card-sm ${totalActual > totalPlanned ? 'bg-red-50' : 'bg-green-50'}`}>
-          <p className="text-xs text-slate-500 mb-1">Variance</p>
-          <p className={`text-lg font-bold ${totalActual > totalPlanned ? 'text-red-600' : 'text-green-600'}`}>
-            {totalActual > totalPlanned ? '-' : '+'}{formatCurrencyFull(Math.abs(totalPlanned - totalActual))}
-          </p>
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 4 }}>
+        {[
+          { label: 'Planned', value: totalPlanned, color: 'var(--text)' },
+          { label: 'Actual',  value: totalActual,  color: 'var(--text)' },
+          { label: 'Variance', value: Math.abs(variance), color: variance >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)', prefix: variance >= 0 ? '+' : '−' },
+        ].map(({ label, value, color, prefix }) => (
+          <div key={label} className="card-sm" style={{
+            background: label === 'Variance' ? (variance >= 0 ? 'var(--good-soft)' : 'var(--bad-soft)') : 'var(--surface)',
+            padding: '10px 12px',
+          }}>
+            <p style={{ fontSize: 10.5, color: 'var(--text-3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 600 }}>{label}</p>
+            <p className="display-num" style={{ fontSize: 'clamp(12px, 3.5vw, 17px)', color, fontWeight: 600, lineHeight: 1.2 }}>
+              {prefix ?? ''}{formatCurrencyFull(value)}
+            </p>
+          </div>
+        ))}
       </div>
 
       {/* Category rows */}
@@ -65,61 +67,73 @@ export default function BudgetPlanner() {
         const pct = planned > 0 ? Math.min((actual / planned) * 100, 100) : 0
 
         return (
-          <div key={cat} className="card-sm">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-slate-700">{cat}</span>
+          <div key={cat} className="card-sm" style={{ padding: '12px 14px' }}>
+            {/* Row 1: category name + status pill + edit button */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: planned > 0 || actual > 0 ? 8 : 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {cat}
+                </span>
                 {planned > 0 && (
-                  <span className={`badge ${sc.bg} ${sc.text}`}>{sc.label}</span>
+                  <span className={`pill ${sc.pill}`} style={{ fontSize: 10, padding: '1px 6px', flexShrink: 0 }}>
+                    {sc.label}
+                  </span>
                 )}
               </div>
 
               {editing === cat ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400">₹</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-3)' }}>₹</span>
                   <input
                     type="number"
                     value={inputVal}
                     onChange={(e) => setInputVal(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && save(cat)}
-                    className="w-24 text-sm px-2 py-1 border border-brand-400 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    className="input"
+                    style={{ width: 80, padding: '4px 8px', fontSize: 13 }}
                     autoFocus
                   />
-                  <button onClick={() => save(cat)} className="p-1 rounded-lg bg-brand-100 text-brand-600 hover:bg-brand-200">
-                    <Check size={14} />
+                  <button
+                    onClick={() => save(cat)}
+                    style={{ padding: 6, borderRadius: 8, background: 'var(--brand-soft)', color: 'var(--brand-ink)', border: 'none', cursor: 'pointer', display: 'flex' }}
+                  >
+                    <Check size={13} />
                   </button>
                 </div>
               ) : (
                 <button
                   onClick={() => { setEditing(cat); setInputVal(String(planned || '')) }}
-                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600"
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-2)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
                 >
-                  <Edit2 size={12} />
+                  <Edit2 size={11} />
                   {planned > 0 ? formatCurrencyFull(planned) : 'Set budget'}
                 </button>
               )}
             </div>
 
+            {/* Progress bar + spent/remaining */}
             {planned > 0 && (
               <>
-                <div className="w-full bg-slate-100 rounded-full h-2 mb-1">
-                  <div
-                    className={`h-2 rounded-full transition-all duration-500 ${
-                      status === 'on-track' ? 'bg-green-500' :
-                      status === 'warning' ? 'bg-yellow-400' : 'bg-red-500'
-                    }`}
-                    style={{ width: `${pct}%` }}
-                  />
+                <div style={{ width: '100%', background: 'var(--surface-2)', borderRadius: 999, height: 5, overflow: 'hidden', marginBottom: 6 }}>
+                  <div style={{ height: '100%', width: `${pct}%`, background: sc.bar, borderRadius: 999, transition: 'width .4s ease' }} />
                 </div>
-                <div className="flex justify-between text-xs text-slate-400">
-                  <span>Spent: {formatCurrencyFull(actual)}</span>
-                  <span>Remaining: {formatCurrencyFull(Math.max(planned - actual, 0))}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-3)', gap: 4 }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>
+                    Spent: <span className="num">{formatCurrencyFull(actual)}</span>
+                  </span>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1, textAlign: 'right' }}>
+                    Left: <span className="num">{formatCurrencyFull(Math.max(planned - actual, 0))}</span>
+                  </span>
                 </div>
               </>
             )}
 
             {planned === 0 && actual > 0 && (
-              <p className="text-xs text-slate-400">Spent: {formatCurrencyFull(actual)} (no budget set)</p>
+              <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
+                Spent: <span className="num">{formatCurrencyFull(actual)}</span> · no budget set
+              </p>
             )}
           </div>
         )

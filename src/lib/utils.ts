@@ -99,9 +99,9 @@ export function getBudgetStatus(actual: number, planned: number): 'on-track' | '
 }
 
 export const STATUS_COLORS = {
-  'on-track': { bg: 'bg-green-100', text: 'text-green-700', dot: 'bg-green-500', label: '🟢 On Track' },
-  'warning':  { bg: 'bg-yellow-100', text: 'text-yellow-700', dot: 'bg-yellow-500', label: '🟡 Slightly Over' },
-  'over':     { bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-500', label: '🔴 Over Budget' },
+  'on-track': { pill: 'good',    bar: 'var(--good)', label: 'On Track' },
+  'warning':  { pill: 'warn',    bar: 'var(--warn)', label: 'Near Limit' },
+  'over':     { pill: 'bad',     bar: 'var(--bad)',  label: 'Over Budget' },
 } as const
 
 export const TRANSFER_KINDS = [

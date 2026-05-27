@@ -27,8 +27,8 @@ export default function CategoryInsights() {
 
   if (rows.length === 0) {
     return (
-      <div className="card text-center py-8">
-        <p className="text-sm text-slate-400">No spending data to compare yet.</p>
+      <div className="card" style={{ textAlign: 'center', padding: '32px 0' }}>
+        <p style={{ fontSize: 13, color: 'var(--text-3)' }}>No spending data to compare yet.</p>
       </div>
     )
   }
@@ -37,49 +37,57 @@ export default function CategoryInsights() {
   const currLabel = format(parseISO(`${selectedMonth}-01`), 'MMM')
 
   return (
-    <div className="card space-y-1">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Month-over-Month</h3>
-        <span className="text-xs text-slate-400">{prevLabel} → {currLabel}</span>
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Month-over-Month</span>
+        <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{prevLabel} → {currLabel}</span>
       </div>
 
       {rows.map(({ cat, curr, prev, diff, pct }) => {
-        const isUp = diff > 0
+        const isUp   = diff > 0
         const isDown = diff < 0
         const isSame = diff === 0
         const isAnomaly = pct !== null && Math.abs(pct) >= 50 && curr > 1000
 
+        const rowBg = isAnomaly && isUp ? 'var(--bad-soft)' : 'transparent'
+        const changeColor = isUp
+          ? (isAnomaly ? 'var(--bad-ink)' : 'var(--warn-ink)')
+          : isDown ? 'var(--good-ink)' : 'var(--text-3)'
+        const changeText = pct !== null
+          ? `${isUp ? '+' : ''}${pct}%`
+          : prev === 0 && curr > 0 ? 'New'
+          : prev > 0 && curr === 0 ? '−100%'
+          : '—'
+
         return (
           <div
             key={cat}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl ${
-              isAnomaly && isUp ? 'bg-red-50 dark:bg-red-900/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
-            }`}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 10px', borderRadius: 10,
+              background: rowBg,
+              transition: 'background .12s',
+            }}
+            onMouseEnter={e => { if (!isAnomaly || !isUp) e.currentTarget.style.background = 'var(--surface-2)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = rowBg }}
           >
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">{cat}</p>
-              <p className="text-xs text-slate-400">
-                {prev > 0 ? formatCurrencyFull(prev) : '—'} → {curr > 0 ? formatCurrencyFull(curr) : '—'}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {cat}
+              </p>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
+                <span className="num">{prev > 0 ? formatCurrencyFull(prev) : '—'}</span>
+                {' → '}
+                <span className="num">{curr > 0 ? formatCurrencyFull(curr) : '—'}</span>
               </p>
             </div>
 
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              {isUp && <TrendingUp size={14} className={isAnomaly ? 'text-red-500' : 'text-orange-400'} />}
-              {isDown && <TrendingDown size={14} className="text-green-500" />}
-              {isSame && <Minus size={14} className="text-slate-400" />}
-
-              <span className={`text-xs font-semibold ${
-                isUp ? (isAnomaly ? 'text-red-600' : 'text-orange-500') :
-                isDown ? 'text-green-600' : 'text-slate-400'
-              }`}>
-                {pct !== null
-                  ? `${isUp ? '+' : ''}${pct}%`
-                  : prev === 0 && curr > 0
-                    ? 'New'
-                    : prev > 0 && curr === 0
-                      ? '−100%'
-                      : '—'
-                }
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+              {isUp   && <TrendingUp  size={13} style={{ color: isAnomaly ? 'var(--bad)' : 'var(--warn)' }} />}
+              {isDown && <TrendingDown size={13} style={{ color: 'var(--good)' }} />}
+              {isSame && <Minus size={13} style={{ color: 'var(--text-3)' }} />}
+              <span style={{ fontSize: 12, fontWeight: 600, color: changeColor }}>
+                {changeText}
               </span>
             </div>
           </div>
