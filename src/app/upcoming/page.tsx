@@ -71,7 +71,7 @@ export default function UpcomingPage() {
         {upcomingExpenses.length > 0 && (
           <div className="grid grid-cols-3" style={{ gap: 'var(--row-gap)' }}>
             <div className="card-sm">
-              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Going out</div>
+              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Going out <span style={{ fontWeight: 400, opacity: 0.6 }}>· all planned</span></div>
               <div className="display-num" style={{ fontSize: 20, color: 'var(--bad-ink)' }}>{formatCurrencyFull(totalOut)}</div>
               {totalLogged > 0 && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{formatCurrencyFull(totalLogged)} logged</div>}
             </div>

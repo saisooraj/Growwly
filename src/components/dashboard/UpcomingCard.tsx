@@ -22,15 +22,17 @@ export default function UpcomingCard() {
     return map
   }, [upcomingPayments])
 
-  const relevant = upcomingExpenses
+  // All items in this+next month (for correct totals)
+  const relevantAll = upcomingExpenses
     .filter(i => i.dueDate.slice(0, 7) === thisMonth || i.dueDate.slice(0, 7) === nextMonth)
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-    .slice(0, 5)
 
-  const totalOut    = relevant.filter(i => (i.flowType ?? 'expense') === 'expense').reduce((s, i) => s + i.amount, 0)
-  const totalIn     = relevant.filter(i => i.flowType === 'income').reduce((s, i) => s + i.amount, 0)
-  const totalPaid   = relevant.reduce((s, i) => s + (paidByItem.get(i.id) ?? 0), 0)
-  const totalRemain = Math.max(0, totalOut - relevant.filter(i => (i.flowType ?? 'expense') === 'expense').reduce((s, i) => s + (paidByItem.get(i.id) ?? 0), 0))
+  // Only first 5 for display
+  const relevant = relevantAll.slice(0, 5)
+
+  const totalOut    = relevantAll.filter(i => (i.flowType ?? 'expense') === 'expense').reduce((s, i) => s + i.amount, 0)
+  const totalIn     = relevantAll.filter(i => i.flowType === 'income').reduce((s, i) => s + i.amount, 0)
+  const totalPaid   = relevantAll.reduce((s, i) => s + (paidByItem.get(i.id) ?? 0), 0)
   const netPosition = totalIn - totalOut
 
   return (
@@ -46,7 +48,10 @@ export default function UpcomingCard() {
           }}>
             <CalendarClock size={14} />
           </div>
-          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Upcoming</span>
+          <div>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Upcoming</span>
+            <div style={{ fontSize: 10.5, color: 'var(--text-4)', marginTop: 1 }}>this & next month</div>
+          </div>
         </div>
         <Link href="/upcoming" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--brand)', textDecoration: 'none', fontWeight: 500 }}>
           All <ArrowRight size={12} />
@@ -118,9 +123,9 @@ export default function UpcomingCard() {
             })}
           </div>
 
-          {upcomingExpenses.length > 5 && (
+          {relevantAll.length > 5 && (
             <Link href="/upcoming" style={{ fontSize: 12, color: 'var(--text-3)', textDecoration: 'none', textAlign: 'center' }}>
-              +{upcomingExpenses.length - 5} more
+              +{relevantAll.length - 5} more this period
             </Link>
           )}
         </>
