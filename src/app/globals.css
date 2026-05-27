@@ -370,3 +370,6 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 *::-webkit-scrollbar { width: 10px; height: 10px; }
 *::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; border: 2px solid var(--bg); }
 *::-webkit-scrollbar-track { background: transparent; }
+
+/* Hide scrollbar inside mobile nav */
+.mobile-nav-scroll::-webkit-scrollbar { display: none; }
