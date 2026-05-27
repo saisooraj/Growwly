@@ -116,6 +116,17 @@ export interface UserSettings {
   updatedAt: string
 }
 
+export interface UpcomingPayment {
+  id: string
+  userId: string
+  upcomingId: string
+  amount: number
+  date: string       // YYYY-MM-DD
+  notes?: string
+  linkedTransactionId?: string
+  createdAt: string
+}
+
 export interface UpcomingExpense {
   id: string
   userId: string

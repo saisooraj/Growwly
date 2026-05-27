@@ -20,6 +20,7 @@ import type {
   UserSettings,
   SavingsGoal,
   UpcomingExpense,
+  UpcomingPayment,
 } from '@/types'
 
 // ── Transactions ────────────────────────────────────────────────────────────
@@ -333,4 +334,28 @@ export async function updateUpcoming(
 
 export async function deleteUpcoming(id: string): Promise<void> {
   await deleteDoc(doc(db, 'upcoming', id))
+}
+
+// ── Upcoming Payments ─────────────────────────────────────────────────────────
+
+export async function getUserUpcomingPayments(userId: string): Promise<UpcomingPayment[]> {
+  const q = query(collection(db, 'upcomingPayments'), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }) as UpcomingPayment)
+}
+
+export async function addUpcomingPayment(
+  userId: string,
+  data: Omit<UpcomingPayment, 'id' | 'userId' | 'createdAt'>
+): Promise<string> {
+  const ref = await addDoc(collection(db, 'upcomingPayments'), {
+    ...data,
+    userId,
+    createdAt: new Date().toISOString(),
+  })
+  return ref.id
+}
+
+export async function deleteUpcomingPayment(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'upcomingPayments', id))
 }

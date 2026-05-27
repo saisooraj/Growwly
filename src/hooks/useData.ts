@@ -12,6 +12,7 @@ import {
   getUserSettings,
   getUserSavingsGoals,
   getUserUpcoming,
+  getUserUpcomingPayments,
 } from '@/lib/firestore'
 
 export function useData() {
@@ -25,6 +26,7 @@ export function useData() {
     setSettings,
     setSavingsGoals,
     setUpcomingExpenses,
+    setUpcomingPayments,
     setLoading,
     setInitialized,
     initialized,
@@ -42,7 +44,7 @@ export function useData() {
       if (!user) return
       setLoading(true)
       try {
-        const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming] =
+        const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming, upcomingPmts] =
           await Promise.all([
             getUserTransactions(user.uid),
             getUserBudgets(user.uid),
@@ -52,6 +54,7 @@ export function useData() {
             getUserSettings(user.uid),
             getUserSavingsGoals(user.uid).catch(() => []),
             getUserUpcoming(user.uid).catch(() => []),
+            getUserUpcomingPayments(user.uid).catch(() => []),
           ])
         setTransactions(txs)
         setBudgets(budgets)
@@ -61,6 +64,7 @@ export function useData() {
         setSettings(settings)
         setSavingsGoals(goals)
         setUpcomingExpenses(upcoming)
+        setUpcomingPayments(upcomingPmts)
         setInitialized(true)
       } finally {
         setLoading(false)
@@ -82,6 +86,7 @@ export function useRefreshData() {
     setSettings,
     setSavingsGoals,
     setUpcomingExpenses,
+    setUpcomingPayments,
     setLoading,
     setInitialized,
   } = useAppStore()
@@ -91,7 +96,7 @@ export function useRefreshData() {
     setInitialized(false)
     setLoading(true)
     try {
-      const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming] =
+      const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming, upcomingPmts] =
         await Promise.all([
           getUserTransactions(user.uid),
           getUserBudgets(user.uid),
@@ -101,6 +106,7 @@ export function useRefreshData() {
           getUserSettings(user.uid),
           getUserSavingsGoals(user.uid).catch(() => []),
           getUserUpcoming(user.uid).catch(() => []),
+          getUserUpcomingPayments(user.uid).catch(() => []),
         ])
       setTransactions(txs)
       setBudgets(budgets)
@@ -110,6 +116,7 @@ export function useRefreshData() {
       setSettings(settings)
       setSavingsGoals(goals)
       setUpcomingExpenses(upcoming)
+      setUpcomingPayments(upcomingPmts)
       setInitialized(true)
     } finally {
       setLoading(false)

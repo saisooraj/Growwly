@@ -68,5 +68,12 @@ service cloud.firestore {
     match /pushSubscriptions/{userId} {
       allow read, write: if isOwner(userId);
     }
+
+    // Upcoming Payments
+    match /upcomingPayments/{docId} {
+      allow read, delete: if isAuth() && resource.data.userId == request.auth.uid;
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuth() && resource.data.userId == request.auth.uid;
+    }
   }
 }
