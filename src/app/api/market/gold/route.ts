@@ -1,59 +1,79 @@
 import { NextResponse } from 'next/server'
 
-const HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-  'Accept': 'application/json',
+const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+interface IBJAEntry {
+  date: string   // DD/MM/YYYY
+  pm: number     // per 10g, 999 purity
+  am: number
 }
 
-const TROY_OZ_TO_GRAM = 31.1035
+async function fetchIBJA(): Promise<IBJAEntry[]> {
+  const res = await fetch('https://ibjarates.com/', {
+    headers: { 'User-Agent': UA },
+    cache: 'no-store',
+  })
+  const html = await res.text()
 
-async function fetchYahooMeta(symbol: string) {
-  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1mo`
-  const res = await fetch(url, { headers: HEADERS, next: { revalidate: 300 } })
-  const json = await res.json()
-  const result = json.chart?.result?.[0]
-  const meta = result?.meta
-  const timestamps = result?.timestamp ?? []
-  const closes = result?.indicators?.quote?.[0]?.close ?? []
-  return { meta, timestamps, closes }
+  const entries: IBJAEntry[] = []
+  // Each table row has: date, then Gold999 AM, Gold999 PM
+  const dateBlocks = html.split(/<strong>\d{2}\/\d{2}\/\d{4}<\/strong>/)
+  const dateMatches = [...html.matchAll(/<strong>(\d{2}\/\d{2}\/\d{4})<\/strong>/g)]
+
+  for (let i = 0; i < dateMatches.length; i++) {
+    const dateStr = dateMatches[i][1]
+    const block = dateBlocks[i + 1] ?? ''
+    const nums = [...block.matchAll(/data-label="Gold 999">(\d+)</g)]
+    if (nums.length >= 2) {
+      entries.push({
+        date: dateStr,
+        am: parseInt(nums[0][1]),
+        pm: parseInt(nums[1][1]),
+      })
+    } else if (nums.length === 1) {
+      entries.push({ date: dateStr, am: parseInt(nums[0][1]), pm: parseInt(nums[0][1]) })
+    }
+  }
+  return entries
+}
+
+function parseDate(ddmmyyyy: string): string {
+  const [d, m, y] = ddmmyyyy.split('/')
+  return `${y}-${m}-${d}`
 }
 
 export async function GET() {
   try {
-    const [goldData, forexData] = await Promise.all([
-      fetchYahooMeta('GC=F'),
-      fetchYahooMeta('USDINR=X'),
-    ])
+    const entries = await fetchIBJA()
+    if (entries.length === 0) throw new Error('No IBJA data')
 
-    const goldUSD = goldData.meta?.regularMarketPrice ?? 0
-    const usdInr  = forexData.meta?.regularMarketPrice ?? 84
+    // Most recent rate (use PM if available)
+    const latest = entries[0]
+    const latestPer10g = latest.pm || latest.am
 
-    // Calculate prices
-    const price24kPerGram = (goldUSD * usdInr) / TROY_OZ_TO_GRAM
+    const price24kPerGram = latestPer10g / 10
     const price22kPerGram = price24kPerGram * (22 / 24)
-    const sovereign = price22kPerGram * 8   // 1 sovereign = 8 grams
-    const tenGram   = price22kPerGram * 10
+    const sovereign       = price22kPerGram * 8   // 1 sovereign = 8g
+    const tenGram         = price22kPerGram * 10
 
-    // Build 30-day history for 22K price per gram
-    const history: { date: string; price22k: number }[] = []
-    const goldCloses = goldData.closes
-    const goldTimestamps = goldData.timestamps
+    // 30-day history from IBJA — deduplicate by date, keep PM rate
+    const seen = new Set<string>()
+    const history = entries
+      .filter(e => {
+        const d = parseDate(e.date)
+        if (seen.has(d)) return false
+        seen.add(d)
+        return true
+      })
+      .slice(0, 30)
+      .map(e => ({
+        date: parseDate(e.date),
+        price22k: parseFloat(((e.pm || e.am) / 10 * (22 / 24)).toFixed(0)),
+      }))
+      .reverse()
 
-    // forex close for the same period (may have different length, use latest rate as proxy)
-    for (let i = 0; i < goldTimestamps.length; i++) {
-      const close = goldCloses[i]
-      if (close == null) continue
-      const inrClose = (forexData.closes[i] ?? usdInr)
-      const p22 = (close * inrClose) / TROY_OZ_TO_GRAM * (22 / 24)
-      const date = new Date(goldTimestamps[i] * 1000).toISOString().split('T')[0]
-      history.push({ date, price22k: parseFloat(p22.toFixed(0)) })
-    }
-
-    // Buy signal: compare current vs 30-day average
-    const avg30 = history.length > 0
-      ? history.reduce((s, h) => s + h.price22k, 0) / history.length
-      : price22kPerGram
-
+    // Buy/hold/wait signal vs 30-day average
+    const avg30 = history.reduce((s, h) => s + h.price22k, 0) / (history.length || 1)
     const pctAboveAvg = ((price22kPerGram - avg30) / avg30) * 100
     let signal: 'buy' | 'hold' | 'wait'
     let signalText: string
@@ -69,16 +89,15 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      goldUSD: parseFloat(goldUSD.toFixed(2)),
-      usdInr: parseFloat(usdInr.toFixed(2)),
-      price24kPerGram: parseFloat(price24kPerGram.toFixed(0)),
-      price22kPerGram: parseFloat(price22kPerGram.toFixed(0)),
-      sovereign: parseFloat(sovereign.toFixed(0)),
-      tenGram: parseFloat(tenGram.toFixed(0)),
-      avg30Day: parseFloat(avg30.toFixed(0)),
+      price24kPerGram: Math.round(price24kPerGram),
+      price22kPerGram: Math.round(price22kPerGram),
+      sovereign:       Math.round(sovereign),
+      tenGram:         Math.round(tenGram),
+      avg30Day:        Math.round(avg30),
       signal,
       signalText,
       history,
+      source: 'IBJA',
       updatedAt: new Date().toISOString(),
     })
   } catch (e) {

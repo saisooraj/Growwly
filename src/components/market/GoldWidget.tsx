@@ -6,8 +6,6 @@ import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceL
 import { format, parseISO } from 'date-fns'
 
 interface GoldData {
-  goldUSD: number
-  usdInr: number
   price24kPerGram: number
   price22kPerGram: number
   sovereign: number
@@ -158,8 +156,7 @@ export default function GoldWidget() {
       )}
 
       <p className="text-xs text-slate-400 text-center">
-        Calculated from MCX Gold (GC=F) × USD/INR · Refreshes every 5 min
-        <br />Kerala market may add ₹30–50/gram premium
+        Source: IBJA (India Bullion &amp; Jewellers Association) · Refreshes every 5 min
       </p>
     </div>
   )
