@@ -27,9 +27,11 @@ export default function UpcomingCard() {
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
     .slice(0, 5)
 
-  const totalPlanned  = relevant.reduce((s, i) => s + i.amount, 0)
-  const totalPaid     = relevant.reduce((s, i) => s + (paidByItem.get(i.id) ?? 0), 0)
-  const totalRemain   = Math.max(0, totalPlanned - totalPaid)
+  const totalOut    = relevant.filter(i => (i.flowType ?? 'expense') === 'expense').reduce((s, i) => s + i.amount, 0)
+  const totalIn     = relevant.filter(i => i.flowType === 'income').reduce((s, i) => s + i.amount, 0)
+  const totalPaid   = relevant.reduce((s, i) => s + (paidByItem.get(i.id) ?? 0), 0)
+  const totalRemain = Math.max(0, totalOut - relevant.filter(i => (i.flowType ?? 'expense') === 'expense').reduce((s, i) => s + (paidByItem.get(i.id) ?? 0), 0))
+  const netPosition = totalIn - totalOut
 
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -60,25 +62,26 @@ export default function UpcomingCard() {
         </div>
       ) : (
         <>
-          {/* Total remaining */}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-            <span className="display-num" style={{ fontSize: 26, color: 'var(--text)', lineHeight: 1 }}>
-              {formatCurrencyFull(totalRemain)}
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-              {totalPaid > 0 ? 'remaining' : 'committed'}
-            </span>
-            {totalPaid > 0 && (
-              <span style={{ fontSize: 11, color: 'var(--good-ink)', marginLeft: 2 }}>
-                · {formatCurrencyFull(totalPaid)} paid
+          {/* Summary */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span className="display-num" style={{ fontSize: 26, color: netPosition >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)', lineHeight: 1 }}>
+                {netPosition >= 0 ? '+' : ''}{formatCurrencyFull(netPosition)}
               </span>
-            )}
+              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>net</span>
+            </div>
+            <div style={{ display: 'flex', gap: 10, fontSize: 11 }}>
+              {totalOut > 0 && <span style={{ color: 'var(--bad-ink)' }}>↓ {formatCurrencyFull(totalOut)} out</span>}
+              {totalIn > 0  && <span style={{ color: 'var(--good-ink)' }}>↑ {formatCurrencyFull(totalIn)} in</span>}
+              {totalPaid > 0 && <span style={{ color: 'var(--text-3)' }}>· {formatCurrencyFull(totalPaid)} logged</span>}
+            </div>
           </div>
 
           {/* List */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {relevant.map(item => {
-              const color     = CATEGORY_COLORS[item.category ?? ''] ?? '#94a3b8'
+              const isIncome  = item.flowType === 'income'
+              const color     = isIncome ? 'var(--good)' : (CATEGORY_COLORS[item.category ?? ''] ?? '#94a3b8')
               const paid      = paidByItem.get(item.id) ?? 0
               const remaining = Math.max(0, item.amount - paid)
               const pct       = item.amount > 0 ? Math.min(100, (paid / item.amount) * 100) : 0

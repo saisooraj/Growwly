@@ -2,12 +2,12 @@
 
 import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { X } from 'lucide-react'
+import { X, TrendingDown, TrendingUp } from 'lucide-react'
 import { format, addMonths } from 'date-fns'
 import { addUpcoming, updateUpcoming } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
-import { EXPENSE_CATEGORIES } from '@/lib/utils'
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/utils'
 import type { UpcomingExpense, Category } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -23,6 +23,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
 
   const defaultDate = format(addMonths(new Date(), 1), 'yyyy-MM') + '-01'
 
+  const [flowType, setFlowType]     = useState<'expense' | 'income'>('expense')
   const [label, setLabel]           = useState('')
   const [amount, setAmount]         = useState('')
   const [dueDate, setDueDate]       = useState(defaultDate)
@@ -31,16 +32,25 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
   const [isRecurring, setRecurring] = useState(false)
   const [saving, setSaving]         = useState(false)
 
+  const isIncome = flowType === 'income'
+
   useEffect(() => {
     if (open) {
+      const ft = (editItem?.flowType ?? 'expense') as 'expense' | 'income'
+      setFlowType(ft)
       setLabel(editItem?.label ?? '')
       setAmount(editItem ? String(editItem.amount) : '')
       setDueDate(editItem?.dueDate ?? defaultDate)
-      setCategory((editItem?.category as Category) ?? 'Living Expenses')
+      setCategory((editItem?.category as Category) ?? (ft === 'income' ? 'Other Income' : 'Living Expenses'))
       setNotes(editItem?.notes ?? '')
       setRecurring(editItem?.isRecurring ?? false)
     }
   }, [open, editItem])
+
+  function handleFlowTypeChange(ft: 'expense' | 'income') {
+    setFlowType(ft)
+    setCategory(ft === 'income' ? 'Other Income' : 'Living Expenses')
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -48,6 +58,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
     setSaving(true)
     try {
       const payload = {
+        flowType,
         label: label.trim(),
         amount: Number(amount),
         dueDate,
@@ -60,7 +71,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
         toast.success('Updated')
       } else {
         await addUpcoming(user.uid, payload)
-        toast.success('Added to upcoming')
+        toast.success(isIncome ? 'Expected income added' : 'Added to upcoming')
       }
       await refresh()
       onClose()
@@ -95,12 +106,13 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
                 background: 'var(--surface)', border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-lg)', overflow: 'hidden',
               }}>
+                {/* Header */}
                 <div style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '16px 20px', borderBottom: '1px solid var(--border)',
                 }}>
                   <Dialog.Title style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
-                    {editItem ? 'Edit upcoming expense' : 'Add upcoming expense'}
+                    {editItem ? 'Edit entry' : 'Add upcoming'}
                   </Dialog.Title>
                   <button onClick={onClose} style={{ padding: 6, borderRadius: 8, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}>
                     <X size={16} />
@@ -109,12 +121,44 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
 
                 <form onSubmit={handleSubmit} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
 
+                  {/* Expense / Income toggle — disabled when editing (can't change flow type) */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {(['expense', 'income'] as const).map(ft => {
+                      const active = flowType === ft
+                      const Icon = ft === 'expense' ? TrendingDown : TrendingUp
+                      const activeColor = ft === 'expense' ? 'var(--bad-ink)' : 'var(--good-ink)'
+                      const activeBg   = ft === 'expense' ? 'color-mix(in oklch, var(--bad) 12%, transparent)' : 'color-mix(in oklch, var(--good) 12%, transparent)'
+                      const activeBorder = ft === 'expense' ? 'var(--bad)' : 'var(--good)'
+                      return (
+                        <button
+                          key={ft}
+                          type="button"
+                          disabled={!!editItem}
+                          onClick={() => handleFlowTypeChange(ft)}
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                            padding: '10px 12px', borderRadius: 10, cursor: editItem ? 'default' : 'pointer',
+                            border: `1.5px solid ${active ? activeBorder : 'var(--border)'}`,
+                            background: active ? activeBg : 'var(--surface-2)',
+                            color: active ? activeColor : 'var(--text-3)',
+                            fontSize: 13, fontWeight: 600,
+                            transition: 'all .15s',
+                            opacity: editItem ? 0.7 : 1,
+                          }}
+                        >
+                          <Icon size={14} />
+                          {ft === 'expense' ? 'Going out' : 'Coming in'}
+                        </button>
+                      )
+                    })}
+                  </div>
+
                   <div>
-                    <label className="label">What is it?</label>
+                    <label className="label">{isIncome ? "What's coming in?" : 'What is it?'}</label>
                     <input
                       type="text"
                       className="input"
-                      placeholder="e.g. Rent, Credit card bill, Flight…"
+                      placeholder={isIncome ? 'e.g. Security deposit, Freelance payout…' : 'e.g. Rent, Credit card bill, Flight…'}
                       value={label}
                       onChange={e => setLabel(e.target.value)}
                       required
@@ -138,7 +182,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
                   </div>
 
                   <div>
-                    <label className="label">Expected date</label>
+                    <label className="label">{isIncome ? 'Expected by' : 'Expected date'}</label>
                     <input
                       type="date"
                       className="input"
@@ -155,7 +199,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
                       value={category}
                       onChange={e => setCategory(e.target.value as Category)}
                     >
-                      {EXPENSE_CATEGORIES.map(c => (
+                      {(isIncome ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map(c => (
                         <option key={c} value={c}>{c}</option>
                       ))}
                     </select>
@@ -203,7 +247,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
                     className="btn-primary"
                     style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: 14, opacity: saving ? 0.6 : 1 }}
                   >
-                    {saving ? 'Saving…' : editItem ? 'Update' : 'Add'}
+                    {saving ? 'Saving…' : editItem ? 'Update' : isIncome ? 'Add income' : 'Add expense'}
                   </button>
                 </form>
               </Dialog.Panel>

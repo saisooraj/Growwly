@@ -24,6 +24,7 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
   const refresh  = useRefreshData()
 
   const isEditing = !!editPayment
+  const isIncome  = item?.flowType === 'income'
   const remaining = item ? Math.max(0, item.amount - alreadyPaid) : 0
 
   const [amount, setAmount]       = useState('')
@@ -63,11 +64,11 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
 
         if (alsoLog) {
           linkedTransactionId = await addTransaction(user.uid, {
-            type: 'expense',
+            type: isIncome ? 'income' : 'expense',
             amount: Number(amount),
-            category: item.category ?? 'Other',
+            category: item.category ?? (isIncome ? 'Other Income' : 'Other'),
             date,
-            notes: notes || `Payment towards: ${item.label}`,
+            notes: notes || (isIncome ? `Received: ${item.label}` : `Payment towards: ${item.label}`),
             isRecurring: false,
           })
         }
@@ -82,7 +83,7 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
       }
 
       await refresh()
-      toast.success(isEditing ? 'Payment updated' : 'Payment logged')
+      toast.success(isEditing ? 'Updated' : isIncome ? 'Receipt logged' : 'Payment logged')
       onClose()
     } catch (err) {
       console.error(err)
@@ -124,7 +125,7 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
                   <div>
                     <Dialog.Title style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', margin: 0 }}>
-                      {isEditing ? 'Edit payment' : 'Log payment'}
+                      {isEditing ? (isIncome ? 'Edit receipt' : 'Edit payment') : isIncome ? 'Log receipt' : 'Log payment'}
                     </Dialog.Title>
                     <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{item.label}</p>
                   </div>
@@ -160,7 +161,7 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
                 <form onSubmit={handleSubmit} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
 
                   <div>
-                    <label className="label">Amount paid (₹)</label>
+                    <label className="label">{isIncome ? 'Amount received (₹)' : 'Amount paid (₹)'}</label>
                     <input
                       type="number"
                       step="0.01"
@@ -225,9 +226,9 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
                     </div>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 500, color: alsoLog ? 'var(--brand-ink)' : 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <IndianRupee size={12} /> Also log as expense transaction
+                        <IndianRupee size={12} /> {isIncome ? 'Also log as income transaction' : 'Also log as expense transaction'}
                       </div>
-                      <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 1 }}>Adds to your monthly spending</div>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 1 }}>{isIncome ? 'Adds to your monthly income' : 'Adds to your monthly spending'}</div>
                     </div>
                   </label>}
 
@@ -237,7 +238,7 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
                     className="btn-primary"
                     style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: 14, opacity: saving ? 0.6 : 1 }}
                   >
-                    {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Log payment'}
+                    {saving ? 'Saving…' : isEditing ? 'Save changes' : isIncome ? 'Log receipt' : 'Log payment'}
                   </button>
                 </form>
               </Dialog.Panel>

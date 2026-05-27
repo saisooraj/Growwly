@@ -41,9 +41,12 @@ export default function UpcomingPage() {
     return map
   }, [upcomingExpenses])
 
-  const totalAll    = upcomingExpenses.reduce((s, i) => s + i.amount, 0)
-  const totalPaid   = Array.from(paidByItem.values()).reduce((s, v) => s + v, 0)
-  const totalRemain = Math.max(0, totalAll - totalPaid)
+  const expenses    = upcomingExpenses.filter(i => (i.flowType ?? 'expense') === 'expense')
+  const incomes     = upcomingExpenses.filter(i => i.flowType === 'income')
+  const totalOut    = expenses.reduce((s, i) => s + i.amount, 0)
+  const totalIn     = incomes.reduce((s, i) => s + i.amount, 0)
+  const totalLogged = Array.from(paidByItem.values()).reduce((s, v) => s + v, 0)
+  const netPosition = totalIn - totalOut
 
   async function handleDelete(item: UpcomingExpense) {
     if (!confirm(`Delete "${item.label}"?`)) return
@@ -68,17 +71,18 @@ export default function UpcomingPage() {
         {upcomingExpenses.length > 0 && (
           <div className="grid grid-cols-3" style={{ gap: 'var(--row-gap)' }}>
             <div className="card-sm">
-              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Total planned</div>
-              <div className="display-num" style={{ fontSize: 20, color: 'var(--text)' }}>{formatCurrencyFull(totalAll)}</div>
+              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Going out</div>
+              <div className="display-num" style={{ fontSize: 20, color: 'var(--bad-ink)' }}>{formatCurrencyFull(totalOut)}</div>
+              {totalLogged > 0 && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{formatCurrencyFull(totalLogged)} logged</div>}
             </div>
             <div className="card-sm">
-              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Paid so far</div>
-              <div className="display-num" style={{ fontSize: 20, color: 'var(--good-ink)' }}>{formatCurrencyFull(totalPaid)}</div>
+              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Coming in</div>
+              <div className="display-num" style={{ fontSize: 20, color: 'var(--good-ink)' }}>{formatCurrencyFull(totalIn)}</div>
             </div>
             <div className="card-sm">
-              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Remaining</div>
-              <div className="display-num" style={{ fontSize: 20, color: totalRemain > 0 ? 'var(--bad-ink)' : 'var(--good-ink)' }}>
-                {formatCurrencyFull(totalRemain)}
+              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Net position</div>
+              <div className="display-num" style={{ fontSize: 20, color: netPosition >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
+                {netPosition >= 0 ? '+' : ''}{formatCurrencyFull(netPosition)}
               </div>
             </div>
           </div>
@@ -88,27 +92,36 @@ export default function UpcomingPage() {
         {grouped.size === 0 ? (
           <div className="card" style={{ textAlign: 'center', padding: '60px 20px' }}>
             <CalendarClock size={32} style={{ color: 'var(--text-4)', margin: '0 auto 12px' }} />
-            <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-2)', marginBottom: 6 }}>No upcoming expenses yet</p>
-            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>Jot down anything you know is coming — bills, EMIs, events.</p>
+            <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-2)', marginBottom: 6 }}>Nothing planned yet</p>
+            <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>Track upcoming bills, EMIs, and money you expect to receive.</p>
             <button onClick={() => setAddOpen(true)} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <Plus size={14} /> Add first item
             </button>
           </div>
         ) : (
           Array.from(grouped.entries()).map(([ym, items]) => {
-            const monthTotal   = items.reduce((s, i) => s + i.amount, 0)
-            const monthPaid    = items.reduce((s, i) => s + (paidByItem.get(i.id) ?? 0), 0)
-            const monthRemain  = Math.max(0, monthTotal - monthPaid)
+            const mOut   = items.filter(i => (i.flowType ?? 'expense') === 'expense').reduce((s, i) => s + i.amount, 0)
+            const mIn    = items.filter(i => i.flowType === 'income').reduce((s, i) => s + i.amount, 0)
+            const mNet   = mIn - mOut
+            const mPaid  = items.reduce((s, i) => s + (paidByItem.get(i.id) ?? 0), 0)
             return (
               <div key={ym} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px' }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{monthLabel(ym)}</span>
-                  <div style={{ textAlign: 'right' }}>
-                    <span className="display-num" style={{ fontSize: 13, color: 'var(--text-2)' }}>{formatCurrencyFull(monthTotal)}</span>
-                    {monthPaid > 0 && (
-                      <span style={{ fontSize: 11.5, color: 'var(--text-3)', marginLeft: 6 }}>
-                        · {formatCurrencyFull(monthRemain)} left
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {mOut > 0 && (
+                      <span style={{ fontSize: 11.5, color: 'var(--bad-ink)' }}>↓ {formatCurrencyFull(mOut)}</span>
+                    )}
+                    {mIn > 0 && (
+                      <span style={{ fontSize: 11.5, color: 'var(--good-ink)' }}>↑ {formatCurrencyFull(mIn)}</span>
+                    )}
+                    {mOut > 0 && mIn > 0 && (
+                      <span className="display-num" style={{ fontSize: 12, color: mNet >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)', fontWeight: 600 }}>
+                        {mNet >= 0 ? '+' : ''}{formatCurrencyFull(mNet)}
                       </span>
+                    )}
+                    {mPaid > 0 && !(mOut > 0 && mIn > 0) && (
+                      <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{formatCurrencyFull(mPaid)} logged</span>
                     )}
                   </div>
                 </div>
@@ -169,11 +182,12 @@ interface NoteCardProps {
 
 function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: NoteCardProps) {
   const refresh   = useRefreshData()
-  const color     = CATEGORY_COLORS[item.category ?? ''] ?? '#94a3b8'
+  const isIncome  = item.flowType === 'income'
+  const color     = isIncome ? 'var(--good)' : (CATEGORY_COLORS[item.category ?? ''] ?? '#94a3b8')
   const due       = parseISO(item.dueDate)
-  const overdue   = isPast(due) && !isThisMonth(due)
+  const overdue   = !isIncome && isPast(due) && !isThisMonth(due)
   const daysOut   = differenceInDays(due, new Date())
-  const soon      = daysOut >= 0 && daysOut <= 7
+  const soon      = !isIncome && daysOut >= 0 && daysOut <= 7
   const remaining = Math.max(0, item.amount - paid)
   const pct       = item.amount > 0 ? Math.min(100, (paid / item.amount) * 100) : 0
   const fulfilled = pct >= 100
@@ -181,14 +195,14 @@ function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: Note
   const [showPayments, setShowPayments] = useState(false)
   const [editPay, setEditPay]           = useState<UpcomingPayment | null>(null)
 
-  const urgencyColor = overdue ? 'var(--bad-ink)' : soon ? 'var(--warn-ink)' : 'var(--text-3)'
+  const urgencyColor = overdue ? 'var(--bad-ink)' : soon ? 'var(--warn-ink)' : isIncome ? 'var(--good-ink)' : 'var(--text-3)'
 
   async function handleDeletePayment(p: UpcomingPayment) {
-    if (!confirm('Remove this payment entry?')) return
+    if (!confirm('Remove this entry?')) return
     try {
       await deleteUpcomingPayment(p.id)
       await refresh()
-      toast.success('Payment removed')
+      toast.success('Entry removed')
     } catch {
       toast.error('Failed to remove')
     }
@@ -228,8 +242,8 @@ function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: Note
         </div>
         {paid > 0 && (
           <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 3 }}>
-            <span style={{ color: 'var(--good-ink)', fontWeight: 500 }}>{formatCurrencyFull(paid)} paid</span>
-            {!fulfilled && <span> · {formatCurrencyFull(remaining)} left</span>}
+            <span style={{ color: 'var(--good-ink)', fontWeight: 500 }}>{formatCurrencyFull(paid)} {isIncome ? 'received' : 'paid'}</span>
+            {!fulfilled && <span> · {formatCurrencyFull(remaining)} {isIncome ? 'pending' : 'left'}</span>}
           </div>
         )}
       </div>
@@ -257,7 +271,7 @@ function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: Note
           }}
         >
           {showPayments ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-          {payments.length} payment{payments.length > 1 ? 's' : ''} logged
+          {payments.length} {isIncome ? 'receipt' : 'payment'}{payments.length > 1 ? 's' : ''} logged
         </button>
       )}
 
@@ -317,7 +331,7 @@ function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: Note
       {/* Footer */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
         <span style={{ fontSize: 11.5, color: urgencyColor, fontWeight: overdue || soon ? 500 : 400 }}>
-          {overdue && !fulfilled ? 'Overdue · ' : ''}{format(due, 'dd MMM yyyy')}
+          {overdue && !fulfilled ? 'Overdue · ' : ''}{isIncome ? 'Expected by ' : ''}{format(due, 'dd MMM yyyy')}
         </span>
         {!fulfilled && (
           <button
@@ -325,7 +339,7 @@ function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: Note
             className="btn btn-sm"
             style={{ fontSize: 11, padding: '3px 10px', borderRadius: 8 }}
           >
-            + Pay
+            {isIncome ? '+ Received' : '+ Pay'}
           </button>
         )}
       </div>

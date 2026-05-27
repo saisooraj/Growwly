@@ -130,12 +130,13 @@ export interface UpcomingPayment {
 export interface UpcomingExpense {
   id: string
   userId: string
+  flowType?: 'expense' | 'income'  // defaults to 'expense' for legacy records
   label: string
   amount: number
   dueDate: string       // YYYY-MM-DD
   category?: Category
   notes?: string
-  isRecurring?: boolean // auto-copy to next month
+  isRecurring?: boolean
   createdAt: string
 }
 
