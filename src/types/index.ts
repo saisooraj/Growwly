@@ -110,6 +110,8 @@ export interface UserSettings {
   emergencyFundTarget: number
   weeklyBudget: number
   notificationsEnabled: boolean
+  pushReminderEnabled?: boolean
+  pushReminderHour?: number   // 0–23, hour in user's local time
   createdAt: string
   updatedAt: string
 }

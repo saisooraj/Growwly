@@ -8,21 +8,29 @@ import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
 import { setUserSettings, exportAllUserData, importAllUserData } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
+import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { downloadJSON } from '@/lib/utils'
-import { Download, Upload, Flame, Shield, Wallet, LogOut } from 'lucide-react'
+import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { FinancialMode } from '@/types'
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const label = i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`
+  return { value: i, label }
+})
 
 export default function SettingsPage() {
   const { user, logout } = useAuth()
   const { settings } = useAppStore()
   const refresh = useRefreshData()
   const fileRef = useRef<HTMLInputElement>(null)
+  const { state: pushState, subscribe, unsubscribe } = usePushNotifications()
 
   const [mode, setMode] = useState<FinancialMode>('normal')
   const [weeklyBudget, setWeeklyBudget] = useState('')
   const [monthlyIncome, setMonthlyIncome] = useState('')
   const [efTarget, setEfTarget] = useState('')
+  const [reminderHour, setReminderHour] = useState(20)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -33,6 +41,7 @@ export default function SettingsPage() {
       setWeeklyBudget(String(settings.weeklyBudget ?? ''))
       setMonthlyIncome(String(settings.monthlyIncomeTarget ?? ''))
       setEfTarget(String(settings.emergencyFundTarget ?? ''))
+      setReminderHour(settings.pushReminderHour ?? 20)
     }
   }, [settings])
 
@@ -40,11 +49,14 @@ export default function SettingsPage() {
     if (!user) return
     setSaving(true)
     try {
+      const utcHour = (reminderHour - Math.round(new Date().getTimezoneOffset() / -60) + 24) % 24
       await setUserSettings(user.uid, {
         financialMode: mode,
         weeklyBudget: Number(weeklyBudget) || 0,
         monthlyIncomeTarget: Number(monthlyIncome) || 0,
         emergencyFundTarget: Number(efTarget) || 0,
+        pushReminderHour: utcHour,
+        pushReminderEnabled: pushState === 'subscribed',
       })
       await refresh()
       toast.success('Settings saved')
@@ -55,12 +67,32 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleTogglePush() {
+    if (pushState === 'subscribed') {
+      await unsubscribe()
+      await setUserSettings(user!.uid, { pushReminderEnabled: false })
+      toast.success('Reminders turned off')
+    } else {
+      const ok = await subscribe()
+      if (ok) {
+        const utcHour = (reminderHour - Math.round(new Date().getTimezoneOffset() / -60) + 24) % 24
+        await setUserSettings(user!.uid, {
+          pushReminderEnabled: true,
+          pushReminderHour: utcHour,
+        })
+        toast.success('Reminders enabled!')
+      } else if (pushState === 'denied') {
+        toast.error('Notifications blocked — enable them in browser settings')
+      }
+    }
+  }
+
   async function handleExport() {
     if (!user) return
     setExporting(true)
     try {
       const data = await exportAllUserData(user.uid)
-      downloadJSON(data, `spendwise-backup-${new Date().toISOString().split('T')[0]}.json`)
+      downloadJSON(data, `growwly-backup-${new Date().toISOString().split('T')[0]}.json`)
       toast.success('Data exported successfully')
     } catch {
       toast.error('Export failed')
@@ -89,64 +121,127 @@ export default function SettingsPage() {
     }
   }
 
+  const pushUnavailable = pushState === 'unsupported' || pushState === 'denied'
+  const pushLoading     = pushState === 'loading'
+  const isSubscribed    = pushState === 'subscribed'
+
   return (
     <AppShell title="Settings">
-      <div className="max-w-xl space-y-5">
+      <div style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
         {/* Account */}
-        <div className="card space-y-4">
-          <h2 className="font-semibold text-slate-800">Account</h2>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Account</h2>
           {user && (
-            <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, background: 'var(--surface-2)', borderRadius: 12 }}>
               {user.photoURL ? (
-                <img src={user.photoURL} alt={user.displayName ?? ''} className="w-10 h-10 rounded-full" />
+                <img src={user.photoURL} alt={user.displayName ?? ''} style={{ width: 40, height: 40, borderRadius: '50%' }} />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-brand-500 flex items-center justify-center text-white font-semibold">
+                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 600 }}>
                   {user.displayName?.[0] ?? 'U'}
                 </div>
               )}
               <div>
-                <p className="text-sm font-medium text-slate-800">{user.displayName}</p>
-                <p className="text-xs text-slate-400">{user.email}</p>
+                <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0 }}>{user.displayName}</p>
+                <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>{user.email}</p>
               </div>
             </div>
           )}
-          <button onClick={logout} className="btn-danger">
+          <button onClick={logout} className="btn-danger" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6 }}>
             <LogOut size={15} /> Sign Out
           </button>
         </div>
 
-        {/* Financial Mode */}
-        <div className="card space-y-4">
-          <div className="flex items-center gap-2">
-            <Flame size={16} className="text-orange-500" />
-            <h2 className="font-semibold text-slate-800">Financial Mode</h2>
+        {/* Push Notifications */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: isSubscribed ? 'var(--brand-soft)' : 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isSubscribed ? 'var(--brand)' : 'var(--text-3)' }}>
+              <BellRing size={14} />
+            </div>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Daily Reminders</h2>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+
+          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
+            Get a push notification each day to remind you to log your transactions.
+          </p>
+
+          {pushState === 'unsupported' && (
+            <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)', fontSize: 12, color: 'var(--text-3)' }}>
+              Push notifications are not supported in this browser.
+            </div>
+          )}
+
+          {pushState === 'denied' && (
+            <div style={{ padding: '10px 14px', borderRadius: 10, background: 'color-mix(in oklch, var(--bad) 12%, transparent)', fontSize: 12, color: 'var(--bad-ink)' }}>
+              Notifications are blocked. Allow them in your browser / OS settings, then reload.
+            </div>
+          )}
+
+          {/* Reminder time picker — shown when subscribed or about to subscribe */}
+          {!pushUnavailable && (
+            <div>
+              <label className="label">Remind me at</label>
+              <select
+                className="input"
+                value={reminderHour}
+                onChange={e => setReminderHour(Number(e.target.value))}
+                style={{ maxWidth: 180 }}
+              >
+                {HOUR_OPTIONS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 4 }}>Your local time. Reminder fires within the hour.</p>
+            </div>
+          )}
+
+          {!pushUnavailable && (
+            <button
+              onClick={handleTogglePush}
+              disabled={pushLoading}
+              className={isSubscribed ? 'btn' : 'btn-primary'}
+              style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8, opacity: pushLoading ? 0.6 : 1 }}
+            >
+              {isSubscribed ? <BellOff size={14} /> : <Bell size={14} />}
+              {pushLoading ? 'Working…' : isSubscribed ? 'Turn off reminders' : 'Enable reminders'}
+            </button>
+          )}
+        </div>
+
+        {/* Financial Mode */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Flame size={14} style={{ color: 'var(--warn-ink)' }} />
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Financial Mode</h2>
+          </div>
+          <div className="grid grid-cols-2" style={{ gap: 10 }}>
             {([
-              { value: 'normal' as const,       label: 'Normal Mode',       desc: 'Standard budget tracking',              icon: '🧘' },
-              { value: 'high-expense' as const, label: 'High Expense Mode', desc: 'Cash pressure alerts, borrow tracking', icon: '🔥' },
+              { value: 'normal' as const,       label: 'Normal',       desc: 'Standard budget tracking',              emoji: '🧘' },
+              { value: 'high-expense' as const, label: 'High Expense', desc: 'Cash pressure alerts, borrow tracking', emoji: '🔥' },
             ]).map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => setMode(opt.value)}
-                className={`text-left p-3 rounded-xl border-2 transition-all ${
-                  mode === opt.value ? 'border-brand-500 bg-brand-50' : 'border-slate-200 hover:border-slate-300'
-                }`}
+                style={{
+                  textAlign: 'left', padding: 12, borderRadius: 12,
+                  border: `2px solid ${mode === opt.value ? 'var(--brand)' : 'var(--border)'}`,
+                  background: mode === opt.value ? 'var(--brand-soft)' : 'var(--surface)',
+                  cursor: 'pointer', transition: 'all .15s',
+                }}
               >
-                <span className="text-xl mb-1 block">{opt.icon}</span>
-                <p className="text-sm font-medium text-slate-800">{opt.label}</p>
-                <p className="text-xs text-slate-500">{opt.desc}</p>
+                <span style={{ fontSize: 20, display: 'block', marginBottom: 4 }}>{opt.emoji}</span>
+                <p style={{ fontSize: 13, fontWeight: 500, color: mode === opt.value ? 'var(--brand-ink)' : 'var(--text)', margin: 0 }}>{opt.label}</p>
+                <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, marginTop: 2 }}>{opt.desc}</p>
               </button>
             ))}
           </div>
         </div>
 
         {/* Budget Targets */}
-        <div className="card space-y-4">
-          <div className="flex items-center gap-2">
-            <Wallet size={16} className="text-brand-500" />
-            <h2 className="font-semibold text-slate-800">Budget Targets</h2>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Wallet size={14} style={{ color: 'var(--brand)' }} />
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Budget Targets</h2>
           </div>
           <div>
             <label className="label">Monthly Income Target (₹)</label>
@@ -160,31 +255,30 @@ export default function SettingsPage() {
             <label className="label">Emergency Fund Target (₹)</label>
             <input type="number" className="input" placeholder="e.g. 200000" value={efTarget} onChange={(e) => setEfTarget(e.target.value)} />
           </div>
-          <button onClick={saveSettings} disabled={saving} className="btn-primary disabled:opacity-60">
-            {saving ? 'Saving...' : 'Save Settings'}
+          <button onClick={saveSettings} disabled={saving} className="btn-primary" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>
+            {saving ? 'Saving…' : 'Save Settings'}
           </button>
         </div>
 
         {/* Backup & Restore */}
-        <div className="card space-y-4">
-          <div className="flex items-center gap-2">
-            <Shield size={16} className="text-teal-500" />
-            <h2 className="font-semibold text-slate-800">Backup & Restore</h2>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Shield size={14} style={{ color: 'var(--info-ink)' }} />
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Backup & Restore</h2>
           </div>
-          <p className="text-sm text-slate-500">Export all your data as JSON. Re-import anytime to restore on any device.</p>
-          <div className="flex gap-3 flex-wrap">
-            <button onClick={handleExport} disabled={exporting} className="btn-primary disabled:opacity-60">
-              <Download size={15} /> {exporting ? 'Exporting...' : 'Export Backup'}
+          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>Export all your data as JSON. Re-import anytime to restore on any device.</p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button onClick={handleExport} disabled={exporting} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: exporting ? 0.6 : 1 }}>
+              <Download size={14} /> {exporting ? 'Exporting…' : 'Export Backup'}
             </button>
-            <button onClick={() => fileRef.current?.click()} disabled={importing} className="btn-secondary disabled:opacity-60">
-              <Upload size={15} /> {importing ? 'Importing...' : 'Import Backup'}
+            <button onClick={() => fileRef.current?.click()} disabled={importing} className="btn" style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: importing ? 0.6 : 1 }}>
+              <Upload size={14} /> {importing ? 'Importing…' : 'Import Backup'}
             </button>
           </div>
-          <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
-          <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-500 space-y-1">
-            <p>• Exports all transactions, budgets, projects, borrowings & emergency fund</p>
-            <p>• Import overwrites existing data — export first as a precaution</p>
-            <p>• Recommended: export monthly for data safety</p>
+          <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
+          <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.7 }}>
+            <p style={{ margin: 0 }}>• Exports all transactions, budgets, projects, borrowings & emergency fund</p>
+            <p style={{ margin: 0 }}>• Import overwrites existing data — export first as a precaution</p>
           </div>
         </div>
 

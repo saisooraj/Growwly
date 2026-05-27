@@ -200,6 +200,20 @@ export async function setUserSettings(
   }
 }
 
+// ── Push Subscriptions ────────────────────────────────────────────────────────
+
+export async function savePushSubscription(
+  userId: string,
+  subscription: PushSubscriptionJSON
+): Promise<void> {
+  const ref = doc(db, 'pushSubscriptions', userId)
+  await setDoc(ref, { userId, subscription, updatedAt: new Date().toISOString() })
+}
+
+export async function deletePushSubscription(userId: string): Promise<void> {
+  await deleteDoc(doc(db, 'pushSubscriptions', userId))
+}
+
 // ── Savings Goals ─────────────────────────────────────────────────────────────
 
 export async function addSavingsGoal(
