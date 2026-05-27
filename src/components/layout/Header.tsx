@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Sun, Moon, Bell, Leaf } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Sun, Moon, Bell, Leaf, Settings } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useAppStore } from '@/store/appStore'
 import { getLast6Months, getMonthLabel } from '@/lib/utils'
@@ -139,6 +139,16 @@ export default function Header({ title }: { title?: string }) {
             boxShadow: '0 0 0 2px var(--surface)',
           }} />
         </button>
+
+        {/* Settings — visible on mobile only (desktop uses sidebar) */}
+        <Link
+          href="/settings"
+          className="btn btn-sm lg:hidden"
+          style={{ padding: 8, borderRadius: 10, textDecoration: 'none', color: pathname === '/settings' ? 'var(--brand)' : 'inherit' }}
+          title="Settings"
+        >
+          <Settings size={15} />
+        </Link>
       </div>
     </header>
   )
