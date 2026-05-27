@@ -14,10 +14,6 @@ import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRin
 import toast from 'react-hot-toast'
 import type { FinancialMode } from '@/types'
 
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
-  const label = i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`
-  return { value: i, label }
-})
 
 export default function SettingsPage() {
   const { user, logout } = useAuth()
@@ -30,7 +26,6 @@ export default function SettingsPage() {
   const [weeklyBudget, setWeeklyBudget] = useState('')
   const [monthlyIncome, setMonthlyIncome] = useState('')
   const [efTarget, setEfTarget] = useState('')
-  const [reminderHour, setReminderHour] = useState(20)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -41,7 +36,6 @@ export default function SettingsPage() {
       setWeeklyBudget(String(settings.weeklyBudget ?? ''))
       setMonthlyIncome(String(settings.monthlyIncomeTarget ?? ''))
       setEfTarget(String(settings.emergencyFundTarget ?? ''))
-      setReminderHour(settings.pushReminderHour ?? 20)
     }
   }, [settings])
 
@@ -49,13 +43,11 @@ export default function SettingsPage() {
     if (!user) return
     setSaving(true)
     try {
-      const utcHour = (reminderHour - Math.round(new Date().getTimezoneOffset() / -60) + 24) % 24
       await setUserSettings(user.uid, {
         financialMode: mode,
         weeklyBudget: Number(weeklyBudget) || 0,
         monthlyIncomeTarget: Number(monthlyIncome) || 0,
         emergencyFundTarget: Number(efTarget) || 0,
-        pushReminderHour: utcHour,
         pushReminderEnabled: pushState === 'subscribed',
       })
       await refresh()
@@ -75,10 +67,8 @@ export default function SettingsPage() {
     } else {
       const ok = await subscribe()
       if (ok) {
-        const utcHour = (reminderHour - Math.round(new Date().getTimezoneOffset() / -60) + 24) % 24
         await setUserSettings(user!.uid, {
           pushReminderEnabled: true,
-          pushReminderHour: utcHour,
         })
         toast.success('Reminders enabled!')
       } else if (pushState === 'denied') {
@@ -177,21 +167,14 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Reminder time picker — shown when subscribed or about to subscribe */}
+          {/* Fixed reminder time */}
           {!pushUnavailable && (
-            <div>
-              <label className="label">Remind me at</label>
-              <select
-                className="input"
-                value={reminderHour}
-                onChange={e => setReminderHour(Number(e.target.value))}
-                style={{ maxWidth: 180 }}
-              >
-                {HOUR_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-              <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 4 }}>Your local time. Reminder fires within the hour.</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)' }}>
+              <span style={{ fontSize: 18 }}>🕖</span>
+              <div>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>Fires daily at 7:30 PM IST</p>
+                <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>Reminder arrives within an hour of that time.</p>
+              </div>
             </div>
           )}
 
