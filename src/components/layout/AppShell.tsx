@@ -6,18 +6,26 @@ import MobileNav from './MobileNav'
 import AuthGuard from '@/components/ui/AuthGuard'
 
 interface Props {
-  title: string
+  title?: string
   children: React.ReactNode
 }
 
 export default function AppShell({ title, children }: Props) {
   return (
     <AuthGuard>
-      <div className="flex min-h-screen">
+      <div className="app">
         <Sidebar />
-        <div className="flex-1 flex flex-col min-w-0">
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: '100vh' }}>
           <Header title={title} />
-          <main className="flex-1 overflow-y-auto p-4 lg:p-6 pb-20 lg:pb-6">
+          <main
+            className="main-content"
+            style={{
+              flex: 1,
+              background: 'var(--bg)',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+            }}
+          >
             {children}
           </main>
         </div>

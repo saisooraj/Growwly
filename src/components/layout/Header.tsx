@@ -1,81 +1,144 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { format } from 'date-fns'
-import { ChevronLeft, ChevronRight, TrendingUp, Sun, Moon } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Sun, Moon, Bell, Leaf } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useAppStore } from '@/store/appStore'
 import { getLast6Months, getMonthLabel } from '@/lib/utils'
+import { usePathname } from 'next/navigation'
 import Link from 'next/link'
+
+const PAGE_META: Record<string, { title: string; sub: string }> = {
+  '/':             { title: 'Overview',      sub: 'Your money at a glance' },
+  '/transactions': { title: 'Transactions',  sub: 'Every movement, searchable and filtered' },
+  '/planning':     { title: 'Planning',      sub: 'Set the plan and watch it land' },
+  '/goals':        { title: 'Savings goals', sub: 'Targets and contributions' },
+  '/projects':     { title: 'Projects',      sub: 'Construction, events, one-off budgets' },
+  '/borrowings':   { title: 'Borrowings',    sub: 'Lent and borrowed, who and when' },
+  '/market':       { title: 'Market',        sub: 'Stocks, funds, gold and news' },
+  '/settings':     { title: 'Settings',      sub: 'Account, mode, budgets and backups' },
+}
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
-
-  if (!mounted) return <div className="w-8 h-8" />
+  if (!mounted) return <div style={{ width: 34, height: 34 }} />
 
   return (
     <button
       onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-      className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-      aria-label="Toggle theme"
+      className="btn btn-sm"
+      style={{ padding: 8, borderRadius: 10 }}
+      title="Toggle theme"
     >
-      {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+      {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
     </button>
   )
 }
 
 export default function Header({ title }: { title?: string }) {
+  const pathname = usePathname()
   const { selectedMonth, setSelectedMonth } = useAppStore()
   const months = getLast6Months()
-
   const currentIdx = months.indexOf(selectedMonth)
   const canPrev = currentIdx > 0
   const canNext = currentIdx < months.length - 1
+  const meta = PAGE_META[pathname] ?? { title: title ?? 'Overview', sub: '' }
+
+  const now = new Date()
+  const [yr, mon] = selectedMonth.split('-').map(Number)
+  const isCurrentMonth = yr === now.getFullYear() && mon - 1 === now.getMonth()
+  const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const monthName = monthNames[mon - 1] ?? ''
 
   function prev() { if (canPrev) setSelectedMonth(months[currentIdx - 1]) }
   function next() { if (canNext) setSelectedMonth(months[currentIdx + 1]) }
 
   return (
-    <header className="bg-white dark:bg-[#0A0B14] border-b border-slate-200 dark:border-[#151728] px-4 lg:px-6 h-14 flex items-center justify-between gap-4 sticky top-0 z-40">
+    <header
+      className="app-header"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        borderBottom: '1px solid var(--border)',
+        background: 'var(--bg)',
+        position: 'sticky', top: 0, zIndex: 5,
+      }}
+    >
       {/* Mobile logo */}
-      <Link href="/" className="flex items-center gap-2 lg:hidden">
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-gradient-to-br from-brand-500 to-fuchsia-500">
-          <TrendingUp size={14} className="text-white" />
+      <Link href="/" className="flex items-center lg:hidden" style={{ gap: 8, textDecoration: 'none' }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+          background: 'linear-gradient(135deg, var(--brand) 0%, var(--brand-deep) 100%)',
+          color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Leaf size={13} strokeWidth={2} />
         </div>
-        <span className="font-display font-bold text-sm bg-gradient-to-r from-brand-600 to-fuchsia-500 dark:from-brand-400 dark:to-fuchsia-400 bg-clip-text text-transparent">
-          {title ?? 'Growwly'}
+        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', letterSpacing: '-0.01em' }}>
+          Growwly
         </span>
       </Link>
 
-      {/* Desktop title */}
-      <h1 className="hidden lg:block text-base font-semibold text-slate-800 dark:text-slate-100">
-        {title ?? 'Dashboard'}
-      </h1>
-
-      {/* Right side: month nav + theme toggle */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={prev}
-          disabled={!canPrev}
-          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 transition-colors text-slate-600 dark:text-slate-300"
+      {/* Desktop title block */}
+      <div style={{ flex: 1, minWidth: 0 }} className="hidden lg:block">
+        <div
+          className="serif"
+          style={{ fontSize: 15, fontStyle: 'italic', color: 'var(--text-3)', fontWeight: 400, lineHeight: 1, marginBottom: 4 }}
         >
-          <ChevronLeft size={16} />
-        </button>
-        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 min-w-[110px] text-center">
-          {getMonthLabel(selectedMonth)}
-        </span>
-        <button
-          onClick={next}
-          disabled={!canNext}
-          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 transition-colors text-slate-600 dark:text-slate-300"
-        >
-          <ChevronRight size={16} />
-        </button>
+          {isCurrentMonth ? 'this month' : `in ${monthName}`}
+        </div>
+        <h1 style={{ margin: 0, fontSize: 24, fontWeight: 500, letterSpacing: '-0.015em', lineHeight: 1.15, color: 'var(--text)' }}>
+          {meta.title}
+        </h1>
+        <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 3 }}>{meta.sub}</div>
+      </div>
 
-        <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
+      {/* Controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        {/* Month picker */}
+        <div style={{
+          display: 'flex', alignItems: 'center',
+          border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface)',
+        }}>
+          <button
+            onClick={prev}
+            disabled={!canPrev}
+            className="btn-ghost"
+            style={{ border: 0, padding: '7px 8px', borderRadius: 10, opacity: canPrev ? 1 : 0.3 }}
+          >
+            <ChevronLeft size={15} />
+          </button>
+          <span
+            className="num"
+            style={{ padding: '0 8px', fontSize: 12, fontWeight: 500, minWidth: 72, textAlign: 'center', color: 'var(--text)' }}
+          >
+            {getMonthLabel(selectedMonth)}
+          </span>
+          <button
+            onClick={next}
+            disabled={!canNext}
+            className="btn-ghost"
+            style={{ border: 0, padding: '7px 8px', borderRadius: 10, opacity: canNext ? 1 : 0.3 }}
+          >
+            <ChevronRight size={15} />
+          </button>
+        </div>
+
         <ThemeToggle />
+
+        {/* Bell with notification dot */}
+        <button
+          className="btn btn-sm"
+          style={{ padding: 8, borderRadius: 10, position: 'relative' }}
+        >
+          <Bell size={15} />
+          <span style={{
+            position: 'absolute', top: 5, right: 5,
+            width: 6, height: 6, borderRadius: 999,
+            background: 'var(--bad)',
+            boxShadow: '0 0 0 2px var(--surface)',
+          }} />
+        </button>
       </div>
     </header>
   )
