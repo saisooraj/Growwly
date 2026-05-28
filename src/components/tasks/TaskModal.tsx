@@ -72,26 +72,29 @@ export default function TaskModal({ task, defaultPriority = 'this-week', onClose
     if (!user || !title.trim()) return
     setSaving(true)
     try {
-      const payload = {
+      // Firestore rejects undefined values — build payload with only defined fields
+      const payload: Record<string, unknown> = {
         title: title.trim(),
-        nextAction: nextAction.trim() || undefined,
-        dueDate: dueDate || undefined,
         priority,
-        status: task?.status ?? 'pending' as const,
+        status: task?.status ?? 'pending',
         tags,
         subtasks,
-        completedAt: task?.completedAt,
       }
+      if (nextAction.trim())    payload.nextAction   = nextAction.trim()
+      if (dueDate)              payload.dueDate      = dueDate
+      if (task?.completedAt)    payload.completedAt  = task.completedAt
+
       if (isEditing) {
         await updateTask(task!.id, payload)
         toast.success('Task updated')
       } else {
-        await addTask(user.uid, payload)
+        await addTask(user.uid, payload as Omit<import('@/types').Task, 'id' | 'userId' | 'createdAt'>)
         toast.success('Task added')
       }
       await refresh()
       onClose()
-    } catch {
+    } catch (err) {
+      console.error('Task save error:', err)
       toast.error('Failed to save task')
     } finally {
       setSaving(false)
