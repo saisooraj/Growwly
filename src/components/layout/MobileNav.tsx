@@ -13,6 +13,7 @@ import {
   HandCoins,
   LineChart,
   Settings,
+  CheckSquare,
 } from 'lucide-react'
 
 const NAV = [
@@ -23,6 +24,7 @@ const NAV = [
   { href: '/goals',        icon: Target,          label: 'Goals' },
   { href: '/projects',     icon: FolderKanban,    label: 'Projects' },
   { href: '/borrowings',   icon: HandCoins,       label: 'Borrow' },
+  { href: '/tasks',        icon: CheckSquare,     label: 'Tasks' },
   { href: '/market',       icon: LineChart,       label: 'Market' },
   { href: '/settings',     icon: Settings,        label: 'Settings' },
 ]

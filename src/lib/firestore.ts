@@ -21,6 +21,7 @@ import type {
   SavingsGoal,
   UpcomingExpense,
   UpcomingPayment,
+  Task,
 } from '@/types'
 
 // ── Transactions ────────────────────────────────────────────────────────────
@@ -365,4 +366,32 @@ export async function updateUpcomingPayment(
 
 export async function deleteUpcomingPayment(id: string): Promise<void> {
   await deleteDoc(doc(db, 'upcomingPayments', id))
+}
+
+// ── Tasks ────────────────────────────────────────────────────────────────────
+
+export async function getUserTasks(userId: string): Promise<Task[]> {
+  const q = query(collection(db, 'tasks'), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Task))
+}
+
+export async function addTask(
+  userId: string,
+  data: Omit<Task, 'id' | 'userId' | 'createdAt'>
+): Promise<string> {
+  const ref = await addDoc(collection(db, 'tasks'), {
+    ...data,
+    userId,
+    createdAt: new Date().toISOString(),
+  })
+  return ref.id
+}
+
+export async function updateTask(id: string, data: Partial<Task>): Promise<void> {
+  await updateDoc(doc(db, 'tasks', id), data)
+}
+
+export async function deleteTask(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'tasks', id))
 }

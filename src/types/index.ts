@@ -134,3 +134,25 @@ export interface MonthlySummary {
   net: number
   byCategory: Record<Category, number>
 }
+
+export interface Subtask {
+  id: string
+  title: string
+  done: boolean
+}
+
+export type TaskPriority = 'immediate' | 'this-week' | 'later' | 'someday'
+
+export interface Task {
+  id: string
+  userId: string
+  title: string
+  nextAction?: string
+  dueDate?: string       // YYYY-MM-DD
+  priority: TaskPriority
+  status: 'pending' | 'done'
+  tags: string[]
+  subtasks: Subtask[]
+  createdAt: string
+  completedAt?: string
+}

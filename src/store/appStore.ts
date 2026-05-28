@@ -9,6 +9,7 @@ import type {
   SavingsGoal,
   UpcomingExpense,
   UpcomingPayment,
+  Task,
 } from '@/types'
 import { getCurrentMonth } from '@/lib/utils'
 
@@ -22,6 +23,7 @@ interface AppState {
   savingsGoals: SavingsGoal[]
   upcomingExpenses: UpcomingExpense[]
   upcomingPayments: UpcomingPayment[]
+  tasks: Task[]
   selectedMonth: string
   loading: boolean
   initialized: boolean
@@ -35,6 +37,7 @@ interface AppState {
   setSavingsGoals: (g: SavingsGoal[]) => void
   setUpcomingExpenses: (u: UpcomingExpense[]) => void
   setUpcomingPayments: (p: UpcomingPayment[]) => void
+  setTasks: (t: Task[]) => void
   setSelectedMonth: (m: string) => void
   setLoading: (l: boolean) => void
   setInitialized: (i: boolean) => void
@@ -51,6 +54,7 @@ export const useAppStore = create<AppState>((set) => ({
   savingsGoals: [],
   upcomingExpenses: [],
   upcomingPayments: [],
+  tasks: [],
   selectedMonth: getCurrentMonth(),
   loading: false,
   initialized: false,
@@ -64,6 +68,7 @@ export const useAppStore = create<AppState>((set) => ({
   setSavingsGoals: (savingsGoals) => set({ savingsGoals }),
   setUpcomingExpenses: (upcomingExpenses) => set({ upcomingExpenses }),
   setUpcomingPayments: (upcomingPayments) => set({ upcomingPayments }),
+  setTasks: (tasks) => set({ tasks }),
   setSelectedMonth: (selectedMonth) => set({ selectedMonth }),
   setLoading: (loading) => set({ loading }),
   setInitialized: (initialized) => set({ initialized }),
@@ -78,6 +83,7 @@ export const useAppStore = create<AppState>((set) => ({
       savingsGoals: [],
       upcomingExpenses: [],
       upcomingPayments: [],
+      tasks: [],
       selectedMonth: getCurrentMonth(),
       initialized: false,
     }),

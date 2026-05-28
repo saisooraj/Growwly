@@ -14,6 +14,7 @@ import {
   Flame,
   LineChart,
   Target,
+  CheckSquare,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
@@ -27,6 +28,7 @@ const NAV = [
   { href: '/goals',        icon: Target,          label: 'Savings' },
   { href: '/projects',     icon: FolderKanban,    label: 'Projects' },
   { href: '/borrowings',   icon: HandCoins,       label: 'Borrowings' },
+  { href: '/tasks',        icon: CheckSquare,     label: 'Tasks' },
   { href: '/market',       icon: LineChart,       label: 'Market' },
   { href: '/settings',     icon: Settings,        label: 'Settings' },
 ]
