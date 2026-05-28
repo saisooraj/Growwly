@@ -8,6 +8,7 @@ import { useRefreshData } from '@/hooks/useData'
 import { useAppStore } from '@/store/appStore'
 import { formatCurrencyFull } from '@/lib/utils'
 import type { Borrowing } from '@/types'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -31,6 +32,7 @@ function buildWhatsAppLink(b: Borrowing): string {
 export default function BorrowingsList({ onEdit }: Props) {
   const { borrowings } = useAppStore()
   const refresh = useRefreshData()
+  const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
 
   const totalBorrowed = borrowings
     .filter((b) => b.type === 'borrowed' && b.status !== 'repaid')
@@ -40,15 +42,17 @@ export default function BorrowingsList({ onEdit }: Props) {
     .filter((b) => b.type === 'lent' && b.status !== 'repaid')
     .reduce((s, b) => s + (b.amount - b.repaidAmount), 0)
 
-  async function handleDelete(id: string) {
-    if (!confirm('Delete this record?')) return
-    try {
-      await deleteBorrowing(id)
-      await refresh()
-      toast.success('Deleted')
-    } catch {
-      toast.error('Failed')
-    }
+  function handleDelete(id: string) {
+    setConfirm({
+      message: 'Delete this borrowing record?',
+      onConfirm: async () => {
+        try {
+          await deleteBorrowing(id)
+          await refresh()
+          toast.success('Deleted')
+        } catch { toast.error('Failed') }
+      },
+    })
   }
 
   async function markRepaid(b: Borrowing) {
@@ -143,6 +147,14 @@ export default function BorrowingsList({ onEdit }: Props) {
             )}
           </div>
         ))
+      )}
+      {confirm && (
+        <ConfirmDialog
+          open={true}
+          message={confirm.message}
+          onConfirm={confirm.onConfirm}
+          onClose={() => setConfirm(null)}
+        />
       )}
     </div>
   )

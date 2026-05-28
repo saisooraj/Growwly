@@ -7,6 +7,7 @@ import { format, parseISO, isToday, isTomorrow, isPast } from 'date-fns'
 import { Plus, Check, ChevronDown, ChevronUp, Edit2, Trash2, CircleDot } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
 import TaskModal from '@/components/tasks/TaskModal'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
 import { updateTask, deleteTask } from '@/lib/firestore'
@@ -43,6 +44,7 @@ function TaskRow({ task, onEdit, onDeleted }: TaskRowProps) {
   const [expanded, setExpanded] = useState(false)
   const [hovered, setHovered] = useState(false)
 
+  const [confirmOpen, setConfirmOpen] = useState(false)
   const isDone = task.status === 'done'
   const hasSubs = task.subtasks.length > 0
   const subsDone = task.subtasks.filter(s => s.done).length
@@ -50,10 +52,9 @@ function TaskRow({ task, onEdit, onDeleted }: TaskRowProps) {
 
   async function toggleDone() {
     try {
-      await updateTask(task.id, {
-        status: isDone ? 'pending' : 'done',
-        completedAt: isDone ? undefined : new Date().toISOString(),
-      })
+      const update: Record<string, unknown> = { status: isDone ? 'pending' : 'done' }
+      if (!isDone) update.completedAt = new Date().toISOString()
+      await updateTask(task.id, update)
       await refresh()
     } catch { toast.error('Failed to update') }
   }
@@ -66,8 +67,7 @@ function TaskRow({ task, onEdit, onDeleted }: TaskRowProps) {
     } catch { toast.error('Failed to update') }
   }
 
-  async function handleDelete() {
-    if (!confirm('Delete this task?')) return
+  async function doDelete() {
     try {
       await deleteTask(task.id)
       await refresh()
@@ -162,7 +162,7 @@ function TaskRow({ task, onEdit, onDeleted }: TaskRowProps) {
                 <Edit2 size={13} />
               </button>
               <button
-                onClick={handleDelete}
+                onClick={() => setConfirmOpen(true)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4, display: 'flex' }}
                 onMouseEnter={e => (e.currentTarget.style.color = 'var(--bad)')}
                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
@@ -192,6 +192,13 @@ function TaskRow({ task, onEdit, onDeleted }: TaskRowProps) {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        message="Delete this task?"
+        onConfirm={doDelete}
+        onClose={() => setConfirmOpen(false)}
+      />
     </div>
   )
 }

@@ -10,6 +10,7 @@ import { formatCurrencyFull, CATEGORY_COLORS, TRANSFER_KINDS } from '@/lib/utils
 import { useAppStore } from '@/store/appStore'
 import type { Transaction } from '@/types'
 import AddTransactionModal from './AddTransactionModal'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
 
 interface Props {
@@ -22,11 +23,12 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
   const { projects } = useAppStore()
   const [editOpen, setEditOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const open = !!tx
 
-  async function handleDelete() {
-    if (!tx || !confirm('Delete this transaction?')) return
+  async function doDelete() {
+    if (!tx) return
     setDeleting(true)
     try {
       await deleteTransaction(tx.id)
@@ -205,7 +207,7 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
                     <Edit2 size={14} /> Edit
                   </button>
                   <button
-                    onClick={handleDelete}
+                    onClick={() => setConfirmOpen(true)}
                     disabled={deleting}
                     className="btn-danger"
                     style={{ flex: 1, justifyContent: 'center', gap: 8 }}
@@ -224,6 +226,12 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
         open={editOpen}
         onClose={() => { setEditOpen(false); onClose() }}
         editTx={tx}
+      />
+      <ConfirmDialog
+        open={confirmOpen}
+        message="Delete this transaction? This cannot be undone."
+        onConfirm={doDelete}
+        onClose={() => setConfirmOpen(false)}
       />
     </>
   )

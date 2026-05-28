@@ -5,6 +5,8 @@ import { formatCurrencyFull } from '@/lib/utils'
 import { deleteProject } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
 import type { Project } from '@/types'
+import { useState } from 'react'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
 import { format, parseISO } from 'date-fns'
 
@@ -21,6 +23,7 @@ const STATUS_MAP = {
 
 export default function ProjectCard({ project, onEdit }: Props) {
   const refresh = useRefreshData()
+  const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
   const pct = project.totalBudget > 0
     ? Math.min((project.paid / project.totalBudget) * 100, 100)
     : 0
@@ -29,15 +32,17 @@ export default function ProjectCard({ project, onEdit }: Props) {
   const isOver = remaining < 0
   const status = STATUS_MAP[project.status]
 
-  async function handleDelete() {
-    if (!confirm(`Delete project "${project.name}"?`)) return
-    try {
-      await deleteProject(project.id)
-      await refresh()
-      toast.success('Project deleted')
-    } catch {
-      toast.error('Failed to delete')
-    }
+  function handleDelete() {
+    setConfirm({
+      message: `Delete project "${project.name}"?`,
+      onConfirm: async () => {
+        try {
+          await deleteProject(project.id)
+          await refresh()
+          toast.success('Project deleted')
+        } catch { toast.error('Failed to delete') }
+      },
+    })
   }
 
   return (
@@ -101,6 +106,15 @@ export default function ProjectCard({ project, onEdit }: Props) {
           Started: {format(parseISO(project.startDate), 'dd MMM yyyy')}
           {project.endDate && ` · Due: ${format(parseISO(project.endDate), 'dd MMM yyyy')}`}
         </p>
+      )}
+
+      {confirm && (
+        <ConfirmDialog
+          open={true}
+          message={confirm.message}
+          onConfirm={confirm.onConfirm}
+          onClose={() => setConfirm(null)}
+        />
       )}
     </div>
   )

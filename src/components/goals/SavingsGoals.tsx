@@ -10,6 +10,7 @@ import { addSavingsGoal, updateSavingsGoal, deleteSavingsGoal } from '@/lib/fire
 import { formatCurrencyFull } from '@/lib/utils'
 import { format, parseISO, differenceInMonths } from 'date-fns'
 import type { SavingsGoal } from '@/types'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
 
 const EMOJIS = ['🏠', '✈️', '🚗', '📱', '💍', '🎓', '💰', '🏖️', '🎯', '🛍️', '🏋️', '💻']
@@ -32,6 +33,7 @@ export default function SavingsGoals() {
   const [editing, setEditing] = useState<SavingsGoal | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY)
   const [saving, setSaving] = useState(false)
+  const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
 
   function openAdd() {
     setEditing(null)
@@ -78,15 +80,17 @@ export default function SavingsGoals() {
     }
   }
 
-  async function handleDelete(g: SavingsGoal) {
-    if (!confirm(`Delete "${g.name}"?`)) return
-    try {
-      await deleteSavingsGoal(g.id)
-      await refresh()
-      toast.success('Goal deleted')
-    } catch {
-      toast.error('Failed to delete')
-    }
+  function handleDelete(g: SavingsGoal) {
+    setConfirm({
+      message: `Delete goal "${g.name}"?`,
+      onConfirm: async () => {
+        try {
+          await deleteSavingsGoal(g.id)
+          await refresh()
+          toast.success('Goal deleted')
+        } catch { toast.error('Failed to delete') }
+      },
+    })
   }
 
   return (
@@ -287,6 +291,15 @@ export default function SavingsGoals() {
           </div>
         </Dialog>
       </Transition>
+
+      {confirm && (
+        <ConfirmDialog
+          open={true}
+          message={confirm.message}
+          onConfirm={confirm.onConfirm}
+          onClose={() => setConfirm(null)}
+        />
+      )}
     </div>
   )
 }

@@ -11,6 +11,7 @@ import { useRefreshData } from '@/hooks/useData'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { downloadJSON } from '@/lib/utils'
 import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing } from 'lucide-react'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
 import type { FinancialMode } from '@/types'
 
@@ -29,6 +30,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [pendingImport, setPendingImport] = useState<any | null>(null)
 
   useEffect(() => {
     if (settings) {
@@ -94,20 +97,30 @@ export default function SettingsPage() {
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     if (!user || !e.target.files?.[0]) return
     const file = e.target.files[0]
-    setImporting(true)
     try {
       const text = await file.text()
       const data = JSON.parse(text)
       if (!data.transactions || !data.userId) { toast.error('Invalid backup file'); return }
-      if (!confirm('This will overwrite your existing data. Continue?')) return
-      await importAllUserData(user.uid, data)
-      await refresh()
-      toast.success('Data imported successfully')
+      setPendingImport(data)
     } catch {
       toast.error('Import failed — invalid file')
     } finally {
-      setImporting(false)
       if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  async function doImport() {
+    if (!user || !pendingImport) return
+    setImporting(true)
+    try {
+      await importAllUserData(user.uid, pendingImport)
+      await refresh()
+      toast.success('Data imported successfully')
+    } catch {
+      toast.error('Import failed')
+    } finally {
+      setImporting(false)
+      setPendingImport(null)
     }
   }
 
@@ -266,6 +279,14 @@ export default function SettingsPage() {
         </div>
 
       </div>
+
+      <ConfirmDialog
+        open={!!pendingImport}
+        message="This will overwrite your existing data with the backup file. Continue?"
+        confirmLabel="Import"
+        onConfirm={doImport}
+        onClose={() => setPendingImport(null)}
+      />
     </AppShell>
   )
 }

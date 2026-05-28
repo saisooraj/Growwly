@@ -13,6 +13,7 @@ import { deleteUpcoming, deleteUpcomingPayment } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
 import { formatCurrencyFull, CATEGORY_COLORS } from '@/lib/utils'
 import type { UpcomingExpense, UpcomingPayment } from '@/types'
+import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
 
 export default function UpcomingPage() {
@@ -21,6 +22,7 @@ export default function UpcomingPage() {
   const [addOpen, setAddOpen]           = useState(false)
   const [editItem, setEditItem]         = useState<UpcomingExpense | null>(null)
   const [payItem, setPayItem]           = useState<UpcomingExpense | null>(null)
+  const [confirm, setConfirm]           = useState<{ message: string; onConfirm: () => void } | null>(null)
 
   const paidByItem = useMemo(() => {
     const map = new Map<string, number>()
@@ -48,15 +50,17 @@ export default function UpcomingPage() {
   const totalLogged = Array.from(paidByItem.values()).reduce((s, v) => s + v, 0)
   const netPosition = totalIn - totalOut
 
-  async function handleDelete(item: UpcomingExpense) {
-    if (!confirm(`Delete "${item.label}"?`)) return
-    try {
-      await deleteUpcoming(item.id)
-      await refresh()
-      toast.success('Removed')
-    } catch {
-      toast.error('Failed to delete')
-    }
+  function handleDelete(item: UpcomingExpense) {
+    setConfirm({
+      message: `Delete "${item.label}"?`,
+      onConfirm: async () => {
+        try {
+          await deleteUpcoming(item.id)
+          await refresh()
+          toast.success('Removed')
+        } catch { toast.error('Failed to delete') }
+      },
+    })
   }
 
   function monthLabel(ym: string) {
@@ -165,6 +169,14 @@ export default function UpcomingPage() {
       <AddUpcomingModal open={addOpen}    onClose={() => setAddOpen(false)} />
       <AddUpcomingModal open={!!editItem} onClose={() => setEditItem(null)} editItem={editItem} />
       <LogPaymentModal  open={!!payItem}  onClose={() => setPayItem(null)}  item={payItem} alreadyPaid={payItem ? (paidByItem.get(payItem.id) ?? 0) : 0} />
+      {confirm && (
+        <ConfirmDialog
+          open={true}
+          message={confirm.message}
+          onConfirm={confirm.onConfirm}
+          onClose={() => setConfirm(null)}
+        />
+      )}
     </AppShell>
   )
 }
@@ -192,13 +204,13 @@ function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: Note
   const pct       = item.amount > 0 ? Math.min(100, (paid / item.amount) * 100) : 0
   const fulfilled = pct >= 100
 
-  const [showPayments, setShowPayments] = useState(false)
-  const [editPay, setEditPay]           = useState<UpcomingPayment | null>(null)
+  const [showPayments, setShowPayments]   = useState(false)
+  const [editPay, setEditPay]             = useState<UpcomingPayment | null>(null)
+  const [deletingPay, setDeletingPay]     = useState<UpcomingPayment | null>(null)
 
   const urgencyColor = overdue ? 'var(--bad-ink)' : soon ? 'var(--warn-ink)' : isIncome ? 'var(--good-ink)' : 'var(--text-3)'
 
-  async function handleDeletePayment(p: UpcomingPayment) {
-    if (!confirm('Remove this entry?')) return
+  async function doDeletePayment(p: UpcomingPayment) {
     try {
       await deleteUpcomingPayment(p.id)
       await refresh()
@@ -315,7 +327,7 @@ function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: Note
                   <Pencil size={12} />
                 </button>
                 <button
-                  onClick={() => handleDeletePayment(p)}
+                  onClick={() => setDeletingPay(p)}
                   style={{ padding: 4, borderRadius: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}
                   onMouseEnter={e => (e.currentTarget.style.color = 'var(--bad)')}
                   onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
@@ -352,6 +364,13 @@ function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: Note
       item={item}
       alreadyPaid={paid}
       editPayment={editPay}
+    />
+    <ConfirmDialog
+      open={!!deletingPay}
+      message="Remove this payment entry?"
+      confirmLabel="Remove"
+      onConfirm={() => deletingPay && doDeletePayment(deletingPay)}
+      onClose={() => setDeletingPay(null)}
     />
     </>
   )
