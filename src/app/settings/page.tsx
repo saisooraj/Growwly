@@ -10,7 +10,8 @@ import { setUserSettings, exportAllUserData, importAllUserData } from '@/lib/fir
 import { useRefreshData } from '@/hooks/useData'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { downloadJSON } from '@/lib/utils'
-import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing } from 'lucide-react'
+import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2 } from 'lucide-react'
+import LinkedAccounts from '@/components/auth/LinkedAccounts'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
 import type { FinancialMode } from '@/types'
@@ -254,6 +255,18 @@ export default function SettingsPage() {
           <button onClick={saveSettings} disabled={saving} className="btn-primary" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Saving…' : 'Save Settings'}
           </button>
+        </div>
+
+        {/* Linked Accounts */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Link2 size={14} style={{ color: 'var(--brand-ink)' }} />
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Linked Accounts</h2>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
+            Link multiple sign-in methods. Your data stays the same regardless of which method you use.
+          </p>
+          <LinkedAccounts />
         </div>
 
         {/* Backup & Restore */}
