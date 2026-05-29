@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import {
   TrendingUp, ShieldCheck, BarChart3, Wallet, Zap,
-  Phone, Mail, ArrowLeft, Eye, EyeOff, ChevronRight,
+  Mail, ArrowLeft, Eye, EyeOff, ChevronRight,
 } from 'lucide-react'
 import type { ConfirmationResult } from 'firebase/auth'
 import toast from 'react-hot-toast'
@@ -39,17 +39,6 @@ function HomeScreen({ onMethod, onGoogle }: { onMethod: (s: Screen) => void; onG
   return (
     <>
       <div className="flex flex-col gap-3 mb-4">
-        <button
-          onClick={() => onMethod('phone-number')}
-          className="w-full flex items-center gap-3 bg-white/8 hover:bg-white/12 border border-white/12 text-white font-medium py-3.5 px-4 rounded-2xl transition-all text-sm"
-        >
-          <span className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
-            <Phone size={15} />
-          </span>
-          Continue with Mobile number
-          <ChevronRight size={15} className="ml-auto text-slate-500" />
-        </button>
-
         <button
           onClick={() => onMethod('email-signin')}
           className="w-full flex items-center gap-3 bg-white/8 hover:bg-white/12 border border-white/12 text-white font-medium py-3.5 px-4 rounded-2xl transition-all text-sm"
@@ -101,10 +90,16 @@ function PhoneNumberScreen({
       onOTPSent(result, formatted)
       toast.success('OTP sent!')
     } catch (err: unknown) {
-      const code = (err as { code?: string })?.code ?? ''
+      const code    = (err as { code?: string })?.code ?? ''
+      const message = (err as { message?: string })?.message ?? ''
+      console.error('[Phone OTP error]', code, err)
       if (code === 'auth/invalid-phone-number') toast.error('Invalid phone number')
       else if (code === 'auth/too-many-requests') toast.error('Too many attempts. Try later.')
-      else toast.error('Failed to send OTP')
+      else if (code === 'auth/operation-not-allowed') toast.error('Phone auth not enabled in Firebase Console')
+      else if (code === 'auth/captcha-check-failed') toast.error('reCAPTCHA failed — try refreshing the page')
+      else if (code === 'auth/missing-phone-number') toast.error('Please enter a phone number')
+      else if (message.includes('BILLING_NOT_ENABLED')) toast.error('Phone sign-in requires a Firebase Blaze plan — use Email or Google instead')
+      else toast.error(`Failed to send OTP (${code || 'unknown'})`)
     } finally {
       setLoading(false)
     }
@@ -142,6 +137,9 @@ function PhoneNumberScreen({
       >
         {loading ? 'Sending…' : 'Send OTP'}
       </button>
+      <p className="text-center text-xs text-slate-600 mt-3">
+        SMS requires Firebase Blaze plan · <button onClick={onBack} className="text-slate-500 hover:text-slate-400 underline underline-offset-2">Use email instead</button>
+      </p>
     </>
   )
 }
@@ -387,14 +385,6 @@ function ConflictScreen({
         >
           <GoogleIcon />
           Sign in with Google
-        </button>
-      )}
-      {hasPhone && (
-        <button
-          onClick={onBack}
-          className="w-full flex items-center justify-center gap-2 bg-white/8 hover:bg-white/12 border border-white/12 text-white font-medium py-3 px-4 rounded-2xl transition-all text-sm"
-        >
-          <Phone size={14} /> Sign in with Phone instead
         </button>
       )}
     </>

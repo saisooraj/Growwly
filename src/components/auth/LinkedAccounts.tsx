@@ -1,13 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { Phone, Mail, Chrome, Check, Link2, Unlink, Eye, EyeOff, ArrowLeft } from 'lucide-react'
+import { Mail, Chrome, Check, Link2, Unlink, Eye, EyeOff, ArrowLeft } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
-import type { ConfirmationResult } from 'firebase/auth'
 import toast from 'react-hot-toast'
 
-type LinkView = null | 'link-google' | 'link-phone-number' | 'link-phone-otp' | 'link-email' | 'change-password'
+type LinkView = null | 'link-google' | 'link-email' | 'change-password'
 
 function ProviderRow({
   icon, label, sub, linked, onLink, onUnlink, canUnlink,
@@ -63,15 +62,11 @@ function ProviderRow({
 }
 
 export default function LinkedAccounts() {
-  const { user, linkGoogle, linkPhone, confirmPhoneLink, linkEmailPassword, unlinkProvider, changePassword } = useAuth()
+  const { user, linkGoogle, linkEmailPassword, unlinkProvider, changePassword } = useAuth()
 
   const [view, setView]               = useState<LinkView>(null)
   const [confirmUnlink, setConfirmUnlink] = useState<string | null>(null)
 
-  // Phone link state
-  const [phoneInput, setPhoneInput]   = useState('')
-  const [otpInput, setOtpInput]       = useState('')
-  const [phoneResult, setPhoneResult] = useState<ConfirmationResult | null>(null)
   const [loading, setLoading]         = useState(false)
 
   // Email link / change password state
@@ -85,7 +80,6 @@ export default function LinkedAccounts() {
 
   const providers = user.providerData.map(p => p.providerId)
   const hasGoogle = providers.includes('google.com')
-  const hasPhone  = providers.includes('phone')
   const hasEmail  = providers.includes('password')
   const providerCount = providers.length
 
@@ -112,44 +106,6 @@ export default function LinkedAccounts() {
       const code = (err as { code?: string })?.code ?? ''
       if (code === 'auth/credential-already-in-use') toast.error('This Google account is already linked to another Growwly account.')
       else toast.error('Failed to link Google account')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // ── Link Phone ─────────────────────────────────────────────────────────────
-
-  async function handleSendPhoneOTP() {
-    const formatted = phoneInput.startsWith('+') ? phoneInput : `+91${phoneInput.replace(/\D/g, '')}`
-    setLoading(true)
-    try {
-      const result = await linkPhone(formatted)
-      setPhoneResult(result)
-      setView('link-phone-otp')
-      toast.success('OTP sent!')
-    } catch (err: unknown) {
-      const code = (err as { code?: string })?.code ?? ''
-      if (code === 'auth/invalid-phone-number') toast.error('Invalid phone number')
-      else if (code === 'auth/credential-already-in-use') toast.error('This number is already linked to another account.')
-      else toast.error('Failed to send OTP')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleConfirmPhoneOTP() {
-    if (!phoneResult) return
-    setLoading(true)
-    try {
-      await confirmPhoneLink(phoneResult, otpInput)
-      toast.success('Phone number linked!')
-      setView(null)
-      setPhoneInput('')
-      setOtpInput('')
-    } catch (err: unknown) {
-      const code = (err as { code?: string })?.code ?? ''
-      if (code === 'auth/invalid-verification-code') toast.error('Wrong OTP')
-      else toast.error('Verification failed')
     } finally {
       setLoading(false)
     }
@@ -227,31 +183,6 @@ export default function LinkedAccounts() {
           </>
         )}
 
-        {view === 'link-phone-number' && (
-          <>
-            <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 4 }}>Link a phone number. You can use it to sign in via OTP.</p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <div style={{ ...inputStyle, width: 'auto', padding: '9px 10px', flexShrink: 0, fontSize: 12, color: 'var(--text-2)', background: 'var(--surface)', borderRadius: 10, border: '1px solid var(--border-strong)' }}>
-                🇮🇳 +91
-              </div>
-              <input className="input" style={{ fontSize: 13 }} type="tel" placeholder="Mobile number" value={phoneInput} onChange={e => setPhoneInput(e.target.value)} />
-            </div>
-            <button className="btn-primary" onClick={handleSendPhoneOTP} disabled={!phoneInput || loading}>
-              {loading ? 'Sending…' : 'Send OTP'}
-            </button>
-          </>
-        )}
-
-        {view === 'link-phone-otp' && (
-          <>
-            <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Enter the 6-digit OTP sent to your phone.</p>
-            <input className="input" style={{ fontSize: 16, letterSpacing: '0.3em', textAlign: 'center' }} type="number" placeholder="------" value={otpInput} onChange={e => setOtpInput(e.target.value.slice(0, 6))} />
-            <button className="btn-primary" onClick={handleConfirmPhoneOTP} disabled={otpInput.length < 6 || loading}>
-              {loading ? 'Verifying…' : 'Verify & Link'}
-            </button>
-          </>
-        )}
-
         {view === 'link-email' && (
           <>
             <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Add an email and password so you can also sign in with your email.</p>
@@ -301,15 +232,6 @@ export default function LinkedAccounts() {
         onUnlink={() => setConfirmUnlink('google.com')}
       />
       <ProviderRow
-        icon={<Phone size={15} />}
-        label="Mobile number"
-        sub={hasPhone ? (user.providerData.find(p => p.providerId === 'phone')?.phoneNumber ?? 'Linked') : 'Not linked'}
-        linked={hasPhone}
-        canUnlink={providerCount > 1}
-        onLink={() => setView('link-phone-number')}
-        onUnlink={() => setConfirmUnlink('phone')}
-      />
-      <ProviderRow
         icon={<Mail size={15} />}
         label="Email & Password"
         sub={hasEmail ? (user.email ?? 'Linked') : 'Not linked — add a password to sign in with email'}
@@ -333,7 +255,7 @@ export default function LinkedAccounts() {
 
       <ConfirmDialog
         open={!!confirmUnlink}
-        message={`Remove ${confirmUnlink === 'google.com' ? 'Google' : confirmUnlink === 'phone' ? 'phone number' : 'email/password'} from your account? You must have at least one sign-in method.`}
+        message={`Remove ${confirmUnlink === 'google.com' ? 'Google' : 'email/password'} from your account? You must have at least one sign-in method.`}
         confirmLabel="Remove"
         onConfirm={() => confirmUnlink && doUnlink(confirmUnlink)}
         onClose={() => setConfirmUnlink(null)}

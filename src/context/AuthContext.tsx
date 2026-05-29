@@ -75,6 +75,9 @@ function clearRecaptcha() {
     try { _recaptcha.clear() } catch { /* ignore */ }
     _recaptcha = null
   }
+  // Wipe any rendered widget left in the container
+  const el = document.getElementById('recaptcha-root')
+  if (el) el.innerHTML = ''
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
