@@ -10,6 +10,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPhoneNumber,
+  linkWithPhoneNumber,
   EmailAuthProvider,
   linkWithCredential,
   linkWithPopup,
@@ -55,10 +56,25 @@ export interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType)
 
-// Reusable invisible reCAPTCHA factory — creates a fresh verifier each call
-function makeRecaptcha() {
+// Module-level verifier — single-use per attempt, cleared before re-creation
+let _recaptcha: RecaptchaVerifier | null = null
+
+function makeRecaptcha(): RecaptchaVerifier {
+  // Always clear any previous instance before creating a new one
+  if (_recaptcha) {
+    try { _recaptcha.clear() } catch { /* already cleared */ }
+    _recaptcha = null
+  }
   const container = document.getElementById('recaptcha-root') ?? document.body
-  return new RecaptchaVerifier(auth, container, { size: 'invisible' })
+  _recaptcha = new RecaptchaVerifier(auth, container, { size: 'invisible' })
+  return _recaptcha
+}
+
+function clearRecaptcha() {
+  if (_recaptcha) {
+    try { _recaptcha.clear() } catch { /* ignore */ }
+    _recaptcha = null
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -106,7 +122,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function sendPhoneOTP(phone: string): Promise<ConfirmationResult> {
     const verifier = makeRecaptcha()
-    return signInWithPhoneNumber(auth, phone, verifier)
+    try {
+      const result = await signInWithPhoneNumber(auth, phone, verifier)
+      clearRecaptcha()
+      return result
+    } catch (err) {
+      clearRecaptcha()
+      throw err
+    }
   }
 
   async function confirmPhoneOTP(result: ConfirmationResult, otp: string) {
@@ -129,16 +152,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function linkPhone(phone: string): Promise<ConfirmationResult> {
     if (!auth.currentUser) throw new Error('Not signed in')
     const verifier = makeRecaptcha()
-    return signInWithPhoneNumber(auth, phone, verifier)
+    try {
+      // linkWithPhoneNumber ties the OTP flow to the current user's account
+      const result = await linkWithPhoneNumber(auth.currentUser, phone, verifier)
+      clearRecaptcha()
+      return result
+    } catch (err) {
+      clearRecaptcha()
+      throw err
+    }
   }
 
   async function confirmPhoneLink(result: ConfirmationResult, otp: string) {
-    if (!auth.currentUser) throw new Error('Not signed in')
-    const credential = result.verificationId
-      ? (await import('firebase/auth')).PhoneAuthProvider.credential(result.verificationId, otp)
-      : null
-    if (!credential) throw new Error('Invalid OTP session')
-    await linkWithCredential(auth.currentUser, credential)
+    // result.confirm() on a linkWithPhoneNumber result handles linking automatically
+    await result.confirm(otp)
   }
 
   async function unlinkProvider(providerId: string) {
