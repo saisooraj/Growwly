@@ -8,6 +8,7 @@ import HealthCard from '@/components/dashboard/HealthCard'
 import SafeToSpendCard from '@/components/dashboard/SafeToSpendCard'
 import EmergencyFundCard from '@/components/dashboard/EmergencyFundCard'
 import SmartInsights from '@/components/dashboard/SmartInsights'
+import PulseCard from '@/components/dashboard/PulseCard'
 import SummaryCards from '@/components/dashboard/SummaryCards'
 import MonthlyBarChart from '@/components/dashboard/MonthlyBarChart'
 import CategoryPieChart from '@/components/dashboard/CategoryPieChart'
@@ -70,7 +71,10 @@ export default function DashboardPage() {
             <EmergencyFundCard />
           </div>
 
-          {/* Row 2: Smart insights */}
+          {/* Row 2: Monthly Pulse */}
+          <PulseCard />
+
+          {/* Row 3: Smart insights */}
           <SmartInsights />
 
           {/* Row 3: 4 KPIs */}

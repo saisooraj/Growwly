@@ -378,6 +378,12 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 }
 .anim-in { animation: fadeUp .35s ease both; }
 
+@keyframes pulseSheetIn {
+  from { opacity: 0; transform: translateY(32px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.pulse-sheet-enter { animation: pulseSheetIn .22s ease-out both; }
+
 /* ══════════════════════════════════════════
    Scrollbar
 ══════════════════════════════════════════ */

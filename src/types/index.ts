@@ -156,3 +156,82 @@ export interface Task {
   createdAt: string
   completedAt?: string
 }
+
+// ── Financial Pulse ──────────────────────────────────────────────────────────
+
+export interface PulseHealthScore {
+  score: number   // 0–100
+  label: 'excellent' | 'good' | 'caution' | 'critical'
+  breakdown: {
+    spendingControl: number   // max 30
+    efProgress: number        // max 20
+    savingsMomentum: number   // max 20
+    goalsProgress: number     // max 15
+    borrowingHealth: number   // max 15
+  }
+}
+
+export interface PulseCashPosition {
+  monthIncome: number
+  monthExpenses: number
+  upcomingTotal: number   // expenses due in next 30 days
+  freeCash: number        // income − expenses − upcoming
+  daysLeft: number
+  dailyBudget: number     // freeCash / daysLeft
+}
+
+export interface PulseUpcoming {
+  label: string
+  amount: number
+  dueDate: string
+  daysUntil: number
+  type: 'expense' | 'income' | 'borrowing'
+}
+
+export interface PulseAllocation {
+  label: string
+  amount: number
+  reason: string
+  type: 'ef' | 'project' | 'buffer' | 'discretionary'
+}
+
+export interface PulseSpendCategory {
+  category: string
+  amount: number
+  prevAmount: number
+  changePct: number | null   // null if no prior month data
+}
+
+export interface PulseGoal {
+  label: string
+  emoji: string
+  current: number
+  target: number
+  pct: number
+  dueDate?: string
+  type: 'ef' | 'savings' | 'project'
+}
+
+export interface PulseBorrowingAlert {
+  person: string
+  amount: number
+  outstanding: number
+  type: 'borrowed' | 'lent'
+  dueDate?: string
+  isOverdue: boolean
+  daysOverdue?: number
+}
+
+export interface FinancialPulse {
+  month: string
+  generatedAt: string
+  triggerType: 'month-start' | 'payday' | 'manual'
+  headline: string
+  health: PulseHealthScore
+  cashPosition: PulseCashPosition
+  upcoming: PulseUpcoming[]
+  allocations: PulseAllocation[]
+  spendAnalysis: PulseSpendCategory[]
+  goals: PulseGoal[]
+  borrowingAlerts: PulseBorrowingAlert[]
+}
