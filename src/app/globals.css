@@ -270,6 +270,8 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   /* Form elements */
   .input {
     width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     padding: 8px 12px;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);

@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useMemo } from 'react'
-import { Download, Plus, SlidersHorizontal } from 'lucide-react'
+import { Download, Plus, SlidersHorizontal, Eye, EyeOff } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
 import TransactionList from '@/components/transactions/TransactionList'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
@@ -28,6 +28,9 @@ export default function TransactionsPage() {
   const [addOpen, setAddOpen]       = useState(false)
   const [typeFilter, setTypeFilter] = useState<TransactionType | 'all'>('all')
   const [catFilter, setCatFilter]   = useState<string>('all')
+  const [showIncome,   setShowIncome]   = useState(false)
+  const [showExpenses, setShowExpenses] = useState(false)
+  const [showNet,      setShowNet]      = useState(false)
 
   const { transactions, selectedMonth } = useAppStore()
   const summary  = buildMonthlySummary(transactions, selectedMonth)
@@ -62,22 +65,42 @@ export default function TransactionsPage() {
 
         {/* Summary KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-3" style={{ gap: 'var(--row-gap)' }}>
-          <div className="card-sm">
-            <div className="h-eyebrow" style={{ marginBottom: 8 }}>Income</div>
+          {/* Income */}
+          <div className="card-sm" style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span className="h-eyebrow">Income</span>
+              <button onClick={() => setShowIncome(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}>
+                {showIncome ? <EyeOff size={13} /> : <Eye size={13} />}
+              </button>
+            </div>
             <div className="display-num" style={{ fontSize: 22, color: 'var(--good-ink)' }}>
-              {formatCurrencyFull(summary.totalIncome)}
+              {showIncome ? formatCurrencyFull(summary.totalIncome) : '₹ •••'}
             </div>
           </div>
-          <div className="card-sm">
-            <div className="h-eyebrow" style={{ marginBottom: 8 }}>Expenses</div>
+
+          {/* Expenses */}
+          <div className="card-sm" style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span className="h-eyebrow">Expenses</span>
+              <button onClick={() => setShowExpenses(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}>
+                {showExpenses ? <EyeOff size={13} /> : <Eye size={13} />}
+              </button>
+            </div>
             <div className="display-num" style={{ fontSize: 22, color: 'var(--bad-ink)' }}>
-              {formatCurrencyFull(summary.totalExpenses)}
+              {showExpenses ? formatCurrencyFull(summary.totalExpenses) : '₹ •••'}
             </div>
           </div>
-          <div className="card-sm">
-            <div className="h-eyebrow" style={{ marginBottom: 8 }}>Net</div>
+
+          {/* Net */}
+          <div className="card-sm" style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span className="h-eyebrow">Net</span>
+              <button onClick={() => setShowNet(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}>
+                {showNet ? <EyeOff size={13} /> : <Eye size={13} />}
+              </button>
+            </div>
             <div className="display-num" style={{ fontSize: 22, color: summary.net >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
-              {summary.net >= 0 ? '+' : '−'}{formatCurrencyFull(Math.abs(summary.net))}
+              {showNet ? `${summary.net >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(summary.net))}` : '₹ •••'}
             </div>
           </div>
         </div>
@@ -144,7 +167,7 @@ export default function TransactionsPage() {
             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Click any row to view or edit</span>
           </div>
           <div style={{ padding: '8px 8px' }}>
-            <TransactionList transactions={filtered} />
+            <TransactionList transactions={filtered} groupByDay />
           </div>
         </div>
 
