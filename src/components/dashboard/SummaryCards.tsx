@@ -4,9 +4,11 @@ import { useState } from 'react'
 import { ArrowUp, ArrowDown, ArrowDownRight, Handshake, Eye, EyeOff } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { buildMonthlySummary, formatCurrencyFull, getLast6Months } from '@/lib/utils'
+import { getCycleRange, formatCycleRange } from '@/lib/cycle'
 
 interface StatProps {
   label: string
+  dateRange?: string
   value: string
   sub: string
   tone?: 'good' | 'bad' | 'warn' | 'info' | 'neutral'
@@ -17,7 +19,7 @@ interface StatProps {
   onToggleMask?: () => void
 }
 
-function Stat({ label, value, sub, tone = 'neutral', icon, maskable, masked, maskSub, onToggleMask }: StatProps) {
+function Stat({ label, dateRange, value, sub, tone = 'neutral', icon, maskable, masked, maskSub, onToggleMask }: StatProps) {
   const accentColor =
     tone === 'good'    ? 'var(--good)' :
     tone === 'bad'     ? 'var(--bad)'  :
@@ -28,7 +30,14 @@ function Stat({ label, value, sub, tone = 'neutral', icon, maskable, masked, mas
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'relative', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <span className="h-eyebrow">{label}</span>
+        <div>
+          <span className="h-eyebrow">{label}</span>
+          {dateRange && (
+            <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 2, fontWeight: 400, letterSpacing: 0 }}>
+              {dateRange}
+            </div>
+          )}
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {maskable && (
             <button
@@ -56,14 +65,19 @@ function Stat({ label, value, sub, tone = 'neutral', icon, maskable, masked, mas
 export default function SummaryCards() {
   const [maskIncome, setMaskIncome] = useState(true)
   const [maskExpense, setMaskExpense] = useState(true)
-  const { transactions, selectedMonth, budgets, borrowings } = useAppStore()
+  const { transactions, selectedMonth, budgets, borrowings, settings } = useAppStore()
 
   const months = getLast6Months()
   const curIdx = months.indexOf(selectedMonth)
   const prevMonth = curIdx > 0 ? months[curIdx - 1] : null
 
-  const cur = buildMonthlySummary(transactions, selectedMonth)
-  const prev = prevMonth ? buildMonthlySummary(transactions, prevMonth) : null
+  const cur  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
+  const prev = prevMonth ? buildMonthlySummary(transactions, prevMonth, settings, borrowings) : null
+
+  const { start, end } = getCycleRange(selectedMonth, settings)
+  const cycleLabel = settings?.salaryCycleRule && settings.salaryCycleRule !== 'none'
+    ? formatCycleRange(start, end)
+    : null
 
   const totalBudget = budgets.filter(b => b.month === selectedMonth).reduce((s, b) => s + b.planned, 0)
 
@@ -82,12 +96,13 @@ export default function SummaryCards() {
   const pendingBorrowCount = borrowings
     .filter(b => b.type === 'lent' && b.status !== 'repaid').length
 
-  const isDeficit = cur.net < 0
+  const isDeficit = cur.cashNet < 0
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4" style={{ gap: 'var(--row-gap)' }}>
       <Stat
-        label={`Income · ${selectedMonth.slice(0, 7)}`}
+        label="Income"
+        dateRange={cycleLabel ?? undefined}
         value={formatCurrencyFull(cur.totalIncome)}
         sub={incomeChange !== null ? `${Number(incomeChange) > 0 ? '+' : ''}${incomeChange}% vs last month` : 'This month'}
         tone="good"
@@ -97,7 +112,8 @@ export default function SummaryCards() {
         onToggleMask={() => setMaskIncome(v => !v)}
       />
       <Stat
-        label={`Expenses · ${selectedMonth.slice(0, 7)}`}
+        label="Expenses"
+        dateRange={cycleLabel ?? undefined}
         value={formatCurrencyFull(cur.totalExpenses)}
         sub={totalBudget > 0 ? `vs ${formatCurrencyFull(totalBudget)} planned` : (expenseChange !== null ? `${Number(expenseChange) > 0 ? '+' : ''}${expenseChange}% vs last month` : 'This month')}
         tone="bad"
@@ -108,8 +124,9 @@ export default function SummaryCards() {
         onToggleMask={() => setMaskExpense(v => !v)}
       />
       <Stat
-        label="Net"
-        value={formatCurrencyFull(Math.abs(cur.net))}
+        label="Net cashflow"
+        dateRange={cycleLabel ?? undefined}
+        value={formatCurrencyFull(Math.abs(cur.cashNet))}
         sub={isDeficit ? 'Deficit — burning savings' : 'Surplus this month'}
         tone={isDeficit ? 'bad' : 'good'}
         icon={<ArrowDownRight size={14} />}
