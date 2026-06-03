@@ -118,7 +118,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   min-height: 100vh;
   background: var(--bg);
 }
-@media (max-width: 920px) {
+@media (max-width: 1023px) {
   .app { grid-template-columns: 1fr; }
 }
 
