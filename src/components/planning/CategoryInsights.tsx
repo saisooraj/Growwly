@@ -6,13 +6,13 @@ import { buildMonthlySummary, EXPENSE_CATEGORIES, formatCurrencyFull } from '@/l
 import { format, subMonths, parseISO } from 'date-fns'
 
 export default function CategoryInsights() {
-  const { transactions, selectedMonth } = useAppStore()
+  const { transactions, selectedMonth, settings } = useAppStore()
 
   const prevMonthDate = subMonths(parseISO(`${selectedMonth}-01`), 1)
   const prevMonth = format(prevMonthDate, 'yyyy-MM')
 
-  const currSummary = buildMonthlySummary(transactions, selectedMonth)
-  const prevSummary = buildMonthlySummary(transactions, prevMonth)
+  const currSummary = buildMonthlySummary(transactions, selectedMonth, settings)
+  const prevSummary = buildMonthlySummary(transactions, prevMonth, settings)
 
   const rows = EXPENSE_CATEGORIES
     .map(cat => {

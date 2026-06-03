@@ -1,6 +1,7 @@
 import { type ClassValue, clsx } from 'clsx'
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, parseISO, isWithinInterval } from 'date-fns'
-import type { Transaction, MonthlySummary, Category } from '@/types'
+import type { Transaction, MonthlySummary, Category, UserSettings, Borrowing } from '@/types'
+import { getCycleRange } from './cycle'
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs)
@@ -30,14 +31,13 @@ export function getMonthLabel(month: string): string {
 
 export function getTransactionsForMonth(
   transactions: Transaction[],
-  month: string
+  month: string,
+  settings?: UserSettings | null
 ): Transaction[] {
-  const start = startOfMonth(parseISO(`${month}-01`))
-  const end = endOfMonth(start)
-  return transactions.filter((t) => {
-    const d = parseISO(t.date)
-    return isWithinInterval(d, { start, end })
-  })
+  const { start, end } = getCycleRange(month, settings)
+  return transactions.filter((t) =>
+    isWithinInterval(parseISO(t.date), { start: parseISO(start), end: parseISO(end) })
+  )
 }
 
 export function getTransactionsForWeek(
@@ -54,15 +54,18 @@ export function getTransactionsForWeek(
 
 export function buildMonthlySummary(
   transactions: Transaction[],
-  month: string
+  month: string,
+  settings?: UserSettings | null,
+  borrowings?: Borrowing[] | null
 ): MonthlySummary {
-  const monthTxs = getTransactionsForMonth(transactions, month)
+  const { start, end } = getCycleRange(month, settings)
+  const monthTxs = getTransactionsForMonth(transactions, month, settings)
   const byCategory: Record<string, number> = {}
   let totalIncome = 0
   let totalExpenses = 0
 
   for (const t of monthTxs) {
-    if (t.type === 'transfer') continue  // transfers are not P&L
+    if (t.type === 'transfer') continue
     if (t.type === 'income') {
       totalIncome += t.amount
     } else {
@@ -71,11 +74,27 @@ export function buildMonthlySummary(
     }
   }
 
+  let totalLent = 0
+  let totalBorrowed = 0
+  if (borrowings) {
+    for (const b of borrowings) {
+      if (b.date < start || b.date > end) continue
+      if (b.type === 'lent')     totalLent     += b.amount
+      else                       totalBorrowed += b.amount
+    }
+  }
+
+  const net     = totalIncome - totalExpenses
+  const cashNet = net - totalLent + totalBorrowed
+
   return {
     month,
     totalIncome,
     totalExpenses,
-    net: totalIncome - totalExpenses,
+    net,
+    cashNet,
+    totalLent,
+    totalBorrowed,
     byCategory: byCategory as Record<Category, number>,
   }
 }

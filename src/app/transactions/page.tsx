@@ -32,9 +32,9 @@ export default function TransactionsPage() {
   const [showExpenses, setShowExpenses] = useState(false)
   const [showNet,      setShowNet]      = useState(false)
 
-  const { transactions, selectedMonth } = useAppStore()
-  const summary  = buildMonthlySummary(transactions, selectedMonth)
-  const monthTxs = getTransactionsForMonth(transactions, selectedMonth)
+  const { transactions, borrowings, selectedMonth, settings } = useAppStore()
+  const summary  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
+  const monthTxs = getTransactionsForMonth(transactions, selectedMonth, settings)
 
   const filtered = useMemo(() => {
     return monthTxs.filter(t => {
@@ -91,17 +91,27 @@ export default function TransactionsPage() {
             </div>
           </div>
 
-          {/* Net */}
+          {/* Net (true cashflow) */}
           <div className="card-sm" style={{ position: 'relative' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="h-eyebrow">Net</span>
+              <span className="h-eyebrow">Net cashflow</span>
               <button onClick={() => setShowNet(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}>
                 {showNet ? <EyeOff size={13} /> : <Eye size={13} />}
               </button>
             </div>
-            <div className="display-num" style={{ fontSize: 22, color: summary.net >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
-              {showNet ? `${summary.net >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(summary.net))}` : '₹ •••'}
+            <div className="display-num" style={{ fontSize: 22, color: summary.cashNet >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
+              {showNet ? `${summary.cashNet >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(summary.cashNet))}` : '₹ •••'}
             </div>
+            {showNet && (summary.totalLent > 0 || summary.totalBorrowed > 0) && (
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {summary.totalLent > 0 && (
+                  <span>−{formatCurrencyFull(summary.totalLent)} <span style={{ color: 'var(--warn-ink)' }}>lent</span></span>
+                )}
+                {summary.totalBorrowed > 0 && (
+                  <span>+{formatCurrencyFull(summary.totalBorrowed)} <span style={{ color: 'var(--info-ink)' }}>borrowed</span></span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

@@ -234,8 +234,8 @@ export function computePulse(
   const month = format(now, 'yyyy-MM')
   const prevMonth = format(new Date(now.getFullYear(), now.getMonth() - 1, 1), 'yyyy-MM')
 
-  const curSummary  = buildMonthlySummary(transactions, month)
-  const prevSummary = buildMonthlySummary(transactions, prevMonth)
+  const curSummary  = buildMonthlySummary(transactions, month,      snapshot.settings)
+  const prevSummary = buildMonthlySummary(transactions, prevMonth,  snapshot.settings)
 
   const daysLeft    = Math.max(getDaysInMonth(now) - now.getDate(), 0)
   const thirtyDaysOut = addDays(now, 30)

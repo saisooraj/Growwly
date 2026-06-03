@@ -12,12 +12,12 @@ import { Check, Edit2 } from 'lucide-react'
 
 export default function BudgetPlanner() {
   const { user } = useAuth()
-  const { budgets, transactions, selectedMonth } = useAppStore()
+  const { budgets, transactions, selectedMonth, settings } = useAppStore()
   const refresh = useRefreshData()
   const [editing, setEditing] = useState<Category | null>(null)
   const [inputVal, setInputVal] = useState('')
 
-  const summary = buildMonthlySummary(transactions, selectedMonth)
+  const summary = buildMonthlySummary(transactions, selectedMonth, settings)
   const monthBudgets = budgets.filter((b) => b.month === selectedMonth)
   const budgetMap = Object.fromEntries(monthBudgets.map((b) => [b.category, b.planned]))
 

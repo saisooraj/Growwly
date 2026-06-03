@@ -3,21 +3,22 @@
 import { useMemo } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { buildMonthlySummary, formatCurrencyFull } from '@/lib/utils'
-import { endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns'
+import { getCycleRange } from '@/lib/cycle'
+import { parseISO, differenceInCalendarDays } from 'date-fns'
 
 export default function SafeToSpendCard() {
-  const { transactions, selectedMonth } = useAppStore()
+  const { transactions, selectedMonth, settings } = useAppStore()
 
   const { dailySafe, daysLeft, cushion, tone } = useMemo(() => {
-    const summary = buildMonthlySummary(transactions, selectedMonth)
+    const summary = buildMonthlySummary(transactions, selectedMonth, settings)
     const today = new Date()
-    const monthEnd = endOfMonth(parseISO(`${selectedMonth}-01`))
-    const daysLeft = Math.max(1, differenceInCalendarDays(monthEnd, today) + 1)
+    const { end } = getCycleRange(selectedMonth, settings)
+    const daysLeft = Math.max(1, differenceInCalendarDays(parseISO(end), today) + 1)
     const cushion = summary.net
     const dailySafe = Math.max(0, cushion / daysLeft)
     const tone = cushion < 0 ? 'bad' : cushion < 5000 ? 'warn' : 'good'
     return { dailySafe, daysLeft, cushion, tone }
-  }, [transactions, selectedMonth])
+  }, [transactions, selectedMonth, settings])
 
   const accent =
     tone === 'bad'  ? 'var(--bad)'  :

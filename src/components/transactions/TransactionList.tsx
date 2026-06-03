@@ -2,10 +2,11 @@
 
 import { useState, useMemo } from 'react'
 import { format, parseISO, isToday, isYesterday } from 'date-fns'
-import { TrendingUp, TrendingDown, ArrowLeftRight, ChevronDown, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react'
+import { TrendingUp, TrendingDown, ArrowLeftRight, ChevronDown, ChevronRight, ArrowUp, ArrowDown, UserMinus, UserPlus } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { formatCurrencyFull, CATEGORY_COLORS, getTransactionsForMonth, TRANSFER_KINDS } from '@/lib/utils'
-import type { Transaction } from '@/types'
+import { getCycleRange } from '@/lib/cycle'
+import type { Transaction, Borrowing } from '@/types'
 import TransactionDetailModal from './TransactionDetailModal'
 
 interface Props {
@@ -13,6 +14,27 @@ interface Props {
   limit?: number
   transactions?: Transaction[]
   groupByDay?: boolean
+}
+
+// Synthetic row type — Transaction extended with borrowing metadata
+type ViewTx = Transaction & { _borrowDir?: 'lent' | 'borrowed'; _person?: string }
+
+// ── Borrowing → synthetic ViewTx ────────────────────────────────────────────
+
+function borrowingToViewTx(b: Borrowing): ViewTx {
+  return {
+    id: `borrow-${b.id}`,
+    userId: b.userId,
+    type: b.type === 'lent' ? 'expense' : 'income',
+    amount: b.amount,
+    category: b.type === 'lent' ? 'Lent' : 'Borrowed',
+    date: b.date,
+    notes: `${b.type === 'lent' ? 'To' : 'From'} ${b.person}${b.description ? ' · ' + b.description : ''}`,
+    createdAt: b.createdAt,
+    borrowingId: b.id,
+    _borrowDir: b.type as 'lent' | 'borrowed',
+    _person: b.person,
+  }
 }
 
 function transferLabel(tx: Transaction): string {
@@ -32,16 +54,38 @@ function dayLabel(dateStr: string): string {
 
 // ── Single transaction row ───────────────────────────────────────────────────
 
-function TxRow({ tx, onSelect }: { tx: Transaction; onSelect: (t: Transaction) => void }) {
-  const isTransfer = tx.type === 'transfer'
-  const isIncome   = tx.type === 'income'
-  const color      = isTransfer ? 'var(--info)' : (CATEGORY_COLORS[tx.category] ?? '#94a3b8')
-  const dir        = isTransfer ? transferDir(tx) : (isIncome ? 'in' : 'out')
-  const label      = isTransfer ? transferLabel(tx) : tx.category
-  const amountColor = isTransfer
-    ? dir === 'in' ? 'var(--good-ink)' : 'var(--text-2)'
-    : isIncome ? 'var(--good-ink)' : 'var(--text)'
-  const prefix = (isTransfer ? dir === 'in' : isIncome) ? '+' : '−'
+function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => void }) {
+  const isBorrowing = !!tx._borrowDir
+  const isTransfer  = tx.type === 'transfer'
+  const isIncome    = tx.type === 'income'
+
+  let color: string, icon: React.ReactNode, label: string, amountColor: string, prefix: string
+
+  if (isBorrowing) {
+    const isLent = tx._borrowDir === 'lent'
+    color       = isLent ? 'var(--warn)' : 'var(--info)'
+    icon        = isLent
+      ? <UserMinus size={15} style={{ color }} />
+      : <UserPlus  size={15} style={{ color }} />
+    label       = tx._person ?? (isLent ? 'Lent' : 'Borrowed')
+    amountColor = isLent ? 'var(--warn-ink)' : 'var(--info-ink)'
+    prefix      = isLent ? '−' : '+'
+  } else if (isTransfer) {
+    const dir = transferDir(tx)
+    color       = 'var(--info)'
+    icon        = <ArrowLeftRight size={15} style={{ color }} />
+    label       = transferLabel(tx)
+    amountColor = dir === 'in' ? 'var(--good-ink)' : 'var(--text-2)'
+    prefix      = dir === 'in' ? '+' : '−'
+  } else {
+    color       = CATEGORY_COLORS[tx.category] ?? '#94a3b8'
+    icon        = isIncome
+      ? <TrendingUp   size={15} style={{ color }} />
+      : <TrendingDown size={15} style={{ color }} />
+    label       = tx.category
+    amountColor = isIncome ? 'var(--good-ink)' : 'var(--text)'
+    prefix      = isIncome ? '+' : '−'
+  }
 
   return (
     <button
@@ -61,12 +105,7 @@ function TxRow({ tx, onSelect }: { tx: Transaction; onSelect: (t: Transaction) =
         background: color + '20',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        {isTransfer
-          ? <ArrowLeftRight size={15} style={{ color }} />
-          : isIncome
-            ? <TrendingUp size={15} style={{ color }} />
-            : <TrendingDown size={15} style={{ color }} />
-        }
+        {icon}
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -74,6 +113,18 @@ function TxRow({ tx, onSelect }: { tx: Transaction; onSelect: (t: Transaction) =
           <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {label}
           </span>
+          {isBorrowing && (
+            <span
+              className="pill"
+              style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0,
+                background: tx._borrowDir === 'lent' ? 'var(--warn-soft)' : 'var(--info-soft)',
+                color:      tx._borrowDir === 'lent' ? 'var(--warn-ink)'  : 'var(--info-ink)',
+                border: 'none',
+              }}
+            >
+              {tx._borrowDir}
+            </span>
+          )}
           {isTransfer && (
             <span className="pill info" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0 }}>transfer</span>
           )}
@@ -99,7 +150,7 @@ function TxRow({ tx, onSelect }: { tx: Transaction; onSelect: (t: Transaction) =
 
 function DayGroup({ date, txs, defaultOpen, onSelect }: {
   date: string
-  txs: Transaction[]
+  txs: ViewTx[]
   defaultOpen: boolean
   onSelect: (t: Transaction) => void
 }) {
@@ -108,6 +159,7 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
   const { income, expenses } = useMemo(() => {
     let income = 0, expenses = 0
     for (const tx of txs) {
+      if (tx._borrowDir) continue  // borrowings don't count in P&L summary
       if (tx.type === 'income') income += tx.amount
       else if (tx.type === 'expense') expenses += tx.amount
       else {
@@ -121,7 +173,6 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
 
   return (
     <div>
-      {/* Day header */}
       <button
         onClick={() => setOpen(v => !v)}
         style={{
@@ -134,30 +185,26 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
       >
         {open
-          ? <ChevronDown size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+          ? <ChevronDown  size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
           : <ChevronRight size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
         }
         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', flex: 1, textAlign: 'left' }}>
           {dayLabel(date)}
         </span>
-        {/* Collapsed summary — always visible */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
           {income > 0 && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: 'var(--good-ink)' }}>
-              <ArrowDown size={11} />
-              {formatCurrencyFull(income)}
+              <ArrowDown size={11} />{formatCurrencyFull(income)}
             </span>
           )}
           {expenses > 0 && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: 'var(--bad-ink)' }}>
-              <ArrowUp size={11} />
-              {formatCurrencyFull(expenses)}
+              <ArrowUp size={11} />{formatCurrencyFull(expenses)}
             </span>
           )}
         </div>
       </button>
 
-      {/* Expanded rows */}
       {open && (
         <div style={{ paddingLeft: 4 }}>
           {txs.map(tx => <TxRow key={tx.id} tx={tx} onSelect={onSelect} />)}
@@ -170,21 +217,31 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
 // ── Main component ───────────────────────────────────────────────────────────
 
 export default function TransactionList({ filterMonth = false, limit, transactions: txOverride, groupByDay = false }: Props) {
-  const { transactions: storeTxs, selectedMonth } = useAppStore()
+  const { transactions: storeTxs, borrowings, selectedMonth, settings } = useAppStore()
   const [selected, setSelected] = useState<Transaction | null>(null)
 
-  const base = txOverride ?? (filterMonth
-    ? getTransactionsForMonth(storeTxs, selectedMonth)
-    : storeTxs)
+  const base: ViewTx[] = useMemo(() => {
+    const txs: Transaction[] = txOverride ?? (filterMonth
+      ? getTransactionsForMonth(storeTxs, selectedMonth, settings)
+      : storeTxs)
+
+    // Filter borrowings to the same date range
+    const { start, end } = getCycleRange(selectedMonth, settings)
+    const borrowingRows = borrowings
+      .filter(b => b.date >= start && b.date <= end)
+      .map(borrowingToViewTx)
+
+    return [...txs, ...borrowingRows]
+  }, [txOverride, storeTxs, borrowings, selectedMonth, settings, filterMonth])
 
   const list  = [...base].sort((a, b) => b.date.localeCompare(a.date))
   const shown = limit ? list.slice(0, limit) : list
 
   const today = format(new Date(), 'yyyy-MM-dd')
 
-  const groups: [string, Transaction[]][] = useMemo(() => {
+  const groups: [string, ViewTx[]][] = useMemo(() => {
     if (!groupByDay) return []
-    const map = new Map<string, Transaction[]>()
+    const map = new Map<string, ViewTx[]>()
     for (const tx of shown) {
       if (!map.has(tx.date)) map.set(tx.date, [])
       map.get(tx.date)!.push(tx)

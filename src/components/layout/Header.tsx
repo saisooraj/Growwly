@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Sun, Moon, Bell, Leaf, Settings } from 'luci
 import { useTheme } from 'next-themes'
 import { useAppStore } from '@/store/appStore'
 import { getLast6Months, getMonthLabel } from '@/lib/utils'
+import { getCycleRange, formatCycleRange } from '@/lib/cycle'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 
@@ -39,7 +40,7 @@ function ThemeToggle() {
 
 export default function Header({ title }: { title?: string }) {
   const pathname = usePathname()
-  const { selectedMonth, setSelectedMonth } = useAppStore()
+  const { selectedMonth, setSelectedMonth, settings } = useAppStore()
   const months = getLast6Months()
   const currentIdx = months.indexOf(selectedMonth)
   const canPrev = currentIdx > 0
@@ -105,12 +106,19 @@ export default function Header({ title }: { title?: string }) {
           >
             <ChevronLeft size={15} />
           </button>
-          <span
-            className="num"
-            style={{ padding: '0 8px', fontSize: 12, fontWeight: 500, minWidth: 72, textAlign: 'center', color: 'var(--text)' }}
-          >
-            {getMonthLabel(selectedMonth)}
-          </span>
+          <div style={{ padding: '0 8px', minWidth: 80, textAlign: 'center' }}>
+            <div className="num" style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', lineHeight: 1.3 }}>
+              {getMonthLabel(selectedMonth)}
+            </div>
+            {settings?.salaryCycleRule && settings.salaryCycleRule !== 'none' && (() => {
+              const { start, end } = getCycleRange(selectedMonth, settings)
+              return (
+                <div style={{ fontSize: 10, color: 'var(--text-4)', lineHeight: 1.2, marginTop: 1 }}>
+                  {formatCycleRange(start, end)}
+                </div>
+              )
+            })()}
+          </div>
           <button
             onClick={next}
             disabled={!canNext}

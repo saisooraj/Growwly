@@ -99,6 +99,10 @@ export interface UserSettings {
   notificationsEnabled: boolean
   pushReminderEnabled?: boolean
   pushReminderHour?: number   // 0–23, hour in user's local time
+  // Salary cycle
+  salaryCycleRule?: 'none' | 'last-working-day' | 'fixed-day'
+  salaryCycleFixedDay?: number                    // 1–31, used when rule = 'fixed-day'
+  cycleOverrides?: Record<string, string>         // { "2026-06": "2026-05-30" } per-month overrides
   createdAt: string
   updatedAt: string
 }
@@ -131,7 +135,10 @@ export interface MonthlySummary {
   month: string
   totalIncome: number
   totalExpenses: number
-  net: number
+  net: number           // P&L net: income − expenses (no borrowings)
+  cashNet: number       // True cashflow: net − lent + borrowed
+  totalLent: number
+  totalBorrowed: number
   byCategory: Record<Category, number>
 }
 

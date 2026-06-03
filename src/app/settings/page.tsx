@@ -9,12 +9,16 @@ import { useAppStore } from '@/store/appStore'
 import { setUserSettings, exportAllUserData, importAllUserData } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
-import { downloadJSON } from '@/lib/utils'
-import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2 } from 'lucide-react'
+import { downloadJSON, getLast6Months } from '@/lib/utils'
+import { getCycleRange, getLastWorkingDay, formatCycleRange } from '@/lib/cycle'
+import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X } from 'lucide-react'
 import LinkedAccounts from '@/components/auth/LinkedAccounts'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
+import { format, parseISO } from 'date-fns'
 import type { FinancialMode } from '@/types'
+
+type SalaryCycleRule = 'none' | 'last-working-day' | 'fixed-day'
 
 
 export default function SettingsPage() {
@@ -34,12 +38,23 @@ export default function SettingsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pendingImport, setPendingImport] = useState<any | null>(null)
 
+  // Salary cycle
+  const [cycleRule, setCycleRule]           = useState<SalaryCycleRule>('none')
+  const [cycleFixedDay, setCycleFixedDay]   = useState('28')
+  const [cycleOverrides, setCycleOverrides] = useState<Record<string, string>>({})
+  const [savingCycle, setSavingCycle]       = useState(false)
+  const [editingMonth, setEditingMonth]     = useState<string | null>(null)
+  const [editDate, setEditDate]             = useState('')
+
   useEffect(() => {
     if (settings) {
       setMode(settings.financialMode ?? 'normal')
       setWeeklyBudget(String(settings.weeklyBudget ?? ''))
       setMonthlyIncome(String(settings.monthlyIncomeTarget ?? ''))
       setEfTarget(String(settings.emergencyFundTarget ?? ''))
+      setCycleRule((settings.salaryCycleRule ?? 'none') as SalaryCycleRule)
+      setCycleFixedDay(String(settings.salaryCycleFixedDay ?? 28))
+      setCycleOverrides(settings.cycleOverrides ?? {})
     }
   }, [settings])
 
@@ -79,6 +94,40 @@ export default function SettingsPage() {
         toast.error('Notifications blocked — enable them in browser settings')
       }
     }
+  }
+
+  async function saveCycleSettings() {
+    if (!user) return
+    setSavingCycle(true)
+    try {
+      await setUserSettings(user.uid, {
+        salaryCycleRule: cycleRule,
+        salaryCycleFixedDay: Number(cycleFixedDay) || 28,
+        cycleOverrides,
+      })
+      await refresh()
+      toast.success('Salary cycle saved')
+    } catch {
+      toast.error('Failed to save cycle')
+    } finally {
+      setSavingCycle(false)
+    }
+  }
+
+  async function saveOverride(budgetMonth: string, date: string) {
+    if (!user || !date) return
+    const updated = { ...cycleOverrides, [budgetMonth]: date }
+    setCycleOverrides(updated)
+    setEditingMonth(null)
+    await setUserSettings(user.uid, { cycleOverrides: updated })
+    toast.success('Override saved')
+  }
+
+  async function clearOverride(budgetMonth: string) {
+    if (!user) return
+    const { [budgetMonth]: _, ...rest } = cycleOverrides
+    setCycleOverrides(rest)
+    await setUserSettings(user.uid, { cycleOverrides: rest })
   }
 
   async function handleExport() {
@@ -255,6 +304,138 @@ export default function SettingsPage() {
           <button onClick={saveSettings} disabled={saving} className="btn-primary" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Saving…' : 'Save Settings'}
           </button>
+        </div>
+
+        {/* Salary Cycle */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CalendarClock size={14} style={{ color: 'var(--brand)' }} />
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Salary Cycle</h2>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
+            Salary credited on the last day of a month is budgeted for the next month. Set your cycle so cashflow matches reality.
+          </p>
+
+          {/* Rule selector */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label className="label">Cycle starts on</label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {([
+                { value: 'none',             label: 'Off — use calendar month' },
+                { value: 'last-working-day', label: 'Last working day of previous month (Mon–Fri)' },
+                { value: 'fixed-day',        label: 'Fixed day of previous month' },
+              ] as { value: SalaryCycleRule; label: string }[]).map(opt => (
+                <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: 'var(--text-2)' }}>
+                  <input
+                    type="radio"
+                    name="cycleRule"
+                    value={opt.value}
+                    checked={cycleRule === opt.value}
+                    onChange={() => setCycleRule(opt.value)}
+                    style={{ accentColor: 'var(--brand)' }}
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+
+            {cycleRule === 'fixed-day' && (
+              <div style={{ marginTop: 4 }}>
+                <label className="label">Day of month (1–31)</label>
+                <input
+                  type="number"
+                  className="input"
+                  min={1} max={31}
+                  value={cycleFixedDay}
+                  onChange={e => setCycleFixedDay(e.target.value)}
+                  style={{ maxWidth: 100 }}
+                />
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={saveCycleSettings}
+            disabled={savingCycle}
+            className="btn-primary"
+            style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, opacity: savingCycle ? 0.6 : 1 }}
+          >
+            {savingCycle ? 'Saving…' : 'Save Cycle Rule'}
+          </button>
+
+          {/* Per-month override table */}
+          {cycleRule !== 'none' && (
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+              <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 10 }}>
+                Cycle start dates <span style={{ fontWeight: 400, color: 'var(--text-3)' }}>— edit if salary came on a different day</span>
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {getLast6Months().reverse().map(bm => {
+                  const override  = cycleOverrides[bm]
+                  const autoStart = cycleRule === 'last-working-day'
+                    ? (() => { const [y, m] = bm.split('-').map(Number); const py = m === 1 ? y-1 : y; const pm = m === 1 ? 12 : m-1; return getLastWorkingDay(py, pm) })()
+                    : (() => { const [y, m] = bm.split('-').map(Number); const py = m === 1 ? y-1 : y; const pm = m === 1 ? 12 : m-1; const lastDay = new Date(py, pm, 0).getDate(); const day = Math.min(Number(cycleFixedDay)||28, lastDay); return format(new Date(py, pm-1, day), 'yyyy-MM-dd') })()
+                  const activeStart = override ?? autoStart
+                  const { end } = getCycleRange(bm, { ...settings, salaryCycleRule: cycleRule, salaryCycleFixedDay: Number(cycleFixedDay)||28, cycleOverrides } as Parameters<typeof getCycleRange>[1])
+                  const isEditing = editingMonth === bm
+
+                  return (
+                    <div key={bm} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 10, background: isEditing ? 'var(--surface-2)' : 'transparent' }}>
+                      <div style={{ minWidth: 80, fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
+                        {format(parseISO(`${bm}-01`), 'MMM yyyy')}
+                      </div>
+                      <div style={{ flex: 1, fontSize: 12, color: 'var(--text-2)' }}>
+                        {isEditing ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <input
+                              type="date"
+                              className="input"
+                              style={{ fontSize: 12, padding: '4px 8px', maxWidth: 160 }}
+                              value={editDate}
+                              onChange={e => setEditDate(e.target.value)}
+                            />
+                            <button className="btn btn-sm btn-primary" onClick={() => saveOverride(bm, editDate)} disabled={!editDate}>Save</button>
+                            <button className="btn btn-sm" onClick={() => setEditingMonth(null)}>Cancel</button>
+                          </div>
+                        ) : (
+                          <span>
+                            {format(parseISO(activeStart), 'MMM d, EEE')}
+                            {' '}
+                            <span style={{ fontSize: 11, color: 'var(--text-4)' }}>→ {format(parseISO(end), 'MMM d')}</span>
+                            {' '}
+                            {override
+                              ? <span style={{ fontSize: 10.5, background: 'var(--warn-soft)', color: 'var(--warn-ink)', padding: '1px 6px', borderRadius: 999 }}>custom</span>
+                              : <span style={{ fontSize: 10.5, color: 'var(--text-4)' }}>auto</span>
+                            }
+                          </span>
+                        )}
+                      </div>
+                      {!isEditing && (
+                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                          <button
+                            onClick={() => { setEditingMonth(bm); setEditDate(activeStart) }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4, display: 'flex' }}
+                            title="Edit cycle start"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                          {override && (
+                            <button
+                              onClick={() => clearOverride(bm)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bad-ink)', padding: 4, display: 'flex' }}
+                              title="Reset to auto"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Linked Accounts */}
