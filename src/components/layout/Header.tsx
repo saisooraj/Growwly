@@ -77,6 +77,9 @@ export default function Header({ title }: { title?: string }) {
         </div>
       </Link>
 
+      {/* Spacer — pushes controls to the right on mobile */}
+      <div className="lg:hidden" style={{ flex: 1 }} />
+
       {/* Desktop title block */}
       <div style={{ flex: 1, minWidth: 0 }} className="hidden lg:block">
         <div
@@ -131,18 +134,14 @@ export default function Header({ title }: { title?: string }) {
 
         <ThemeToggle />
 
-        {/* Bell with notification dot */}
+        {/* Bell — disabled until notifications are live */}
         <button
+          disabled
           className="btn btn-sm"
-          style={{ padding: 8, borderRadius: 10, position: 'relative' }}
+          style={{ padding: 8, borderRadius: 10, opacity: 0.35, cursor: 'not-allowed' }}
+          title="Notifications coming soon"
         >
           <Bell size={15} />
-          <span style={{
-            position: 'absolute', top: 5, right: 5,
-            width: 6, height: 6, borderRadius: 999,
-            background: 'var(--bad)',
-            boxShadow: '0 0 0 2px var(--surface)',
-          }} />
         </button>
 
         {/* Settings — visible on mobile only (desktop uses sidebar) */}
