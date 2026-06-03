@@ -63,8 +63,10 @@ function Stat({ label, dateRange, value, sub, tone = 'neutral', icon, maskable, 
 }
 
 export default function SummaryCards() {
-  const [maskIncome, setMaskIncome] = useState(true)
+  const [maskIncome, setMaskIncome]   = useState(true)
   const [maskExpense, setMaskExpense] = useState(true)
+  const [maskNet, setMaskNet]         = useState(true)
+  const [maskOwed, setMaskOwed]       = useState(true)
   const { transactions, selectedMonth, budgets, borrowings, settings } = useAppStore()
 
   const months = getLast6Months()
@@ -130,6 +132,9 @@ export default function SummaryCards() {
         sub={isDeficit ? 'Deficit — burning savings' : 'Surplus this month'}
         tone={isDeficit ? 'bad' : 'good'}
         icon={<ArrowDownRight size={14} />}
+        maskable
+        masked={maskNet}
+        onToggleMask={() => setMaskNet(v => !v)}
       />
       <Stat
         label="Owed to you"
@@ -137,6 +142,9 @@ export default function SummaryCards() {
         sub={pendingBorrow > 0 ? `${pendingBorrowCount} record${pendingBorrowCount !== 1 ? 's' : ''} pending` : 'All clear'}
         tone={pendingBorrow > 0 ? 'warn' : 'neutral'}
         icon={<Handshake size={14} />}
+        maskable
+        masked={maskOwed}
+        onToggleMask={() => setMaskOwed(v => !v)}
       />
     </div>
   )
