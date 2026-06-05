@@ -7,7 +7,14 @@ import { buildMonthlySummary, formatCurrency, formatCurrencyFull, CATEGORY_COLOR
 
 const MAX_SLICES = 6
 
-function ActiveShape(props: Record<string, number>) {
+interface ShapeProps {
+  cx: number; cy: number
+  innerRadius: number; outerRadius: number
+  startAngle: number; endAngle: number
+  fill: string
+}
+
+function ActiveShape(props: ShapeProps) {
   const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props
   return (
     <Sector
@@ -73,7 +80,7 @@ export default function CategoryPieChart() {
             paddingAngle={2}
             dataKey="value"
             activeIndex={activeIdx ?? undefined}
-            activeShape={ActiveShape as any}
+            activeShape={ActiveShape as unknown as object}
             onMouseEnter={(_, i) => setActiveIdx(i)}
             onMouseLeave={() => setActiveIdx(null)}
             strokeWidth={0}
