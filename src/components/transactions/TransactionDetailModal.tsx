@@ -32,14 +32,19 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
     setDeleting(true)
     try {
       await deleteTransaction(tx.id)
-      await refresh()
-      toast.success('Deleted')
-      onClose()
     } catch {
       toast.error('Failed to delete')
-    } finally {
       setDeleting(false)
+      return
     }
+    // Delete confirmed — remove from store and close immediately
+    const { transactions, setTransactions } = useAppStore.getState()
+    setTransactions(transactions.filter(t => t.id !== tx.id))
+    toast.success('Deleted')
+    onClose()
+    setDeleting(false)
+    // Best-effort refresh to sync other data (project.paid, etc.)
+    refresh().catch(() => {})
   }
 
   function handleEdit() {

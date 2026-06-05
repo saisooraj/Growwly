@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { AlertTriangle } from 'lucide-react'
 
 interface Props {
@@ -27,12 +28,12 @@ export default function ConfirmDialog({ open, message, confirmLabel = 'Delete', 
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  if (!open) return null
+  if (!open || typeof document === 'undefined') return null
 
-  return (
+  return createPortal(
     <div
       style={{
-        position: 'fixed', inset: 0, zIndex: 300,
+        position: 'fixed', inset: 0, zIndex: 9999,
         background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(4px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: 16,
@@ -70,6 +71,7 @@ export default function ConfirmDialog({ open, message, confirmLabel = 'Delete', 
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

@@ -4,7 +4,7 @@ import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { X, RefreshCw, ArrowDownLeft, ArrowUpRight, ArrowLeftRight } from 'lucide-react'
 import { format } from 'date-fns'
-import { addTransaction, updateTransaction } from '@/lib/firestore'
+import { addTransaction, updateTransaction, updateProject } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import {
@@ -57,6 +57,22 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
     }
   }, [open, editTx])
 
+  // Auto-link certain categories → matching project (new transactions only)
+  useEffect(() => {
+    if (txType !== 'expense' || editTx) return
+    const rules: Record<string, string[]> = {
+      'Gold':         ['gold', 'wedding'],
+      'Construction': ['construction', 'house'],
+    }
+    const keywords = rules[category]
+    if (keywords) {
+      const match = projects.find(p =>
+        keywords.some(kw => p.name.toLowerCase().includes(kw))
+      )
+      if (match) setProjectId(match.id)
+    }
+  }, [category, txType]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function checkBudgetAlert(cat: string, addedAmount: number, d: string) {
     const month = d.slice(0, 7)
     const budget = budgets.find(b => b.month === month && b.category === cat)
@@ -92,9 +108,32 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
 
       if (editTx) {
         await updateTransaction(editTx.id, payload)
+        // Sync project.paid: adjust for amount/project changes
+        if (txType === 'expense') {
+          const oldProjId = editTx.projectId
+          const newProjId = projectId || undefined
+          const oldAmt = editTx.amount
+          const newAmt = Number(amount)
+          if (oldProjId && oldProjId !== newProjId) {
+            const oldProj = projects.find(p => p.id === oldProjId)
+            if (oldProj) await updateProject(oldProjId, { paid: Math.max(0, oldProj.paid - oldAmt) })
+          }
+          if (newProjId) {
+            const proj = projects.find(p => p.id === newProjId)
+            if (proj) {
+              const adjusted = oldProjId === newProjId ? proj.paid - oldAmt + newAmt : proj.paid + newAmt
+              await updateProject(newProjId, { paid: Math.max(0, adjusted) })
+            }
+          }
+        }
         toast.success('Transaction updated')
       } else {
         await addTransaction(user.uid, payload as Omit<Transaction, 'id' | 'userId' | 'createdAt'>)
+        // Sync project.paid for new expense linked to a project
+        if (txType === 'expense' && projectId) {
+          const proj = projects.find(p => p.id === projectId)
+          if (proj) await updateProject(projectId, { paid: proj.paid + Number(amount) })
+        }
         toast.success(txType === 'transfer' ? 'Transfer logged' : 'Transaction added')
         if (txType === 'expense') checkBudgetAlert(category, Number(amount), date)
       }
@@ -272,7 +311,14 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                   {/* Project (expense only) */}
                   {txType === 'expense' && projects.length > 0 && (
                     <div>
-                      <label className="label">Link to Project (optional)</label>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <label className="label" style={{ margin: 0 }}>Link to Project (optional)</label>
+                        {(category === 'Gold' || category === 'Construction') && projectId && (
+                          <span style={{ fontSize: 10.5, color: 'var(--brand-ink)', fontWeight: 500 }}>
+                            Auto-linked {category === 'Gold' ? '🥇' : '🏗️'}
+                          </span>
+                        )}
+                      </div>
                       <select
                         className="input"
                         value={projectId}

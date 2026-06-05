@@ -93,12 +93,12 @@ export function useRefreshData() {
     setUpcomingPayments,
     setTasks,
     setLoading,
-    setInitialized,
   } = useAppStore()
 
   return async function refresh() {
     if (!user) return
-    setInitialized(false)
+    // Do NOT touch `initialized` here — setting it false triggers useData to
+    // start a concurrent reload which can race and restore stale data.
     setLoading(true)
     try {
       const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming, upcomingPmts, tasks] =
@@ -124,7 +124,6 @@ export function useRefreshData() {
       setUpcomingExpenses(upcoming)
       setUpcomingPayments(upcomingPmts)
       setTasks(tasks)
-      setInitialized(true)
     } finally {
       setLoading(false)
     }
