@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Download, Plus, SlidersHorizontal, Eye, EyeOff } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
@@ -25,7 +25,7 @@ const TYPE_OPTS: { id: TransactionType | 'all'; label: string }[] = [
   { id: 'transfer', label: 'Transfers' },
 ]
 
-export default function TransactionsPage() {
+function TransactionsInner() {
   const searchParams = useSearchParams()
   const [addOpen, setAddOpen]       = useState(false)
   const [typeFilter, setTypeFilter] = useState<TransactionType | 'all'>('all')
@@ -209,5 +209,13 @@ export default function TransactionsPage() {
 
       <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />
     </AppShell>
+  )
+}
+
+export default function TransactionsPage() {
+  return (
+    <Suspense>
+      <TransactionsInner />
+    </Suspense>
   )
 }
