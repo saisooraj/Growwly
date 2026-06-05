@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { format, parseISO, isToday, isYesterday } from 'date-fns'
 import { TrendingUp, TrendingDown, ArrowLeftRight, ChevronDown, ChevronRight, ArrowUp, ArrowDown, UserMinus, UserPlus } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
@@ -14,6 +14,8 @@ interface Props {
   limit?: number
   transactions?: Transaction[]
   groupByDay?: boolean
+  defaultExpandAll?: boolean
+  showBorrowings?: boolean
 }
 
 // Synthetic row type — Transaction extended with borrowing metadata
@@ -155,6 +157,7 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
   onSelect: (t: Transaction) => void
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  useEffect(() => { setOpen(defaultOpen) }, [defaultOpen])
 
   const { income, expenses } = useMemo(() => {
     let income = 0, expenses = 0
@@ -216,7 +219,7 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export default function TransactionList({ filterMonth = false, limit, transactions: txOverride, groupByDay = false }: Props) {
+export default function TransactionList({ filterMonth = false, limit, transactions: txOverride, groupByDay = false, defaultExpandAll = false, showBorrowings = true }: Props) {
   const { transactions: storeTxs, borrowings, selectedMonth, settings } = useAppStore()
   const [selected, setSelected] = useState<Transaction | null>(null)
 
@@ -225,6 +228,8 @@ export default function TransactionList({ filterMonth = false, limit, transactio
       ? getTransactionsForMonth(storeTxs, selectedMonth, settings)
       : storeTxs)
 
+    if (!showBorrowings) return txs as ViewTx[]
+
     // Filter borrowings to the same date range
     const { start, end } = getCycleRange(selectedMonth, settings)
     const borrowingRows = borrowings
@@ -232,7 +237,7 @@ export default function TransactionList({ filterMonth = false, limit, transactio
       .map(borrowingToViewTx)
 
     return [...txs, ...borrowingRows]
-  }, [txOverride, storeTxs, borrowings, selectedMonth, settings, filterMonth])
+  }, [txOverride, storeTxs, borrowings, selectedMonth, settings, filterMonth, showBorrowings])
 
   const list  = [...base].sort((a, b) => b.date.localeCompare(a.date))
   const shown = limit ? list.slice(0, limit) : list
@@ -276,7 +281,7 @@ export default function TransactionList({ filterMonth = false, limit, transactio
             key={date}
             date={date}
             txs={txs}
-            defaultOpen={date === today}
+            defaultOpen={date === today || defaultExpandAll}
             onSelect={setSelected}
           />
         ))}

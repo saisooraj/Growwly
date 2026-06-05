@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Download, Plus, SlidersHorizontal, Eye, EyeOff } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
 import TransactionList from '@/components/transactions/TransactionList'
@@ -25,9 +26,10 @@ const TYPE_OPTS: { id: TransactionType | 'all'; label: string }[] = [
 ]
 
 export default function TransactionsPage() {
+  const searchParams = useSearchParams()
   const [addOpen, setAddOpen]       = useState(false)
   const [typeFilter, setTypeFilter] = useState<TransactionType | 'all'>('all')
-  const [catFilter, setCatFilter]   = useState<string>('all')
+  const [catFilter, setCatFilter]   = useState<string>(searchParams.get('cat') ?? 'all')
   const [showIncome,   setShowIncome]   = useState(false)
   const [showExpenses, setShowExpenses] = useState(false)
   const [showNet,      setShowNet]      = useState(false)
@@ -177,7 +179,12 @@ export default function TransactionsPage() {
             <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Click any row to view or edit</span>
           </div>
           <div style={{ padding: '8px 8px' }}>
-            <TransactionList transactions={filtered} groupByDay />
+            <TransactionList
+            transactions={filtered}
+            groupByDay
+            defaultExpandAll={catFilter !== 'all'}
+            showBorrowings={catFilter === 'all' && typeFilter === 'all'}
+          />
           </div>
         </div>
 

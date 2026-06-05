@@ -1,9 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { ChevronDown, ChevronUp, ArrowUpRight } from 'lucide-react'
 import { PieChart, Pie, Cell, Sector, ResponsiveContainer, Label } from 'recharts'
 import { useAppStore } from '@/store/appStore'
-import { buildMonthlySummary, formatCurrency, formatCurrencyFull, CATEGORY_COLORS } from '@/lib/utils'
+import { buildMonthlySummary, formatCurrency, formatCurrencyFull, CATEGORY_COLORS, getLast6Months, getMonthLabel } from '@/lib/utils'
 
 const MAX_SLICES = 6
 
@@ -29,11 +31,21 @@ function ActiveShape(props: ShapeProps) {
 }
 
 export default function CategoryPieChart() {
+  const router = useRouter()
   const [activeIdx, setActiveIdx] = useState<number | null>(null)
+  const [otherExpanded, setOtherExpanded] = useState(false)
   const { transactions, selectedMonth, settings, borrowings } = useAppStore()
-  const summary = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
+  const months = getLast6Months()
+  const [chartMonth, setChartMonth] = useState<string>(selectedMonth)
 
-  const sorted = Object.entries(summary.byCategory)
+  // Aggregate by category — either for a specific month or all time
+  const byCategory: Record<string, number> = chartMonth === 'all'
+    ? transactions
+        .filter(t => t.type === 'expense')
+        .reduce((acc, t) => { acc[t.category] = (acc[t.category] ?? 0) + t.amount; return acc }, {} as Record<string, number>)
+    : buildMonthlySummary(transactions, chartMonth, settings, borrowings).byCategory
+
+  const sorted = Object.entries(byCategory)
     .filter(([, v]) => v > 0)
     .sort(([, a], [, b]) => b - a)
 
@@ -48,14 +60,20 @@ export default function CategoryPieChart() {
   const top = sorted.slice(0, MAX_SLICES)
   const rest = sorted.slice(MAX_SLICES)
   const otherTotal = rest.reduce((s, [, v]) => s + v, 0)
+  const hasOther = otherTotal > 0
 
   const data = [
-    ...top.map(([cat, val]) => ({ name: cat, value: val, color: CATEGORY_COLORS[cat] ?? '#94a3b8' })),
-    ...(otherTotal > 0 ? [{ name: 'Other', value: otherTotal, color: '#94a3b8' }] : []),
+    ...top.map(([cat, val]) => ({ name: cat, value: val, color: CATEGORY_COLORS[cat] ?? '#94a3b8', isOther: false })),
+    ...(hasOther ? [{ name: 'Other', value: otherTotal, color: '#94a3b8', isOther: true }] : []),
   ]
 
   const total = data.reduce((s, d) => s + d.value, 0)
   const active = activeIdx !== null ? data[activeIdx] : null
+
+  function navigate(cat: string) {
+    const params = new URLSearchParams({ cat })
+    router.push(`/transactions?${params}`)
+  }
 
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -63,9 +81,20 @@ export default function CategoryPieChart() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <span className="h-eyebrow">Expense Breakdown</span>
-        <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
-          {formatCurrencyFull(total)} total
-        </span>
+        <select
+          value={chartMonth}
+          onChange={e => { setChartMonth(e.target.value); setOtherExpanded(false); setActiveIdx(null) }}
+          style={{
+            fontSize: 11, padding: '3px 8px',
+            background: 'var(--surface-2)', border: '1px solid var(--border)',
+            borderRadius: 7, color: 'var(--text-2)', outline: 'none', cursor: 'pointer',
+          }}
+        >
+          {months.map(m => (
+            <option key={m} value={m}>{getMonthLabel(m)}</option>
+          ))}
+          <option value="all">All time</option>
+        </select>
       </div>
 
       {/* Donut */}
@@ -83,6 +112,11 @@ export default function CategoryPieChart() {
             activeShape={ActiveShape as unknown as object}
             onMouseEnter={(_, i) => setActiveIdx(i)}
             onMouseLeave={() => setActiveIdx(null)}
+            onClick={(_, i) => {
+              const item = data[i]
+              if (item.isOther) setOtherExpanded(v => !v)
+              else navigate(item.name)
+            }}
             strokeWidth={0}
           >
             {data.map((entry, i) => (
@@ -139,41 +173,85 @@ export default function CategoryPieChart() {
           const pct = (item.value / total) * 100
           const isActive = activeIdx === i
           return (
-            <div
-              key={i}
-              onMouseEnter={() => setActiveIdx(i)}
-              onMouseLeave={() => setActiveIdx(null)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '5px 8px', borderRadius: 8,
-                background: isActive ? 'var(--surface-2)' : 'transparent',
-                transition: 'background .12s', cursor: 'default',
-              }}
-            >
-              <span style={{
-                width: 8, height: 8, borderRadius: 2, flexShrink: 0,
-                background: item.color,
-                opacity: activeIdx === null || isActive ? 1 : 0.4,
-                transition: 'opacity .15s',
-              }} />
-              <span style={{
-                flex: 1, fontSize: 12,
-                color: isActive ? 'var(--text)' : 'var(--text-2)',
-                fontWeight: isActive ? 500 : 400,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                transition: 'color .12s',
-              }}>
-                {item.name}
-              </span>
-              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', flexShrink: 0 }}>
-                {formatCurrency(item.value)}
-              </span>
-              <span style={{
-                fontSize: 10.5, color: 'var(--text-4)',
-                flexShrink: 0, minWidth: 30, textAlign: 'right',
-              }}>
-                {pct.toFixed(0)}%
-              </span>
+            <div key={i}>
+              {/* Category row */}
+              <button
+                onMouseEnter={() => setActiveIdx(i)}
+                onMouseLeave={() => setActiveIdx(null)}
+                onClick={() => item.isOther ? setOtherExpanded(v => !v) : navigate(item.name)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '5px 8px', borderRadius: 8, width: '100%',
+                  background: isActive ? 'var(--surface-2)' : 'transparent',
+                  border: 'none', cursor: 'pointer', textAlign: 'left',
+                  transition: 'background .12s',
+                }}
+              >
+                <span style={{
+                  width: 8, height: 8, borderRadius: 2, flexShrink: 0,
+                  background: item.color,
+                  opacity: activeIdx === null || isActive ? 1 : 0.4,
+                  transition: 'opacity .15s',
+                }} />
+                <span style={{
+                  flex: 1, fontSize: 12,
+                  color: isActive ? 'var(--text)' : 'var(--text-2)',
+                  fontWeight: isActive ? 500 : 400,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  transition: 'color .12s',
+                }}>
+                  {item.name}
+                </span>
+                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', flexShrink: 0 }}>
+                  {formatCurrency(item.value)}
+                </span>
+                <span style={{ fontSize: 10.5, color: 'var(--text-4)', flexShrink: 0, minWidth: 28, textAlign: 'right' }}>
+                  {pct.toFixed(0)}%
+                </span>
+                <span style={{ color: 'var(--text-4)', flexShrink: 0, display: 'flex' }}>
+                  {item.isOther
+                    ? (otherExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
+                    : <ArrowUpRight size={12} />
+                  }
+                </span>
+              </button>
+
+              {/* "Other" expanded: show sub-categories */}
+              {item.isOther && otherExpanded && (
+                <div style={{
+                  marginLeft: 16, marginTop: 2, marginBottom: 4,
+                  borderLeft: '2px solid var(--border)',
+                  paddingLeft: 10,
+                  display: 'flex', flexDirection: 'column', gap: 1,
+                }}>
+                  {rest.map(([cat, val]) => (
+                    <button
+                      key={cat}
+                      onClick={() => navigate(cat)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '4px 8px', borderRadius: 6, width: '100%',
+                        background: 'transparent', border: 'none', cursor: 'pointer',
+                        textAlign: 'left', transition: 'background .12s',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <span style={{
+                        width: 6, height: 6, borderRadius: 1, flexShrink: 0,
+                        background: CATEGORY_COLORS[cat] ?? '#94a3b8',
+                      }} />
+                      <span style={{ flex: 1, fontSize: 11.5, color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {cat}
+                      </span>
+                      <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text)', flexShrink: 0 }}>
+                        {formatCurrency(val)}
+                      </span>
+                      <ArrowUpRight size={11} style={{ color: 'var(--text-4)', flexShrink: 0 }} />
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )
         })}
