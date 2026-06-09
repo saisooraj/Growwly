@@ -172,6 +172,7 @@ export const EXPENSE_CATEGORIES: Category[] = [
   'Food with Her',
   'Office Expense',
   'Relationship',
+  'Covered for Others',
   'Other',
 ]
 
@@ -213,6 +214,7 @@ export const CATEGORY_EMOJI: Record<string, string> = {
   'Food with Her': '🍜',
   'Office Expense': '💼',
   'Relationship': '💑',
+  'Covered for Others': '🤲',
   'Other': '📦',
   'Salary': '💼',
   'Freelance': '💻',
@@ -251,6 +253,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   'Food with Her': '#f43f5e',
   'Office Expense': '#0ea5e9',
   'Relationship': '#e11d48',
+  'Covered for Others': '#f97316',
   'Other': '#94a3b8',
   'Salary': '#22c55e',
   'Freelance': '#3b82f6',
