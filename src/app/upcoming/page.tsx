@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { format, parseISO, isPast, isThisMonth, differenceInDays } from 'date-fns'
 import { Plus, CalendarClock, Repeat, Pencil, Trash2, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
@@ -23,6 +23,7 @@ export default function UpcomingPage() {
   const [editItem, setEditItem]         = useState<UpcomingExpense | null>(null)
   const [payItem, setPayItem]           = useState<UpcomingExpense | null>(null)
   const [confirm, setConfirm]           = useState<{ message: string; onConfirm: () => void } | null>(null)
+  const [spentOpen, setSpentOpen]       = useState(false)
 
   const paidByItem = useMemo(() => {
     const map = new Map<string, number>()
@@ -32,8 +33,19 @@ export default function UpcomingPage() {
     return map
   }, [upcomingPayments])
 
+  const { pending, fulfilled } = useMemo(() => {
+    const pending: UpcomingExpense[] = []
+    const fulfilled: UpcomingExpense[] = []
+    for (const item of upcomingExpenses) {
+      const paid = paidByItem.get(item.id) ?? 0
+      if (paid >= item.amount && item.amount > 0) fulfilled.push(item)
+      else pending.push(item)
+    }
+    return { pending, fulfilled }
+  }, [upcomingExpenses, paidByItem])
+
   const grouped = useMemo(() => {
-    const sorted = [...upcomingExpenses].sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+    const sorted = [...pending].sort((a, b) => a.dueDate.localeCompare(b.dueDate))
     const map = new Map<string, UpcomingExpense[]>()
     for (const item of sorted) {
       const key = item.dueDate.slice(0, 7)
@@ -41,7 +53,7 @@ export default function UpcomingPage() {
       map.get(key)!.push(item)
     }
     return map
-  }, [upcomingExpenses])
+  }, [pending])
 
   const expenses    = upcomingExpenses.filter(i => (i.flowType ?? 'expense') === 'expense')
   const incomes     = upcomingExpenses.filter(i => i.flowType === 'income')
@@ -145,6 +157,44 @@ export default function UpcomingPage() {
               </div>
             )
           })
+        )}
+
+        {/* Spent / Fulfilled section */}
+        {fulfilled.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button
+              onClick={() => setSpentOpen(v => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                background: 'none', border: 'none', cursor: 'pointer',
+                padding: '0 2px', textAlign: 'left',
+              }}
+            >
+              <CheckCircle2 size={14} style={{ color: 'var(--good)' }} />
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)', flex: 1 }}>
+                Spent / Received ({fulfilled.length})
+              </span>
+              {spentOpen
+                ? <ChevronUp size={14} style={{ color: 'var(--text-3)' }} />
+                : <ChevronDown size={14} style={{ color: 'var(--text-3)' }} />
+              }
+            </button>
+            {spentOpen && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: 10 }}>
+                {fulfilled.map(item => (
+                  <NoteCard
+                    key={item.id}
+                    item={item}
+                    paid={paidByItem.get(item.id) ?? 0}
+                    payments={upcomingPayments.filter(p => p.upcomingId === item.id)}
+                    onEdit={() => setEditItem(item)}
+                    onDelete={() => handleDelete(item)}
+                    onLogPayment={() => setPayItem(item)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
       </div>

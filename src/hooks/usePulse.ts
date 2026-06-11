@@ -10,10 +10,11 @@ export function usePulse(): FinancialPulse {
   const savingsGoals    = useAppStore(s => s.savingsGoals)
   const projects        = useAppStore(s => s.projects)
   const borrowings      = useAppStore(s => s.borrowings)
-  const upcomingExpenses = useAppStore(s => s.upcomingExpenses)
+  const upcomingExpenses  = useAppStore(s => s.upcomingExpenses)
+  const upcomingPayments  = useAppStore(s => s.upcomingPayments)
 
   return useMemo(
-    () => computePulse({ transactions, settings, emergencyFund, savingsGoals, projects, borrowings, upcomingExpenses }),
-    [transactions, settings, emergencyFund, savingsGoals, projects, borrowings, upcomingExpenses]
+    () => computePulse({ transactions, settings, emergencyFund, savingsGoals, projects, borrowings, upcomingExpenses, upcomingPayments }),
+    [transactions, settings, emergencyFund, savingsGoals, projects, borrowings, upcomingExpenses, upcomingPayments]
   )
 }

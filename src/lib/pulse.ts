@@ -4,7 +4,7 @@ import {
 } from 'date-fns'
 import type {
   Transaction, UserSettings, EmergencyFund, SavingsGoal,
-  Project, Borrowing, UpcomingExpense,
+  Project, Borrowing, UpcomingExpense, UpcomingPayment,
   FinancialPulse, PulseHealthScore, PulseCashPosition,
   PulseUpcoming, PulseAllocation, PulseSpendCategory,
   PulseGoal, PulseBorrowingAlert, MonthlySummary,
@@ -19,6 +19,7 @@ export interface PulseSnapshot {
   projects: Project[]
   borrowings: Borrowing[]
   upcomingExpenses: UpcomingExpense[]
+  upcomingPayments: UpcomingPayment[]
 }
 
 // ── Health Score ─────────────────────────────────────────────────────────────
@@ -229,7 +230,7 @@ export function computePulse(
   snapshot: PulseSnapshot,
   triggerType: FinancialPulse['triggerType'] = 'manual',
 ): FinancialPulse {
-  const { transactions, emergencyFund, savingsGoals, projects, borrowings, upcomingExpenses } = snapshot
+  const { transactions, emergencyFund, savingsGoals, projects, borrowings, upcomingExpenses, upcomingPayments } = snapshot
   const now = new Date()
   const month = format(now, 'yyyy-MM')
   const prevMonth = format(new Date(now.getFullYear(), now.getMonth() - 1, 1), 'yyyy-MM')
@@ -240,13 +241,24 @@ export function computePulse(
   const daysLeft    = Math.max(getDaysInMonth(now) - now.getDate(), 0)
   const thirtyDaysOut = addDays(now, 30)
 
-  // Upcoming expenses in next 30 days (expense direction only)
+  // Build paid amounts map
+  const paidByUpcoming = new Map<string, number>()
+  for (const p of upcomingPayments) {
+    paidByUpcoming.set(p.upcomingId, (paidByUpcoming.get(p.upcomingId) ?? 0) + p.amount)
+  }
+
+  // Upcoming expenses in next 30 days (expense direction only, only if still remaining)
   const relevantUpcoming = upcomingExpenses.filter(u => {
     const d = parseISO(u.dueDate)
+    const remaining = u.amount - (paidByUpcoming.get(u.id) ?? 0)
     return isAfter(d, now) && isBefore(d, thirtyDaysOut) &&
-           (u.flowType === 'expense' || !u.flowType)
+           (u.flowType === 'expense' || !u.flowType) &&
+           remaining > 0
   })
-  const upcomingTotal = relevantUpcoming.reduce((s, u) => s + u.amount, 0)
+  const upcomingTotal = relevantUpcoming.reduce((s, u) => {
+    const remaining = u.amount - (paidByUpcoming.get(u.id) ?? 0)
+    return s + remaining
+  }, 0)
 
   const freeCash    = Math.max(curSummary.totalIncome - curSummary.totalExpenses - upcomingTotal, 0)
   const dailyBudget = daysLeft > 0 ? Math.round(freeCash / daysLeft) : 0
@@ -266,9 +278,10 @@ export function computePulse(
   const upcoming: PulseUpcoming[] = []
   for (const u of relevantUpcoming) {
     const d = parseISO(u.dueDate)
+    const remaining = u.amount - (paidByUpcoming.get(u.id) ?? 0)
     upcoming.push({
       label: u.label,
-      amount: u.amount,
+      amount: remaining,
       dueDate: u.dueDate,
       daysUntil: differenceInCalendarDays(d, now),
       type: 'expense',
