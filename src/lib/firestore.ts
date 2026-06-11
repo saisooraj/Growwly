@@ -58,7 +58,7 @@ export async function getUserTransactions(
     .map((d) => ({ id: d.id, ...d.data() } as Transaction))
     .sort((a, b) => {
       const d = b.date.localeCompare(a.date)
-      return d !== 0 ? d : a.createdAt.localeCompare(b.createdAt)
+      return d !== 0 ? d : b.createdAt.localeCompare(a.createdAt)
     })
 }
 

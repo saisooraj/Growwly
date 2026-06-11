@@ -242,7 +242,7 @@ export default function TransactionList({ filterMonth = false, limit, transactio
   const list  = [...base].sort((a, b) => {
     const dateDiff = b.date.localeCompare(a.date)
     if (dateDiff !== 0) return dateDiff
-    return a.createdAt.localeCompare(b.createdAt) // oldest logged first → newest at bottom within a day
+    return b.createdAt.localeCompare(a.createdAt) // newest logged first → at top within a day
   })
   const shown = limit ? list.slice(0, limit) : list
 
