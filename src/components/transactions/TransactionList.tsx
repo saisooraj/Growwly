@@ -239,7 +239,11 @@ export default function TransactionList({ filterMonth = false, limit, transactio
     return [...txs, ...borrowingRows]
   }, [txOverride, storeTxs, borrowings, selectedMonth, settings, filterMonth, showBorrowings])
 
-  const list  = [...base].sort((a, b) => b.date.localeCompare(a.date))
+  const list  = [...base].sort((a, b) => {
+    const dateDiff = b.date.localeCompare(a.date)
+    if (dateDiff !== 0) return dateDiff
+    return a.createdAt.localeCompare(b.createdAt) // oldest logged first → newest at bottom within a day
+  })
   const shown = limit ? list.slice(0, limit) : list
 
   const today = format(new Date(), 'yyyy-MM-dd')

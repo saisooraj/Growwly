@@ -56,7 +56,10 @@ export async function getUserTransactions(
   const snap = await getDocs(q)
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() } as Transaction))
-    .sort((a, b) => b.date.localeCompare(a.date))
+    .sort((a, b) => {
+      const d = b.date.localeCompare(a.date)
+      return d !== 0 ? d : a.createdAt.localeCompare(b.createdAt)
+    })
 }
 
 // ── Budgets ──────────────────────────────────────────────────────────────────
