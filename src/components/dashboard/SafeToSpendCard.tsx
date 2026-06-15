@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { Pencil, Plus, Trash2, CheckCircle2 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { buildMonthlySummary, formatCurrencyFull } from '@/lib/utils'
@@ -18,11 +18,13 @@ export default function SafeToSpendCard() {
   const refresh = useRefreshData()
   const { transactions, selectedMonth, settings, borrowings } = useAppStore()
 
-  const [editing, setEditing]     = useState(false)
+  const [editing, setEditing]       = useState(false)
   const [draftItems, setDraftItems] = useState<DailyItem[]>([])
-  const [newLabel, setNewLabel]   = useState('')
-  const [newAmount, setNewAmount] = useState('')
-  const [saving, setSaving]       = useState(false)
+  const [newLabel, setNewLabel]     = useState('')
+  const [newAmount, setNewAmount]   = useState('')
+  const [saving, setSaving]         = useState(false)
+  const labelRef  = useRef<HTMLInputElement>(null)
+  const amountRef = useRef<HTMLInputElement>(null)
 
   const { cashNet, daysLeft, dailyNeed, dailyAvailable, buffer, extraPerDay, daysCanCover } = useMemo(() => {
     const summary  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
@@ -70,6 +72,7 @@ export default function SafeToSpendCard() {
     setDraftItems(prev => [...prev, { label: newLabel.trim(), amount: amt }])
     setNewLabel('')
     setNewAmount('')
+    setTimeout(() => labelRef.current?.focus(), 0)
   }
 
   function removeItem(i: number) {
@@ -130,7 +133,7 @@ export default function SafeToSpendCard() {
               {draftItems.map((item, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 8, background: 'var(--surface-2)' }}>
                   <span style={{ flex: 1, fontSize: 12.5, color: 'var(--text)' }}>{item.label}</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text)' }}>₹{item.amount}</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--text)' }}>₹{item.amount.toLocaleString('en-IN')}</span>
                   <button type="button" onClick={() => removeItem(i)}
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', display: 'flex', padding: 2 }}
                     onMouseEnter={e => (e.currentTarget.style.color = 'var(--bad)')}
@@ -144,45 +147,63 @@ export default function SafeToSpendCard() {
 
           {/* Add item row */}
           <div style={{ display: 'flex', gap: 6 }}>
+            {/* Label */}
             <input
+              ref={labelRef}
               type="text"
               placeholder="e.g. Breakfast"
               value={newLabel}
               onChange={e => setNewLabel(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addItem())}
-              style={{ flex: 1, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 12, color: 'var(--text)', outline: 'none' }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); amountRef.current?.focus(); amountRef.current?.select() }
+              }}
+              style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 12, color: 'var(--text)', outline: 'none' }}
             />
-            <input
-              type="number"
-              placeholder="₹"
-              min="0"
-              value={newAmount}
-              onChange={e => setNewAmount(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addItem())}
-              style={{ width: 64, padding: '6px 8px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 12, color: 'var(--text)', outline: 'none', textAlign: 'right' }}
-            />
-            <button type="button" onClick={addItem}
-              style={{ padding: '6px 10px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-2)' }}>
+            {/* ₹ prefix + amount */}
+            <div style={{ display: 'flex', alignItems: 'center', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden', background: 'var(--surface)' }}>
+              <span style={{ padding: '7px 8px', background: 'var(--surface-2)', color: 'var(--text-3)', fontSize: 12, borderRight: '1px solid var(--border)', userSelect: 'none' }}>₹</span>
+              <input
+                ref={amountRef}
+                type="number"
+                placeholder="0"
+                min="0"
+                value={newAmount}
+                onChange={e => setNewAmount(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') { e.preventDefault(); addItem() }
+                }}
+                style={{ width: 62, padding: '7px 8px', border: 'none', background: 'transparent', fontSize: 12, color: 'var(--text)', outline: 'none' }}
+              />
+            </div>
+            {/* + button */}
+            <button
+              type="button"
+              onClick={addItem}
+              style={{ padding: '7px 11px', borderRadius: 8, background: 'var(--surface-2)', border: '1px solid var(--border)', cursor: 'pointer', display: 'flex', alignItems: 'center', color: 'var(--text-2)' }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-3)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+            >
               <Plus size={13} />
             </button>
           </div>
 
-          {/* Total + save */}
-          {draftTotal > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4 }}>
-              <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                Daily total: <strong style={{ color: 'var(--text)' }}>₹{draftTotal.toLocaleString('en-IN')}</strong>
-              </span>
-              <button
-                type="button"
-                onClick={save}
-                disabled={saving}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 8, background: 'var(--brand)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, opacity: saving ? 0.6 : 1 }}
-              >
-                <CheckCircle2 size={13} /> {saving ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-          )}
+          {/* Total row + Save button always visible */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 2 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+              {draftTotal > 0
+                ? <>Daily total: <strong style={{ color: 'var(--text)' }}>₹{draftTotal.toLocaleString('en-IN')}</strong></>
+                : <span style={{ color: 'var(--text-4)' }}>No items yet</span>
+              }
+            </span>
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving || draftTotal <= 0}
+              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px', borderRadius: 8, background: draftTotal > 0 ? 'var(--brand)' : 'var(--surface-3)', color: draftTotal > 0 ? '#fff' : 'var(--text-4)', border: 'none', cursor: draftTotal > 0 ? 'pointer' : 'not-allowed', fontSize: 12, fontWeight: 600, opacity: saving ? 0.6 : 1, transition: 'all .15s' }}
+            >
+              <CheckCircle2 size={13} /> {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
         </div>
 
       ) : !isConfigured ? (
