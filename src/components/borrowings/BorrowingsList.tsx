@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import { format, parseISO } from 'date-fns'
 import { Trash2, Edit2, CheckCircle, MessageCircle } from 'lucide-react'
-import { deleteBorrowing, updateBorrowing } from '@/lib/firestore'
+import { deleteBorrowing, updateBorrowing, addTransaction } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
 import { useAppStore } from '@/store/appStore'
+import { useAuth } from '@/context/AuthContext'
 import { formatCurrencyFull } from '@/lib/utils'
 import type { Borrowing } from '@/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
@@ -30,6 +31,7 @@ function buildWhatsAppLink(b: Borrowing): string {
 }
 
 export default function BorrowingsList({ onEdit }: Props) {
+  const { user }    = useAuth()
   const { borrowings } = useAppStore()
   const refresh = useRefreshData()
   const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
@@ -56,10 +58,30 @@ export default function BorrowingsList({ onEdit }: Props) {
   }
 
   async function markRepaid(b: Borrowing) {
+    if (!user) return
     try {
+      const outstanding = b.amount - b.repaidAmount
+      const today = format(new Date(), 'yyyy-MM-dd')
+
+      // Create a transfer transaction so it shows in the list + adjusts cashNet
+      if (outstanding > 0) {
+        await addTransaction(user.uid, {
+          type: 'transfer',
+          transferKind: b.type === 'lent' ? 'loan_repayment_received' : 'loan_repayment_paid',
+          amount: outstanding,
+          category: 'Other',
+          date: today,
+          notes: b.type === 'lent'
+            ? `Repayment from ${b.person}${b.description ? ' · ' + b.description : ''}`
+            : `Repaid to ${b.person}${b.description ? ' · ' + b.description : ''}`,
+          isRecurring: false,
+          borrowingId: b.id,
+        } as Parameters<typeof addTransaction>[1])
+      }
+
       await updateBorrowing(b.id, { repaidAmount: b.amount, status: 'repaid' })
       await refresh()
-      toast.success('Marked as repaid')
+      toast.success('Marked as repaid — transaction logged')
     } catch {
       toast.error('Failed')
     }

@@ -3,6 +3,7 @@ export type TransactionType = 'income' | 'expense' | 'transfer'
 export type TransferKind =
   | 'loan_given'
   | 'loan_repayment_received'
+  | 'loan_repayment_paid'
   | 'savings_transfer'
 
 export type Category = string

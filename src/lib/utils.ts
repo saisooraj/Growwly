@@ -64,8 +64,16 @@ export function buildMonthlySummary(
   let totalIncome = 0
   let totalExpenses = 0
 
+  let repaymentReceived = 0  // lent money came back
+  let repaymentPaid     = 0  // borrowed money repaid by you
+
   for (const t of monthTxs) {
-    if (t.type === 'transfer') continue
+    if (t.type === 'transfer') {
+      // Repayment transfers adjust cashNet but not income/expenses
+      if (t.transferKind === 'loan_repayment_received') repaymentReceived += t.amount
+      if (t.transferKind === 'loan_repayment_paid')     repaymentPaid     += t.amount
+      continue
+    }
     if (t.type === 'income') {
       totalIncome += t.amount
     } else {
@@ -85,7 +93,7 @@ export function buildMonthlySummary(
   }
 
   const net     = totalIncome - totalExpenses
-  const cashNet = net - totalLent + totalBorrowed
+  const cashNet = net - totalLent + totalBorrowed + repaymentReceived - repaymentPaid
 
   return {
     month,
@@ -135,6 +143,12 @@ export const TRANSFER_KINDS = [
     label: 'Repayment Received',
     sub: 'Someone paid you back',
     dir: 'in' as const,
+  },
+  {
+    id: 'loan_repayment_paid' as const,
+    label: 'Loan Repaid',
+    sub: 'You repaid money you owed',
+    dir: 'out' as const,
   },
   {
     id: 'savings_transfer' as const,
