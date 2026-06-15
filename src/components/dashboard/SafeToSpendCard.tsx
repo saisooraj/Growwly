@@ -147,7 +147,7 @@ function ScheduleEditor({
           <input ref={amountRef} type="number" placeholder="0" min="0"
             value={amount} onChange={e => setAmount(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addItem() } }}
-            style={{ width: 58, padding: '6px 6px', border: 'none', background: 'transparent', fontSize: 12, color: 'var(--text)', outline: 'none' }}
+            style={{ width: 80, padding: '6px 8px', border: 'none', background: 'transparent', fontSize: 12, color: 'var(--text)', outline: 'none' }}
           />
         </div>
         <button type="button" onClick={addItem}
