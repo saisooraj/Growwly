@@ -1,5 +1,5 @@
 import { type ClassValue, clsx } from 'clsx'
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, parseISO, isWithinInterval } from 'date-fns'
+import { format, startOfWeek, endOfWeek, parseISO, isWithinInterval } from 'date-fns'
 import type { Transaction, MonthlySummary, Category, UserSettings, Borrowing } from '@/types'
 import { getCycleRange } from './cycle'
 
@@ -171,6 +171,7 @@ export const EXPENSE_CATEGORIES: Category[] = [
   'Borrowed / Loan',
   'Emergency Fund',
   'Food with Her',
+  'Treat',
   'Office Expense',
   'Relationship',
   'Covered for Others',
@@ -214,6 +215,7 @@ export const CATEGORY_EMOJI: Record<string, string> = {
   'Borrowed / Loan': '🤝',
   'Emergency Fund': '🆘',
   'Food with Her': '🍜',
+  'Treat': '🥳',
   'Office Expense': '💼',
   'Relationship': '💑',
   'Covered for Others': '🤲',
@@ -254,6 +256,7 @@ export const CATEGORY_COLORS: Record<string, string> = {
   'Borrowed / Loan': '#ec4899',
   'Emergency Fund': '#14b8a6',
   'Food with Her': '#f43f5e',
+  'Treat': '#f59e0b',
   'Office Expense': '#0ea5e9',
   'Relationship': '#e11d48',
   'Covered for Others': '#f97316',
