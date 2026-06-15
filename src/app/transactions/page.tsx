@@ -76,8 +76,13 @@ function TransactionsInner() {
               </button>
             </div>
             <div className="display-num" style={{ fontSize: 22, color: 'var(--good-ink)' }}>
-              {showIncome ? formatCurrencyFull(summary.totalIncome) : '₹ •••'}
+              {showIncome ? formatCurrencyFull(summary.totalIncome + summary.totalBorrowed) : '₹ •••'}
             </div>
+            {showIncome && summary.totalBorrowed > 0 && (
+              <div style={{ fontSize: 11, color: 'var(--info-ink)', marginTop: 4, fontStyle: 'italic' }}>
+                incl. {formatCurrencyFull(summary.totalBorrowed)} borrowed
+              </div>
+            )}
           </div>
 
           {/* Expenses */}

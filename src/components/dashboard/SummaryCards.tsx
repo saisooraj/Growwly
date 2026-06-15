@@ -11,6 +11,7 @@ interface StatProps {
   dateRange?: string
   value: string
   sub: string
+  hint?: string
   tone?: 'good' | 'bad' | 'warn' | 'info' | 'neutral'
   icon: React.ReactNode
   maskable?: boolean
@@ -19,7 +20,7 @@ interface StatProps {
   onToggleMask?: () => void
 }
 
-function Stat({ label, dateRange, value, sub, tone = 'neutral', icon, maskable, masked, maskSub, onToggleMask }: StatProps) {
+function Stat({ label, dateRange, value, sub, hint, tone = 'neutral', icon, maskable, masked, maskSub, onToggleMask }: StatProps) {
   const accentColor =
     tone === 'good'    ? 'var(--good)' :
     tone === 'bad'     ? 'var(--bad)'  :
@@ -58,6 +59,11 @@ function Stat({ label, dateRange, value, sub, tone = 'neutral', icon, maskable, 
       <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
         {masked && maskSub ? '•••••••' : sub}
       </div>
+      {hint && !masked && (
+        <div style={{ fontSize: 11, color: 'var(--info-ink)', marginTop: -8, fontStyle: 'italic' }}>
+          {hint}
+        </div>
+      )}
     </div>
   )
 }
@@ -105,8 +111,9 @@ export default function SummaryCards() {
       <Stat
         label="Income"
         dateRange={cycleLabel ?? undefined}
-        value={formatCurrencyFull(cur.totalIncome)}
+        value={formatCurrencyFull(cur.totalIncome + cur.totalBorrowed)}
         sub={incomeChange !== null ? `${Number(incomeChange) > 0 ? '+' : ''}${incomeChange}% vs last month` : 'This month'}
+        hint={cur.totalBorrowed > 0 ? `incl. ${formatCurrencyFull(cur.totalBorrowed)} borrowed` : undefined}
         tone="good"
         icon={<ArrowUp size={14} />}
         maskable
