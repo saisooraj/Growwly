@@ -235,8 +235,8 @@ export function computePulse(
   const month = format(now, 'yyyy-MM')
   const prevMonth = format(new Date(now.getFullYear(), now.getMonth() - 1, 1), 'yyyy-MM')
 
-  const curSummary  = buildMonthlySummary(transactions, month,      snapshot.settings)
-  const prevSummary = buildMonthlySummary(transactions, prevMonth,  snapshot.settings)
+  const curSummary  = buildMonthlySummary(transactions, month,     snapshot.settings, borrowings)
+  const prevSummary = buildMonthlySummary(transactions, prevMonth, snapshot.settings, borrowings)
 
   const daysLeft    = Math.max(getDaysInMonth(now) - now.getDate(), 0)
   const thirtyDaysOut = addDays(now, 30)
@@ -260,11 +260,13 @@ export function computePulse(
     return s + remaining
   }, 0)
 
-  const freeCash    = Math.max(curSummary.totalIncome - curSummary.totalExpenses - upcomingTotal, 0)
+  const totalCashIn = curSummary.totalIncome + curSummary.totalBorrowed
+  const freeCash    = Math.max(totalCashIn - curSummary.totalExpenses - upcomingTotal, 0)
   const dailyBudget = daysLeft > 0 ? Math.round(freeCash / daysLeft) : 0
 
   const cashPosition: PulseCashPosition = {
-    monthIncome: curSummary.totalIncome,
+    monthIncome: totalCashIn,
+    borrowedIncome: curSummary.totalBorrowed,
     monthExpenses: curSummary.totalExpenses,
     upcomingTotal,
     freeCash,

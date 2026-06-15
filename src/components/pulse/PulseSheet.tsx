@@ -118,7 +118,14 @@ function CashSection({ cash }: { cash: FinancialPulse['cashPosition'] }) {
           padding: '9px 0',
           borderBottom: '1px solid var(--border)',
         }}>
-          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{r.label}</span>
+          <div>
+            <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{r.label}</span>
+            {i === 0 && cash.borrowedIncome > 0 && (
+              <div style={{ fontSize: 11, color: 'var(--info-ink)', fontStyle: 'italic', marginTop: 1 }}>
+                incl. {formatCurrencyFull(cash.borrowedIncome)} borrowed
+              </div>
+            )}
+          </div>
           <span style={{ fontSize: 13, fontWeight: 500, color: r.color }}>
             {r.sign} {formatCurrencyFull(Math.abs(r.amount))}
           </span>

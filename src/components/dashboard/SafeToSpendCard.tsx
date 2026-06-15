@@ -7,14 +7,14 @@ import { getCycleRange } from '@/lib/cycle'
 import { parseISO, differenceInCalendarDays } from 'date-fns'
 
 export default function SafeToSpendCard() {
-  const { transactions, selectedMonth, settings } = useAppStore()
+  const { transactions, selectedMonth, settings, borrowings } = useAppStore()
 
   const { dailySafe, daysLeft, cushion, tone } = useMemo(() => {
-    const summary = buildMonthlySummary(transactions, selectedMonth, settings)
+    const summary = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
     const today = new Date()
     const { end } = getCycleRange(selectedMonth, settings)
     const daysLeft = Math.max(1, differenceInCalendarDays(parseISO(end), today) + 1)
-    const cushion = summary.net
+    const cushion = summary.cashNet
     const dailySafe = Math.max(0, cushion / daysLeft)
     const tone = cushion < 0 ? 'bad' : cushion < 5000 ? 'warn' : 'good'
     return { dailySafe, daysLeft, cushion, tone }

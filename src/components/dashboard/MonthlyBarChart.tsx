@@ -16,13 +16,14 @@ import { format, parseISO } from 'date-fns'
 
 export default function MonthlyBarChart() {
   const transactions = useAppStore((s) => s.transactions)
+  const borrowings   = useAppStore((s) => s.borrowings)
   const months = getLast6Months()
 
   const data = months.map((m) => {
-    const s = buildMonthlySummary(transactions, m)
+    const s = buildMonthlySummary(transactions, m, null, borrowings)
     return {
       name: format(parseISO(`${m}-01`), 'MMM'),
-      Income: s.totalIncome,
+      Income: s.totalIncome + s.totalBorrowed,
       Expenses: s.totalExpenses,
     }
   })

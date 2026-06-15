@@ -181,6 +181,7 @@ export interface PulseHealthScore {
 
 export interface PulseCashPosition {
   monthIncome: number
+  borrowedIncome: number  // portion of monthIncome that is borrowed
   monthExpenses: number
   upcomingTotal: number   // expenses due in next 30 days
   freeCash: number        // income − expenses − upcoming
