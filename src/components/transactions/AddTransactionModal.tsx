@@ -4,10 +4,10 @@ import { Fragment, useState, useEffect, useCallback } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { X, RefreshCw, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Split, UserPlus, Trash2 } from 'lucide-react'
 import { format } from 'date-fns'
-import { addTransaction, updateTransaction, updateProject, addBorrowing } from '@/lib/firestore'
+import { addTransaction, updateTransaction, updateProject, addBorrowing, setUserSettings } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
-import { TRANSFER_KINDS, buildMonthlySummary } from '@/lib/utils'
+import { TRANSFER_KINDS, buildMonthlySummary, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
 import CategoryPicker from '@/components/transactions/CategoryPicker'
 import type { Transaction, TransactionType, TransferKind } from '@/types'
@@ -58,7 +58,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 export default function AddTransactionModal({ open, onClose, editTx }: Props) {
   const { user } = useAuth()
   const refresh = useRefreshData()
-  const { projects, budgets, transactions, borrowings } = useAppStore()
+  const { projects, budgets, transactions, borrowings, settings } = useAppStore()
 
   // Core fields
   const [txType, setTxType]             = useState<TransactionType>(editTx?.type ?? 'expense')
@@ -279,6 +279,38 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
         } else {
           toast.success(txType === 'transfer' ? 'Transfer logged' : 'Transaction added')
           if (txType === 'expense') checkBudgetAlert(category, effectiveAmount, date)
+
+          // Prompt to save custom category
+          if (txType !== 'transfer') {
+            const allStandard = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]
+            const existing = settings?.customCategories ?? []
+            if (!allStandard.includes(category) && !existing.includes(category) && category) {
+              toast(t => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>Save &ldquo;{category}&rdquo; as a category?</span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={async () => {
+                        toast.dismiss(t.id)
+                        await setUserSettings(user.uid, { customCategories: [...existing, category] })
+                        await refresh()
+                        toast.success(`"${category}" saved`)
+                      }}
+                      style={{ flex: 1, padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--brand)', color: '#fff', fontSize: 12, fontWeight: 600 }}
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => toast.dismiss(t.id)}
+                      style={{ flex: 1, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12 }}
+                    >
+                      Skip
+                    </button>
+                  </div>
+                </div>
+              ), { duration: 10000 })
+            }
+          }
         }
       }
 

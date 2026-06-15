@@ -103,6 +103,7 @@ export interface UserSettings {
   salaryCycleRule?: 'none' | 'last-working-day' | 'fixed-day'
   salaryCycleFixedDay?: number                    // 1–31, used when rule = 'fixed-day'
   cycleOverrides?: Record<string, string>         // { "2026-06": "2026-05-30" } per-month overrides
+  customCategories?: string[]                     // user-defined categories saved for reuse
   createdAt: string
   updatedAt: string
 }

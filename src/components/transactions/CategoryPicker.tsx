@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, CATEGORY_EMOJI } from '@/lib/utils'
+import { useAppStore } from '@/store/appStore'
 
 // ── Emoji palette ─────────────────────────────────────────────────────────────
 const EMOJI_PALETTE = [
@@ -61,7 +62,14 @@ interface Props {
 }
 
 export default function CategoryPicker({ value, onChange, type }: Props) {
-  const cats = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+  const customCategories = useAppStore(s => s.settings?.customCategories ?? [])
+  const baseCats = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+  // Merge saved custom categories in (before "Other", after predefined)
+  const cats = [
+    ...baseCats.slice(0, -1), // everything except "Other"
+    ...customCategories.filter(c => !baseCats.includes(c)),
+    baseCats[baseCats.length - 1], // "Other" last
+  ]
   const isPredefined = cats.includes(value)
 
   const [showCustom, setShowCustom]       = useState(!isPredefined && value !== '')
