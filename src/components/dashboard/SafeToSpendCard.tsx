@@ -177,12 +177,18 @@ export default function SafeToSpendCard() {
   const schedules: Schedule[] = settings?.dailyLivingSchedules ?? []
   const isConfigured = schedules.length > 0 && schedules.some(s => s.days.length > 0 && s.total > 0)
 
-  const { cashNet, daysLeft, todayNeed, todayScheduleLabel, totalEssentials, buffer, extraPerDay } = useMemo(() => {
+  const { cashNet, daysLeft, todayNeed, todayScheduleLabel, todaySpent, totalEssentials, buffer } = useMemo(() => {
     const summary  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
     const today    = new Date()
+    const todayStr = today.toISOString().slice(0, 10)
     const { end }  = getCycleRange(selectedMonth, settings)
     const daysLeft = Math.max(1, differenceInCalendarDays(parseISO(end), today) + 1)
     const cashNet  = Math.max(summary.cashNet, 0)
+
+    // Today's actual expense spend (from transactions)
+    const todaySpent = transactions
+      .filter(t => t.date === todayStr && t.type === 'expense')
+      .reduce((s, t) => s + t.amount, 0)
 
     function needForDay(date: Date): number {
       const dow = date.getDay()
@@ -190,12 +196,11 @@ export default function SafeToSpendCard() {
       return s?.total ?? 0
     }
 
-    const todayNeed           = needForDay(today)
-    const todayDow            = today.getDay()
-    const todaySched          = schedules.find(s => s.days.includes(todayDow))
-    const todayScheduleLabel  = todaySched
+    const todayNeed          = needForDay(today)
+    const todayDow           = today.getDay()
+    const todaySched         = schedules.find(s => s.days.includes(todayDow))
+    const todayScheduleLabel = todaySched
       ? todaySched.days.length === 7 ? 'Every day'
-        : todaySched.days.length <= 2 ? todaySched.days.sort((a,b)=>a-b).map(d => DAY_LABEL[d]).join(' & ')
         : todaySched.days.includes(6) || todaySched.days.includes(0) ? 'Weekend' : 'Weekday'
       : ''
 
@@ -204,25 +209,17 @@ export default function SafeToSpendCard() {
       totalEssentials += needForDay(addDays(today, d))
     }
 
-    const buffer     = cashNet - totalEssentials
-    const extraPerDay = daysLeft > 0 ? buffer / daysLeft : 0
+    const buffer = cashNet - totalEssentials
 
-    return { cashNet, daysLeft, todayNeed, todayScheduleLabel, totalEssentials, buffer, extraPerDay }
+    return { cashNet, daysLeft, todayNeed, todayScheduleLabel, todaySpent, totalEssentials, buffer }
   }, [transactions, selectedMonth, settings, borrowings, schedules])
 
-  const isCovered = buffer >= 0
-  const tone      = !isConfigured ? 'neutral' : isCovered ? (extraPerDay > 200 ? 'good' : 'warn') : 'bad'
+  const isCovered   = buffer >= 0
+  const todayOver   = todayNeed > 0 && todaySpent > todayNeed
+  const todayPct    = todayNeed > 0 ? Math.min(100, (todaySpent / todayNeed) * 100) : 0
+  const todayTone   = todayOver ? 'bad' : todayPct >= 80 ? 'warn' : 'good'
+  const tone        = !isConfigured ? 'neutral' : !isCovered ? 'bad' : todayTone
   const gradientColor = tone === 'good' ? 'oklch(0.95 0.05 152 / .7)' : tone === 'warn' ? 'oklch(0.96 0.06 75 / .7)' : tone === 'bad' ? 'oklch(0.95 0.04 25 / .7)' : 'transparent'
-
-  const insightText = (() => {
-    if (!isConfigured) return 'Set your daily baseline to get smarter advice'
-    if (!isCovered) {
-      const shortPerDay = Math.abs(buffer / daysLeft)
-      return `Short by ${formatCurrencyFull(Math.ceil(shortPerDay))}/day on avg — need to cut spending to last the cycle`
-    }
-    if (extraPerDay < 100) return `Barely covered — stick close to your baseline each day`
-    return `${formatCurrencyFull(Math.floor(extraPerDay))} extra per day after essentials`
-  })()
 
   // ── Edit helpers ────────────────────────────────────────────────────────────
 
@@ -335,50 +332,80 @@ export default function SafeToSpendCard() {
 
       ) : (
         /* ── Configured view ── */
-        <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-          {/* Primary number */}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-            <span className="display-num" style={{ fontSize: 32, lineHeight: 1, color: isCovered ? 'var(--text)' : 'var(--bad-ink)' }}>
-              {isCovered
-                ? `+${formatCurrencyFull(Math.floor(extraPerDay))}`
-                : `−${formatCurrencyFull(Math.ceil(Math.abs(extraPerDay)))}`}
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>{isCovered ? 'extra / day' : 'short / day'}</span>
-          </div>
-
-          {/* Today vs available */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {todayNeed > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                <span style={{ color: 'var(--text-3)' }}>Today's need{todayScheduleLabel ? ` (${todayScheduleLabel})` : ''}</span>
-                <span style={{ color: 'var(--text)', fontWeight: 500 }}>{formatCurrencyFull(todayNeed)}</span>
+          {/* Today's tracking — primary focus */}
+          {todayNeed > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Primary number: remaining or over */}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span className="display-num" style={{ fontSize: 32, lineHeight: 1, color: todayOver ? 'var(--bad-ink)' : 'var(--text)' }}>
+                  {todayOver
+                    ? `−${formatCurrencyFull(Math.round(todaySpent - todayNeed))}`
+                    : formatCurrencyFull(Math.round(todayNeed - todaySpent))
+                  }
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                  {todayOver ? 'over today' : todaySpent === 0 ? 'budget today' : 'left today'}
+                </span>
               </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-              <span style={{ color: 'var(--text-3)' }}>Total essentials left</span>
-              <span style={{ color: isCovered ? 'var(--good-ink)' : 'var(--bad-ink)', fontWeight: 500 }}>{formatCurrencyFull(Math.round(totalEssentials))}</span>
+
+              {/* Progress bar */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ height: 6, borderRadius: 999, background: 'var(--surface-3)', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 999, transition: 'width .4s ease',
+                    width: `${todayPct}%`,
+                    background: todayOver ? 'var(--bad)' : todayPct >= 80 ? 'var(--warn)' : 'var(--good)',
+                  }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-4)' }}>
+                  <span>
+                    {todaySpent === 0
+                      ? 'Nothing logged today yet'
+                      : `₹${todaySpent.toLocaleString('en-IN')} spent`}
+                  </span>
+                  <span>{todayScheduleLabel ? `${todayScheduleLabel} · ` : ''}₹{todayNeed.toLocaleString('en-IN')} baseline</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span style={{ fontSize: 13, color: 'var(--text-3)' }}>No baseline set for today</span>
+            </div>
+          )}
+
+          {/* Divider */}
+          <div style={{ height: 1, background: 'var(--border)' }} />
+
+          {/* Cycle coverage — secondary */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+              <span style={{ color: 'var(--text-3)' }}>Essentials for remaining days</span>
+              <span style={{ color: 'var(--text)', fontWeight: 500 }}>{formatCurrencyFull(Math.round(totalEssentials))}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+              <span style={{ color: 'var(--text-3)' }}>Cycle buffer</span>
+              <span style={{ color: isCovered ? 'var(--good-ink)' : 'var(--bad-ink)', fontWeight: 600 }}>
+                {isCovered ? '+' : '−'}{formatCurrencyFull(Math.abs(Math.round(buffer)))}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+              <span className={`pill ${isCovered ? (todayOver ? 'warn' : 'good') : 'bad'}`}>
+                <span className="pill-dot" />
+                {!isCovered ? 'Cycle tight' : todayOver ? 'Over today' : todayPct >= 80 ? 'Near limit' : 'On track'}
+              </span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, justifyContent: 'flex-end' }}>
+                {schedules.map((s, i) => (
+                  <span key={i} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, background: 'var(--surface-2)', color: 'var(--text-4)', border: '1px solid var(--border)' }}>
+                    {s.days.sort((a,b)=>a-b).map(d => DAY_SHORT[d]).join('/')} ₹{s.total.toLocaleString('en-IN')}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Schedule chips */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {schedules.map((s, i) => (
-              <span key={i} style={{ fontSize: 10.5, padding: '2px 8px', borderRadius: 999, background: 'var(--surface-2)', color: 'var(--text-3)', border: '1px solid var(--border)' }}>
-                {s.days.sort((a,b)=>a-b).map(d => DAY_SHORT[d]).join('/')} · ₹{s.total.toLocaleString('en-IN')}
-              </span>
-            ))}
-          </div>
-
-          {/* Status + insight */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span className={`pill ${tone === 'good' ? 'good' : tone === 'warn' ? 'warn' : 'bad'}`}>
-              <span className="pill-dot" />
-              {isCovered ? (extraPerDay > 200 ? 'Comfortable' : 'Just covered') : 'Tight'}
-            </span>
-          </div>
-
-          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>{insightText}</p>
         </div>
       )}
     </div>
