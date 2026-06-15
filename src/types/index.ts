@@ -104,6 +104,8 @@ export interface UserSettings {
   salaryCycleFixedDay?: number                    // 1–31, used when rule = 'fixed-day'
   cycleOverrides?: Record<string, string>         // { "2026-06": "2026-05-30" } per-month overrides
   customCategories?: string[]                     // user-defined categories saved for reuse
+  dailyLivingCost?: number                        // user-configured daily baseline spend
+  dailyLivingItems?: { label: string; amount: number }[]  // breakdown of daily need
   createdAt: string
   updatedAt: string
 }
