@@ -84,11 +84,18 @@ export function buildMonthlySummary(
 
   let totalLent = 0
   let totalBorrowed = 0
+  let lentOutstanding = 0
+  let borrowedOutstanding = 0
   if (borrowings) {
     for (const b of borrowings) {
       if (b.date < start || b.date > end) continue
-      if (b.type === 'lent')     totalLent     += b.amount
-      else                       totalBorrowed += b.amount
+      if (b.type === 'lent') {
+        totalLent += b.amount
+        lentOutstanding += (b.amount - b.repaidAmount)
+      } else {
+        totalBorrowed += b.amount
+        borrowedOutstanding += (b.amount - b.repaidAmount)
+      }
     }
   }
 
@@ -103,6 +110,10 @@ export function buildMonthlySummary(
     cashNet,
     totalLent,
     totalBorrowed,
+    lentOutstanding,
+    borrowedOutstanding,
+    repaymentReceived,
+    repaymentPaid,
     byCategory: byCategory as Record<Category, number>,
   }
 }

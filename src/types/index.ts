@@ -148,6 +148,10 @@ export interface MonthlySummary {
   cashNet: number       // True cashflow: net − lent + borrowed
   totalLent: number
   totalBorrowed: number
+  lentOutstanding: number
+  borrowedOutstanding: number
+  repaymentReceived: number
+  repaymentPaid: number
   byCategory: Record<Category, number>
 }
 

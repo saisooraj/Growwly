@@ -9,13 +9,16 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY!
 )
 
-// Called by Vercel Cron once daily at 14:00 UTC (7:30 PM IST)
+// Called by Vercel Cron every hour. Sends to users whose preferred IST hour maps
+// to the current UTC hour (IST = UTC+5:30, so utcHour = istHour - 5).
 // Vercel sends: Authorization: Bearer <CRON_SECRET>
 export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization')
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const currentUtcHour = new Date().getUTCHours()
 
   const subSnaps = await getDocs(collection(db, 'pushSubscriptions'))
   const results = { sent: 0, skipped: 0, errors: 0 }
@@ -26,7 +29,13 @@ export async function GET(req: NextRequest) {
 
       const settingsSnap = await getDoc(doc(db, 'userSettings', userId))
       if (!settingsSnap.exists()) { results.skipped++; return }
-      if (!settingsSnap.data().pushReminderEnabled) { results.skipped++; return }
+      const userSettings = settingsSnap.data()
+      if (!userSettings.pushReminderEnabled) { results.skipped++; return }
+
+      // Default to 19 IST (7:30 PM IST = 14:00 UTC) if not set
+      const istHour = userSettings.pushReminderHour ?? 19
+      const expectedUtcHour = (istHour - 5 + 24) % 24
+      if (currentUtcHour !== expectedUtcHour) { results.skipped++; return }
 
       try {
         await webpush.sendNotification(

@@ -28,6 +28,7 @@ export default function SettingsPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const { state: pushState, subscribe, unsubscribe } = usePushNotifications()
 
+  const [reminderHour, setReminderHour] = useState(19)
   const [mode, setMode] = useState<FinancialMode>('normal')
   const [weeklyBudget, setWeeklyBudget] = useState('')
   const [monthlyIncome, setMonthlyIncome] = useState('')
@@ -48,6 +49,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (settings) {
+      setReminderHour(settings.pushReminderHour ?? 19)
       setMode(settings.financialMode ?? 'normal')
       setWeeklyBudget(String(settings.weeklyBudget ?? ''))
       setMonthlyIncome(String(settings.monthlyIncomeTarget ?? ''))
@@ -93,6 +95,14 @@ export default function SettingsPage() {
       } else if (pushState === 'denied') {
         toast.error('Notifications blocked — enable them in browser settings')
       }
+    }
+  }
+
+  async function saveReminderHour(hour: number) {
+    setReminderHour(hour)
+    if (user) {
+      await setUserSettings(user.uid, { pushReminderHour: hour })
+      toast.success('Reminder time saved')
     }
   }
 
@@ -230,16 +240,43 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Fixed reminder time */}
-          {!pushUnavailable && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)' }}>
-              <span style={{ fontSize: 18 }}>🕖</span>
-              <div>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>Fires daily at 7:30 PM IST</p>
-                <p style={{ margin: 0, fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>Reminder arrives within an hour of that time.</p>
+          {/* Reminder time picker */}
+          {isSubscribed && (() => {
+            const TIMES = [
+              { hour: 7,  label: '7:30 AM' },
+              { hour: 8,  label: '8:30 AM' },
+              { hour: 12, label: '12:30 PM' },
+              { hour: 17, label: '5:30 PM' },
+              { hour: 18, label: '6:30 PM' },
+              { hour: 19, label: '7:30 PM' },
+              { hour: 20, label: '8:30 PM' },
+              { hour: 21, label: '9:30 PM' },
+              { hour: 22, label: '10:30 PM' },
+            ]
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)' }}>
+                <span style={{ fontSize: 18 }}>🕖</span>
+                <div style={{ flex: 1 }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>Reminder time (IST)</p>
+                  <select
+                    value={reminderHour}
+                    onChange={e => saveReminderHour(Number(e.target.value))}
+                    style={{
+                      fontSize: 13, padding: '5px 10px',
+                      background: 'var(--surface)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 8, color: 'var(--text)',
+                      outline: 'none', cursor: 'pointer', width: '100%',
+                    }}
+                  >
+                    {TIMES.map(t => (
+                      <option key={t.hour} value={t.hour}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {!pushUnavailable && (
             <button

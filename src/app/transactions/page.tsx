@@ -109,13 +109,13 @@ function TransactionsInner() {
             <div className="display-num" style={{ fontSize: 22, color: summary.cashNet >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
               {showNet ? `${summary.cashNet >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(summary.cashNet))}` : '₹ •••'}
             </div>
-            {showNet && (summary.totalLent > 0 || summary.totalBorrowed > 0) && (
+            {showNet && (summary.lentOutstanding > 0 || summary.borrowedOutstanding > 0) && (
               <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 5, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {summary.totalLent > 0 && (
-                  <span>−{formatCurrencyFull(summary.totalLent)} <span style={{ color: 'var(--warn-ink)' }}>lent</span></span>
+                {summary.lentOutstanding > 0 && (
+                  <span>−{formatCurrencyFull(summary.lentOutstanding)} <span style={{ color: 'var(--warn-ink)' }}>lent</span></span>
                 )}
-                {summary.totalBorrowed > 0 && (
-                  <span>+{formatCurrencyFull(summary.totalBorrowed)} <span style={{ color: 'var(--info-ink)' }}>borrowed</span></span>
+                {summary.borrowedOutstanding > 0 && (
+                  <span>+{formatCurrencyFull(summary.borrowedOutstanding)} <span style={{ color: 'var(--info-ink)' }}>borrowed</span></span>
                 )}
               </div>
             )}
