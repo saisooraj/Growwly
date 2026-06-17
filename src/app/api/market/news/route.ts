@@ -13,6 +13,10 @@ interface NewsItem {
   description: string
 }
 
+function stripCdata(s: string): string {
+  return s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim()
+}
+
 function parseRSS(xml: string, source: string): NewsItem[] {
   const items: NewsItem[] = []
   const itemRegex = /<item>([\s\S]*?)<\/item>/g
@@ -21,19 +25,30 @@ function parseRSS(xml: string, source: string): NewsItem[] {
   while ((match = itemRegex.exec(xml)) !== null) {
     const block = match[1]
 
-    const title = (block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/) ||
-                   block.match(/<title>([\s\S]*?)<\/title>/))?.[1]?.trim() ?? ''
+    const title = stripCdata(
+      (block.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/) ||
+       block.match(/<title>([\s\S]*?)<\/title>/))?.[1]?.trim() ?? ''
+    )
 
-    const link  = (block.match(/<link>([\s\S]*?)<\/link>/) ||
-                   block.match(/<guid[^>]*>([\s\S]*?)<\/guid>/))?.[1]?.trim() ?? ''
+    // feedburner:origLink has the real article URL (FeedBurner redirect links are dead)
+    const link = stripCdata(
+      (block.match(/<feedburner:origLink>([\s\S]*?)<\/feedburner:origLink>/) ||
+       block.match(/<guid[^>]*isPermaLink="true"[^>]*>([\s\S]*?)<\/guid>/) ||
+       block.match(/<link>([\s\S]*?)<\/link>/) ||
+       block.match(/<guid[^>]*>([\s\S]*?)<\/guid>/))?.[1]?.trim() ?? ''
+    )
 
-    const pubDate = block.match(/<pubDate>([\s\S]*?)<\/pubDate>/)?.[1]?.trim() ?? ''
+    const pubDateRaw = (block.match(/<pubDate><!\[CDATA\[([\s\S]*?)\]\]><\/pubDate>/) ||
+                        block.match(/<pubDate>([\s\S]*?)<\/pubDate>/))?.[1]?.trim() ?? ''
+    const pubDate = stripCdata(pubDateRaw)
 
-    const description = (block.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/) ||
-                         block.match(/<description>([\s\S]*?)<\/description>/))?.[1]
-                         ?.replace(/<[^>]+>/g, '')
-                         ?.trim()
-                         ?.slice(0, 200) ?? ''
+    const description = stripCdata(
+      (block.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/) ||
+       block.match(/<description>([\s\S]*?)<\/description>/))?.[1]
+       ?.replace(/<[^>]+>/g, '')
+       ?.trim()
+       ?.slice(0, 200) ?? ''
+    )
 
     if (title && link) {
       items.push({ title, link, pubDate, source, description })
