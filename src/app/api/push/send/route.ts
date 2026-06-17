@@ -9,8 +9,8 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY!
 )
 
-// Called by Vercel Cron every hour. Sends to users whose preferred IST hour maps
-// to the current UTC hour (IST = UTC+5:30, so utcHour = istHour - 5).
+// Called by two Vercel Crons: 03:00 UTC (8:30 AM IST) and 14:00 UTC (7:30 PM IST).
+// Sends only to users whose pushReminderHour (IST) maps to the current UTC hour.
 // Vercel sends: Authorization: Bearer <CRON_SECRET>
 export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization')

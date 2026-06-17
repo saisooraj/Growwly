@@ -243,15 +243,8 @@ export default function SettingsPage() {
           {/* Reminder time picker */}
           {isSubscribed && (() => {
             const TIMES = [
-              { hour: 7,  label: '7:30 AM' },
-              { hour: 8,  label: '8:30 AM' },
-              { hour: 12, label: '12:30 PM' },
-              { hour: 17, label: '5:30 PM' },
-              { hour: 18, label: '6:30 PM' },
-              { hour: 19, label: '7:30 PM' },
-              { hour: 20, label: '8:30 PM' },
-              { hour: 21, label: '9:30 PM' },
-              { hour: 22, label: '10:30 PM' },
+              { hour: 8,  label: 'Morning — 8:30 AM' },
+              { hour: 19, label: 'Evening — 7:30 PM' },
             ]
             return (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)' }}>
