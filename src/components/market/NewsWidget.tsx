@@ -20,6 +20,7 @@ export default function NewsWidget() {
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState('')
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   async function fetchNews() {
     setLoading(true)
@@ -51,7 +52,7 @@ export default function NewsWidget() {
     if (!el) return
     const observer = new IntersectionObserver(
       ([entry]) => { if (entry.isIntersecting) loadMore() },
-      { threshold: 0.1 }
+      { root: scrollRef.current, threshold: 0.1 }
     )
     observer.observe(el)
     return () => observer.disconnect()
@@ -96,7 +97,11 @@ export default function NewsWidget() {
       ) : articles.length === 0 ? (
         <p className="text-sm text-slate-400 text-center py-4">No news available — check connection</p>
       ) : (
-        <>
+        <div
+          ref={scrollRef}
+          className="overflow-y-auto"
+          style={{ maxHeight: 480 }}
+        >
           <div className="space-y-1">
             {visible.map((article, i) => (
               <a
@@ -129,9 +134,9 @@ export default function NewsWidget() {
             ))}
           </div>
 
-          {/* Infinite scroll sentinel */}
+          {/* Infinite scroll sentinel — inside the scrollable container */}
           {hasMore && (
-            <div ref={sentinelRef} className="flex justify-center py-2">
+            <div ref={sentinelRef} className="flex justify-center py-3">
               <div className="flex gap-1">
                 {[0, 1, 2].map(i => (
                   <div key={i} className="w-1 h-1 rounded-full bg-slate-300 animate-pulse" style={{ animationDelay: `${i * 150}ms` }} />
@@ -139,7 +144,7 @@ export default function NewsWidget() {
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
 
       <p className="text-xs text-slate-400 text-center">Sources: NDTV Profit, Economic Times · Refreshes every 15 min</p>
