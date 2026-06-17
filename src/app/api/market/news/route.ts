@@ -55,7 +55,7 @@ function parseRSS(xml: string, source: string): NewsItem[] {
     }
   }
 
-  return items.slice(0, 8)
+  return items.slice(0, 25)
 }
 
 export async function GET() {
@@ -84,7 +84,7 @@ export async function GET() {
   })
 
   return NextResponse.json({
-    articles: allNews.slice(0, 12),
+    articles: allNews.slice(0, 40),
     updatedAt: new Date().toISOString(),
   })
 }
