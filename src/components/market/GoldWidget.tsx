@@ -4,17 +4,6 @@ import { useState, useEffect } from 'react'
 import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from 'recharts'
 import { format, parseISO } from 'date-fns'
-import { useAppStore } from '@/store/appStore'
-import { useAuth } from '@/context/AuthContext'
-import { setUserSettings } from '@/lib/firestore'
-
-const INDIAN_STATES = [
-  'Andhra Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Delhi',
-  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
-  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
-  'Odisha', 'Punjab', 'Rajasthan', 'Tamil Nadu', 'Telangana',
-  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-]
 
 interface GoldData {
   price24kPerGram: number
@@ -36,17 +25,8 @@ const SIGNAL_STYLES = {
 }
 
 export default function GoldWidget() {
-  const { user } = useAuth()
-  const { settings } = useAppStore()
   const [data, setData] = useState<GoldData | null>(null)
   const [loading, setLoading] = useState(true)
-
-  const selectedState = settings?.goldState ?? 'Kerala'
-
-  async function handleStateChange(state: string) {
-    if (!user) return
-    await setUserSettings(user.uid, { goldState: state })
-  }
 
   async function fetchGold() {
     setLoading(true)
@@ -103,24 +83,7 @@ export default function GoldWidget() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-lg">🪙</span>
-          <select
-            value={selectedState}
-            onChange={e => handleStateChange(e.target.value)}
-            style={{
-              fontSize: 14, fontWeight: 600,
-              background: 'transparent',
-              border: 'none',
-              color: 'var(--text)',
-              cursor: 'pointer',
-              outline: 'none',
-              padding: '0 2px',
-              fontFamily: 'inherit',
-            }}
-          >
-            {INDIAN_STATES.map(s => (
-              <option key={s} value={s}>{s} — 22K</option>
-            ))}
-          </select>
+          <h3 className="font-semibold text-slate-800">Gold — 22K (IBJA)</h3>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400">
@@ -193,7 +156,7 @@ export default function GoldWidget() {
       )}
 
       <p className="text-xs text-slate-400 text-center">
-        Source: IBJA (India Bullion &amp; Jewellers Association) · Refreshes every 5 min
+        IBJA national rate · Local prices may vary by ₹50–200/10g · Refreshes every 5 min
       </p>
     </div>
   )
