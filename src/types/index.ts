@@ -104,6 +104,7 @@ export interface UserSettings {
   salaryCycleRule?: 'none' | 'last-working-day' | 'fixed-day'
   salaryCycleFixedDay?: number                    // 1–31, used when rule = 'fixed-day'
   cycleOverrides?: Record<string, string>         // { "2026-06": "2026-05-30" } per-month overrides
+  goldState?: string                               // preferred state for gold widget label
   customCategories?: string[]                     // user-defined categories saved for reuse
   dailyLivingCost?: number                        // legacy — superseded by dailyLivingSchedules
   dailyLivingItems?: { label: string; amount: number }[]  // legacy
