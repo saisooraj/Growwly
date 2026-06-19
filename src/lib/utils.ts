@@ -261,6 +261,20 @@ export const CATEGORY_EMOJI: Record<string, string> = {
   'Other Income': '💰',
 }
 
+/** Returns the emoji for any category — predefined or custom (e.g. "🛵 Bike"). */
+export function getCategoryEmoji(category: string): string {
+  if (!category) return '📦'
+  const known = CATEGORY_EMOJI[category]
+  if (known) return known
+  // Custom categories are stored as "emoji name" — extract the leading emoji
+  const spaceIdx = category.indexOf(' ')
+  if (spaceIdx > 0) {
+    const maybeEmoji = category.slice(0, spaceIdx)
+    if (maybeEmoji.codePointAt(0)! > 255) return maybeEmoji
+  }
+  return '📦'
+}
+
 export const CATEGORY_COLORS: Record<string, string> = {
   'Food & Dining': '#f97316',
   'Groceries': '#84cc16',

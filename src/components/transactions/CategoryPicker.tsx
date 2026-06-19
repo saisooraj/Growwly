@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, CATEGORY_EMOJI } from '@/lib/utils'
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, getCategoryEmoji } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
 
 // ── Emoji palette ─────────────────────────────────────────────────────────────
@@ -154,12 +154,8 @@ export default function CategoryPicker({ value, onChange, type }: Props) {
               cursor: 'pointer', transition: 'all .12s', whiteSpace: 'nowrap',
             }}
           >
-            {(() => {
-              const knownEmoji = CATEGORY_EMOJI[cat]
-              if (knownEmoji) return <><span style={{ fontSize: 13 }}>{knownEmoji}</span>{cat}</>
-              const parsed = parseCustomValue(cat)
-              return <><span style={{ fontSize: 13 }}>{parsed.emoji || '📦'}</span>{parsed.name || cat}</>
-            })()}
+            <span style={{ fontSize: 13 }}>{getCategoryEmoji(cat)}</span>
+            {parseCustomValue(cat).name || cat}
           </button>
         ))}
 

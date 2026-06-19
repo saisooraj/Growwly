@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { X, TrendingDown, TrendingUp, Minus, Calendar, AlertCircle } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import type { FinancialPulse } from '@/types'
-import { formatCurrency, formatCurrencyFull, CATEGORY_EMOJI } from '@/lib/utils'
+import { formatCurrency, formatCurrencyFull, getCategoryEmoji } from '@/lib/utils'
 
 // ── Color maps ───────────────────────────────────────────────────────────────
 
@@ -243,7 +243,7 @@ function SpendSection({ items }: { items: FinancialPulse['spendAnalysis'] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       {items.map((item, i) => {
-        const emoji = CATEGORY_EMOJI[item.category] ?? '📦'
+        const emoji = getCategoryEmoji(item.category)
         const isUp   = item.changePct !== null && item.changePct > 5
         const isDown = item.changePct !== null && item.changePct < -5
         return (
