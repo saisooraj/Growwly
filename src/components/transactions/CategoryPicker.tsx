@@ -154,8 +154,12 @@ export default function CategoryPicker({ value, onChange, type }: Props) {
               cursor: 'pointer', transition: 'all .12s', whiteSpace: 'nowrap',
             }}
           >
-            <span style={{ fontSize: 13 }}>{CATEGORY_EMOJI[cat] ?? '📦'}</span>
-            {cat}
+            {(() => {
+              const knownEmoji = CATEGORY_EMOJI[cat]
+              if (knownEmoji) return <><span style={{ fontSize: 13 }}>{knownEmoji}</span>{cat}</>
+              const parsed = parseCustomValue(cat)
+              return <><span style={{ fontSize: 13 }}>{parsed.emoji || '📦'}</span>{parsed.name || cat}</>
+            })()}
           </button>
         ))}
 
