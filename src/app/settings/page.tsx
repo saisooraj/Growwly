@@ -45,6 +45,7 @@ export default function SettingsPage() {
   const [cycleFixedDay, setCycleFixedDay]   = useState('28')
   const [cycleOverrides, setCycleOverrides] = useState<Record<string, string>>({})
   const [savingCycle, setSavingCycle]       = useState(false)
+  const [editingCycle, setEditingCycle]     = useState(false)
   const [editingMonth, setEditingMonth]     = useState<string | null>(null)
   const [editDate, setEditDate]             = useState('')
 
@@ -119,6 +120,7 @@ export default function SettingsPage() {
       })
       await refresh()
       toast.success('Salary cycle saved')
+      setEditingCycle(false)
     } catch {
       toast.error('Failed to save cycle')
     } finally {
@@ -378,60 +380,89 @@ export default function SettingsPage() {
 
         {/* Salary Cycle */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CalendarClock size={14} style={{ color: 'var(--brand)' }} />
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Salary Cycle</h2>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
-            Salary credited on the last day of a month is budgeted for the next month. Set your cycle so cashflow matches reality.
-          </p>
-
-          {/* Rule selector */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <label className="label">Cycle starts on</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {([
-                { value: 'none',             label: 'Off — use calendar month' },
-                { value: 'last-working-day', label: 'Last working day of previous month (Mon–Fri)' },
-                { value: 'fixed-day',        label: 'Fixed day of previous month' },
-              ] as { value: SalaryCycleRule; label: string }[]).map(opt => (
-                <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: 'var(--text-2)' }}>
-                  <input
-                    type="radio"
-                    name="cycleRule"
-                    value={opt.value}
-                    checked={cycleRule === opt.value}
-                    onChange={() => setCycleRule(opt.value)}
-                    style={{ accentColor: 'var(--brand)' }}
-                  />
-                  {opt.label}
-                </label>
-              ))}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CalendarClock size={14} style={{ color: 'var(--brand)' }} />
+              <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Salary Cycle</h2>
             </div>
-
-            {cycleRule === 'fixed-day' && (
-              <div style={{ marginTop: 4 }}>
-                <label className="label">Day of month (1–31)</label>
-                <input
-                  type="number"
-                  className="input"
-                  min={1} max={31}
-                  value={cycleFixedDay}
-                  onChange={e => setCycleFixedDay(e.target.value)}
-                  style={{ maxWidth: 100 }}
-                />
-              </div>
+            {!editingCycle && (
+              <button
+                onClick={() => setEditingCycle(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text-3)', fontSize: 12 }}
+              >
+                <Pencil size={12} /> Edit
+              </button>
             )}
           </div>
 
-          <button
-            onClick={saveCycleSettings}
-            disabled={savingCycle}
-            className="btn-primary"
-            style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, opacity: savingCycle ? 0.6 : 1 }}
-          >
-            {savingCycle ? 'Saving…' : 'Save Cycle Rule'}
-          </button>
+          {/* Read-only summary */}
+          {!editingCycle && (
+            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)', fontSize: 13, color: 'var(--text-2)' }}>
+              {cycleRule === 'none' && 'Off — using calendar month'}
+              {cycleRule === 'last-working-day' && 'Last working day of previous month (Mon–Fri)'}
+              {cycleRule === 'fixed-day' && `Day ${cycleFixedDay} of previous month`}
+            </div>
+          )}
+
+          {/* Edit form */}
+          {editingCycle && (
+            <>
+              <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
+                Salary credited on the last day of a month is budgeted for the next month. Set your cycle so cashflow matches reality.
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <label className="label">Cycle starts on</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {([
+                    { value: 'none',             label: 'Off — use calendar month' },
+                    { value: 'last-working-day', label: 'Last working day of previous month (Mon–Fri)' },
+                    { value: 'fixed-day',        label: 'Fixed day of previous month' },
+                  ] as { value: SalaryCycleRule; label: string }[]).map(opt => (
+                    <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: 'var(--text-2)' }}>
+                      <input
+                        type="radio"
+                        name="cycleRule"
+                        value={opt.value}
+                        checked={cycleRule === opt.value}
+                        onChange={() => setCycleRule(opt.value)}
+                        style={{ accentColor: 'var(--brand)' }}
+                      />
+                      {opt.label}
+                    </label>
+                  ))}
+                </div>
+                {cycleRule === 'fixed-day' && (
+                  <div style={{ marginTop: 4 }}>
+                    <label className="label">Day of month (1–31)</label>
+                    <input
+                      type="number"
+                      className="input"
+                      min={1} max={31}
+                      value={cycleFixedDay}
+                      onChange={e => setCycleFixedDay(e.target.value)}
+                      style={{ maxWidth: 100 }}
+                    />
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => { setEditingCycle(false); setCycleRule((settings?.salaryCycleRule ?? 'none') as SalaryCycleRule); setCycleFixedDay(String(settings?.salaryCycleFixedDay ?? 28)) }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-2)', fontSize: 13 }}
+                >
+                  <X size={13} /> Cancel
+                </button>
+                <button
+                  onClick={saveCycleSettings}
+                  disabled={savingCycle}
+                  className="btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: savingCycle ? 0.6 : 1 }}
+                >
+                  {savingCycle ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </>
+          )}
 
           {/* Per-month override table */}
           {cycleRule !== 'none' && (
