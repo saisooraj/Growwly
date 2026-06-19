@@ -92,10 +92,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await getRedirectResult(auth)
       } catch (err: unknown) {
         const code = (err as { code?: string })?.code ?? ''
-        // Ignore benign errors; log anything unexpected
-        if (code && code !== 'auth/no-current-user' && code !== 'auth/null-user') {
-          console.warn('[Auth] Redirect sign-in error:', code)
-        }
+        const msg  = (err as { message?: string })?.message ?? ''
+        // Log everything so we can diagnose via browser console
+        console.error('[Auth] getRedirectResult error:', code, msg)
       }
       // Subscribe AFTER redirect result is resolved so onAuthStateChanged
       // fires with the final user state, not the intermediate null
@@ -114,12 +113,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   function signInWithGoogle() {
     signInWithPopup(auth, googleProvider).catch((err) => {
       const code = err?.code ?? ''
+      const msg  = err?.message ?? ''
+      console.error('[Auth] signInWithPopup error:', code, msg)
+
+      // Only fall back to redirect for genuine browser-level blocks.
+      // Do NOT redirect for popup-closed-by-user — that means the user
+      // closed it intentionally (or the popup navigated the tab on mobile,
+      // in which case a second redirect would conflict with the first).
       const shouldRedirect =
         code === 'auth/popup-blocked' ||
-        code === 'auth/popup-closed-by-user' ||
-        code === 'auth/cancelled-popup-request' ||
         code === 'auth/operation-not-supported-in-this-environment'
-      if (shouldRedirect) signInWithRedirect(auth, googleProvider)
+
+      if (shouldRedirect) {
+        signInWithRedirect(auth, googleProvider)
+      } else if (code && code !== 'auth/popup-closed-by-user' && code !== 'auth/cancelled-popup-request') {
+        // Surface unexpected errors — auth/unauthorized-domain lands here
+        console.error('[Auth] Unhandled Google sign-in error:', code, msg)
+      }
     })
   }
 
