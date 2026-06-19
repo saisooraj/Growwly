@@ -220,60 +220,6 @@ export const INCOME_CATEGORIES: Category[] = [
   'Other Income',
 ]
 
-export const CATEGORY_EMOJI: Record<string, string> = {
-  'Food & Dining': '🍽️',
-  'Groceries': '🛒',
-  'Transport': '🚌',
-  'Fuel': '⛽',
-  'Entertainment': '🎬',
-  'Shopping': '🛍️',
-  'Healthcare': '🏥',
-  'Utilities': '💡',
-  'Subscriptions': '📱',
-  'Personal Care': '💆',
-  'Education': '📚',
-  'Travel': '✈️',
-  'Fitness': '💪',
-  'Home & Maintenance': '🏠',
-  'Insurance': '🛡️',
-  'Gifts & Donations': '🎁',
-  'Living Expenses': '🏡',
-  'Rent / Deposit': '🏢',
-  'SIP / Investments': '📈',
-  'Gold': '🥇',
-  'Construction': '🏗️',
-  'Family': '👨‍👩‍👧‍👦',
-  'Family Events': '🎊',
-  'Borrowed / Loan': '🤝',
-  'Emergency Fund': '🆘',
-  'Food with Her': '🍜',
-  'Treat': '🥳',
-  'Office Expense': '💼',
-  'Relationship': '💑',
-  'Covered for Others': '🤲',
-  'Other': '📦',
-  'Salary': '💼',
-  'Freelance': '💻',
-  'Business': '🏪',
-  'Rental Income': '🔑',
-  'Dividends / Interest': '📊',
-  'Bonus / Gift': '🎁',
-  'Other Income': '💰',
-}
-
-/** Returns the emoji for any category — predefined or custom (e.g. "🛵 Bike"). */
-export function getCategoryEmoji(category: string): string {
-  if (!category) return '📦'
-  const known = CATEGORY_EMOJI[category]
-  if (known) return known
-  // Custom categories are stored as "emoji name" — extract the leading emoji
-  const spaceIdx = category.indexOf(' ')
-  if (spaceIdx > 0) {
-    const maybeEmoji = category.slice(0, spaceIdx)
-    if (maybeEmoji.codePointAt(0)! > 255) return maybeEmoji
-  }
-  return '📦'
-}
 
 export const CATEGORY_COLORS: Record<string, string> = {
   'Food & Dining': '#f97316',

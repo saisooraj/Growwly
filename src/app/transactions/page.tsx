@@ -17,6 +17,7 @@ import {
   getTransactionsForMonth,
 } from '@/lib/utils'
 import type { TransactionType } from '@/types'
+import { getCategoryDisplayName } from '@/lib/categoryIcons'
 
 const TYPE_OPTS: { id: TransactionType | 'all'; label: string }[] = [
   { id: 'all',      label: 'All' },
@@ -165,13 +166,9 @@ function TransactionsInner() {
               }}
             >
               <option value="all">All Categories</option>
-              {allCats.map(c => {
-                const isCustom = customCats.includes(c)
-                const label = isCustom
-                  ? (() => { const sp = c.indexOf(' '); return (sp > 0 && (c.codePointAt(0) ?? 0) > 255) ? c.slice(sp + 1) : c })()
-                  : c
-                return <option key={c} value={c}>{label}</option>
-              })}
+              {allCats.map(c => (
+                <option key={c} value={c}>{getCategoryDisplayName(c)}</option>
+              ))}
             </select>
           )}
 

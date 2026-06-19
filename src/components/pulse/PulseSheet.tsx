@@ -5,7 +5,8 @@ import { createPortal } from 'react-dom'
 import { X, TrendingDown, TrendingUp, Minus, Calendar, AlertCircle } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import type { FinancialPulse } from '@/types'
-import { formatCurrency, formatCurrencyFull, getCategoryEmoji } from '@/lib/utils'
+import { formatCurrency, formatCurrencyFull } from '@/lib/utils'
+import { CategoryIcon, getCategoryDisplayName, GoalIcon } from '@/lib/categoryIcons'
 
 // ── Color maps ───────────────────────────────────────────────────────────────
 
@@ -243,7 +244,6 @@ function SpendSection({ items }: { items: FinancialPulse['spendAnalysis'] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       {items.map((item, i) => {
-        const emoji = getCategoryEmoji(item.category)
         const isUp   = item.changePct !== null && item.changePct > 5
         const isDown = item.changePct !== null && item.changePct < -5
         return (
@@ -252,9 +252,9 @@ function SpendSection({ items }: { items: FinancialPulse['spendAnalysis'] }) {
             padding: '10px 0',
             borderBottom: i < items.length - 1 ? '1px solid var(--border)' : 'none',
           }}>
-            <span style={{ fontSize: 18, flexShrink: 0 }}>{emoji}</span>
+            <span style={{ flexShrink: 0, color: 'var(--text-3)' }}><CategoryIcon category={item.category} size={18} /></span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 500 }}>{item.category}</div>
+              <div style={{ fontSize: 13, color: 'var(--text)', fontWeight: 500 }}>{getCategoryDisplayName(item.category)}</div>
               {item.changePct !== null && (
                 <div style={{ fontSize: 11.5, color: isUp ? 'var(--bad-ink)' : isDown ? 'var(--good-ink)' : 'var(--text-3)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
                   {isUp ? <TrendingUp size={10} /> : isDown ? <TrendingDown size={10} /> : <Minus size={10} />}
@@ -285,7 +285,7 @@ function GoalsSection({ goals }: { goals: FinancialPulse['goals'] }) {
         <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <span style={{ fontSize: 16 }}>{g.emoji}</span>
+              <GoalIcon emoji={g.emoji} size={16} color="var(--text-3)" />
               <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{g.label}</span>
               {g.dueDate && (
                 <span style={{ fontSize: 11, color: 'var(--text-3)' }}>

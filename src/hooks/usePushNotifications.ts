@@ -16,9 +16,24 @@ export function usePushNotifications() {
     if (Notification.permission === 'denied') {
       setState('denied'); return
     }
-    const reg = await navigator.serviceWorker.ready
-    const sub = await reg.pushManager.getSubscription()
-    setState(sub ? 'subscribed' : 'unsubscribed')
+    try {
+      // navigator.serviceWorker.ready never resolves if no SW is active —
+      // race with a 5s timeout so we don't stay stuck on 'loading' forever
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('sw-timeout')), 5000)
+      )
+      const reg = await Promise.race([navigator.serviceWorker.ready, timeout])
+      const sub = await reg.pushManager.getSubscription()
+      setState(sub ? 'subscribed' : 'unsubscribed')
+    } catch (err: unknown) {
+      const msg = (err as Error)?.message ?? ''
+      if (msg === 'sw-timeout') {
+        // SW not active yet — treat as unsubscribed so user can try enabling
+        setState('unsubscribed')
+      } else {
+        setState('unsupported')
+      }
+    }
   }, [])
 
   useEffect(() => { checkState() }, [checkState])
