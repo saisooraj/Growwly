@@ -8,12 +8,11 @@ import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import { addSavingsGoal, updateSavingsGoal, deleteSavingsGoal } from '@/lib/firestore'
 import { formatCurrencyFull } from '@/lib/utils'
+import { GoalIcon, GOAL_ICONS, ICON_COMPONENT_MAP } from '@/lib/categoryIcons'
 import { format, parseISO, differenceInMonths } from 'date-fns'
 import type { SavingsGoal } from '@/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
-
-const EMOJIS = ['🏠', '✈️', '🚗', '📱', '💍', '🎓', '💰', '🏖️', '🎯', '🛍️', '🏋️', '💻']
 
 interface FormState {
   name: string
@@ -23,7 +22,7 @@ interface FormState {
   targetDate: string
 }
 
-const EMPTY: FormState = { name: '', emoji: '🎯', targetAmount: '', currentAmount: '0', targetDate: '' }
+const EMPTY: FormState = { name: '', emoji: 'IconTarget', targetAmount: '', currentAmount: '0', targetDate: '' }
 
 export default function SavingsGoals() {
   const { savingsGoals } = useAppStore()
@@ -128,7 +127,7 @@ export default function SavingsGoals() {
               <div key={g.id} className="card">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2.5">
-                    <span className="text-2xl">{g.emoji}</span>
+                    <span className="text-slate-500 dark:text-slate-400"><GoalIcon emoji={g.emoji} size={24} /></span>
                     <div>
                       <p className="font-semibold text-slate-800 dark:text-slate-100">{g.name}</p>
                       {g.targetDate && (
@@ -211,24 +210,29 @@ export default function SavingsGoals() {
                   </div>
 
                   <div className="p-5 space-y-4">
-                    {/* Emoji picker */}
+                    {/* Icon picker */}
                     <div>
                       <label className="label">Icon</label>
                       <div className="flex flex-wrap gap-2">
-                        {EMOJIS.map((e) => (
-                          <button
-                            key={e}
-                            type="button"
-                            onClick={() => setForm(f => ({ ...f, emoji: e }))}
-                            className={`w-9 h-9 text-lg rounded-xl transition-all ${
-                              form.emoji === e
-                                ? 'bg-brand-100 dark:bg-brand-900/40 ring-2 ring-brand-500'
-                                : 'bg-slate-50 dark:bg-slate-800 hover:bg-slate-100'
-                            }`}
-                          >
-                            {e}
-                          </button>
-                        ))}
+                        {GOAL_ICONS.map((p) => {
+                          const active = form.emoji === p.name
+                          const Icon = ICON_COMPONENT_MAP[p.name]
+                          return (
+                            <button
+                              key={p.name}
+                              type="button"
+                              title={p.label}
+                              onClick={() => setForm(f => ({ ...f, emoji: p.name }))}
+                              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
+                                active
+                                  ? 'bg-brand-100 dark:bg-brand-900/40 ring-2 ring-brand-500 text-brand-600'
+                                  : 'bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400'
+                              }`}
+                            >
+                              {Icon && <Icon size={18} stroke={1.5} />}
+                            </button>
+                          )
+                        })}
                       </div>
                     </div>
 

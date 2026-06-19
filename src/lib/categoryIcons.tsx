@@ -239,21 +239,45 @@ export function getCategoryDisplayName(category: string): string {
   return parsed.name || category
 }
 
-// ── Goal emoji → Tabler icon (maps stored goal emojis to icons) ───────────────
+// ── Curated icon palette for savings goals ────────────────────────────────────
+
+export const GOAL_ICONS: PaletteIcon[] = [
+  { name: 'IconTarget',        Icon: IconTarget,        label: 'Goal',         group: 'Goals' },
+  { name: 'IconHome',          Icon: IconHome,          label: 'Home',         group: 'Goals' },
+  { name: 'IconBuildingEstate',Icon: IconBuildingEstate,label: 'Property',     group: 'Goals' },
+  { name: 'IconCrane',         Icon: IconCrane,         label: 'Construction', group: 'Goals' },
+  { name: 'IconPlane',         Icon: IconPlane,         label: 'Travel',       group: 'Goals' },
+  { name: 'IconBeach',         Icon: IconBeach,         label: 'Vacation',     group: 'Goals' },
+  { name: 'IconCar',           Icon: IconCar,           label: 'Car',          group: 'Goals' },
+  { name: 'IconMotorbike',     Icon: IconMotorbike,     label: 'Motorbike',    group: 'Goals' },
+  { name: 'IconDeviceMobile',  Icon: IconDeviceMobile,  label: 'Phone',        group: 'Goals' },
+  { name: 'IconDeviceLaptop',  Icon: IconDeviceLaptop,  label: 'Laptop',       group: 'Goals' },
+  { name: 'IconDeviceWatch',   Icon: IconDeviceWatch,   label: 'Watch',        group: 'Goals' },
+  { name: 'IconDiamond',       Icon: IconDiamond,       label: 'Jewellery',    group: 'Goals' },
+  { name: 'IconSchool',        Icon: IconSchool,        label: 'Education',    group: 'Goals' },
+  { name: 'IconBook',          Icon: IconBook,          label: 'Course',       group: 'Goals' },
+  { name: 'IconCoin',          Icon: IconCoin,          label: 'Savings',      group: 'Goals' },
+  { name: 'IconTrendingUp',    Icon: IconTrendingUp,    label: 'Investment',   group: 'Goals' },
+  { name: 'IconMedal',         Icon: IconMedal,         label: 'Gold',         group: 'Goals' },
+  { name: 'IconBuildingBank',  Icon: IconBuildingBank,  label: 'Bank',         group: 'Goals' },
+  { name: 'IconAlertOctagon',  Icon: IconAlertOctagon,  label: 'Emergency',    group: 'Goals' },
+  { name: 'IconShield',        Icon: IconShield,        label: 'Insurance',    group: 'Goals' },
+  { name: 'IconConfetti',      Icon: IconConfetti,      label: 'Celebration',  group: 'Goals' },
+  { name: 'IconHeart',         Icon: IconHeart,         label: 'Wedding',      group: 'Goals' },
+  { name: 'IconUsers',         Icon: IconUsers,         label: 'Family',       group: 'Goals' },
+  { name: 'IconGift',          Icon: IconGift,          label: 'Gift',         group: 'Goals' },
+  { name: 'IconShoppingBag',   Icon: IconShoppingBag,   label: 'Shopping',     group: 'Goals' },
+  { name: 'IconBarbell',       Icon: IconBarbell,       label: 'Fitness',      group: 'Goals' },
+  { name: 'IconTrophy',        Icon: IconTrophy,        label: 'Trophy',       group: 'Goals' },
+  { name: 'IconStar',          Icon: IconStar,          label: 'Dream',        group: 'Goals' },
+]
+
+// ── Goal icon renderer ────────────────────────────────────────────────────────
 
 const GOAL_EMOJI_ICON_MAP: Record<string, TablerIconComponent> = {
-  '🏠': IconHome,
-  '✈️': IconPlane,
-  '🚗': IconCar,
-  '📱': IconDeviceMobile,
-  '💍': IconDiamond,
-  '🎓': IconSchool,
-  '💰': IconCoin,
-  '🏖️': IconBeach,
-  '🎯': IconTarget,
-  '🛍️': IconShoppingBag,
-  '🏋️': IconBarbell,
-  '💻': IconDeviceLaptop,
+  '🏠': IconHome,  '✈️': IconPlane,  '🚗': IconCar,    '📱': IconDeviceMobile,
+  '💍': IconDiamond, '🎓': IconSchool, '💰': IconCoin, '🏖️': IconBeach,
+  '🎯': IconTarget, '🛍️': IconShoppingBag, '🏋️': IconBarbell, '💻': IconDeviceLaptop,
 }
 
 interface GoalIconProps {
@@ -264,8 +288,14 @@ interface GoalIconProps {
 }
 
 export function GoalIcon({ emoji, size = 16, color = 'currentColor', stroke = 1.5 }: GoalIconProps) {
-  const Icon = GOAL_EMOJI_ICON_MAP[emoji]
-  if (Icon) return <Icon size={size} color={color} stroke={stroke} />
-  // Unknown emoji — show it as-is
+  // New format: bare icon name string like "IconHome"
+  if (emoji.startsWith('Icon')) {
+    const Icon = ICON_COMPONENT_MAP[emoji]
+    if (Icon) return <Icon size={size} color={color} stroke={stroke} />
+  }
+  // Legacy: emoji mapped to Tabler icon
+  const MappedIcon = GOAL_EMOJI_ICON_MAP[emoji]
+  if (MappedIcon) return <MappedIcon size={size} color={color} stroke={stroke} />
+  // Ultimate fallback: raw emoji text
   return <span style={{ fontSize: size, lineHeight: 1 }}>{emoji}</span>
 }
