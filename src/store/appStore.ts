@@ -10,6 +10,8 @@ import type {
   UpcomingExpense,
   UpcomingPayment,
   Task,
+  Asset,
+  Liability,
 } from '@/types'
 import { getCurrentMonth } from '@/lib/utils'
 
@@ -24,6 +26,8 @@ interface AppState {
   upcomingExpenses: UpcomingExpense[]
   upcomingPayments: UpcomingPayment[]
   tasks: Task[]
+  assets: Asset[]
+  liabilities: Liability[]
   selectedMonth: string
   loading: boolean
   initialized: boolean
@@ -38,6 +42,8 @@ interface AppState {
   setUpcomingExpenses: (u: UpcomingExpense[]) => void
   setUpcomingPayments: (p: UpcomingPayment[]) => void
   setTasks: (t: Task[]) => void
+  setAssets: (a: Asset[]) => void
+  setLiabilities: (l: Liability[]) => void
   setSelectedMonth: (m: string) => void
   setLoading: (l: boolean) => void
   setInitialized: (i: boolean) => void
@@ -55,6 +61,8 @@ export const useAppStore = create<AppState>((set) => ({
   upcomingExpenses: [],
   upcomingPayments: [],
   tasks: [],
+  assets: [],
+  liabilities: [],
   selectedMonth: getCurrentMonth(),
   loading: false,
   initialized: false,
@@ -69,6 +77,8 @@ export const useAppStore = create<AppState>((set) => ({
   setUpcomingExpenses: (upcomingExpenses) => set({ upcomingExpenses }),
   setUpcomingPayments: (upcomingPayments) => set({ upcomingPayments }),
   setTasks: (tasks) => set({ tasks }),
+  setAssets: (assets) => set({ assets }),
+  setLiabilities: (liabilities) => set({ liabilities }),
   setSelectedMonth: (selectedMonth) => set({ selectedMonth }),
   setLoading: (loading) => set({ loading }),
   setInitialized: (initialized) => set({ initialized }),
@@ -84,6 +94,8 @@ export const useAppStore = create<AppState>((set) => ({
       upcomingExpenses: [],
       upcomingPayments: [],
       tasks: [],
+      assets: [],
+      liabilities: [],
       selectedMonth: getCurrentMonth(),
       initialized: false,
     }),

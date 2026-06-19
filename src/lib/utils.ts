@@ -66,12 +66,13 @@ export function buildMonthlySummary(
 
   let repaymentReceived = 0  // lent money came back
   let repaymentPaid     = 0  // borrowed money repaid by you
+  let efWithdrawn       = 0  // drawn from emergency fund (own savings, offsets expense)
 
   for (const t of monthTxs) {
     if (t.type === 'transfer') {
-      // Repayment transfers adjust cashNet but not income/expenses
       if (t.transferKind === 'loan_repayment_received') repaymentReceived += t.amount
       if (t.transferKind === 'loan_repayment_paid')     repaymentPaid     += t.amount
+      if (t.transferKind === 'ef_withdrawal')           efWithdrawn       += t.amount
       continue
     }
     if (t.type === 'income') {
@@ -100,7 +101,7 @@ export function buildMonthlySummary(
   }
 
   const net     = totalIncome - totalExpenses
-  const cashNet = net - totalLent + totalBorrowed + repaymentReceived - repaymentPaid
+  const cashNet = net - totalLent + totalBorrowed + repaymentReceived - repaymentPaid + efWithdrawn
 
   return {
     month,
@@ -166,6 +167,12 @@ export const TRANSFER_KINDS = [
     label: 'Savings / Investment',
     sub: 'Moved to savings or investment account',
     dir: 'out' as const,
+  },
+  {
+    id: 'ef_withdrawal' as const,
+    label: 'Emergency Fund Used',
+    sub: 'Withdrawn from Emergency Fund',
+    dir: 'in' as const,
   },
 ] as const
 

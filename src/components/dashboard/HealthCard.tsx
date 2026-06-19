@@ -2,8 +2,8 @@
 
 import { useMemo } from 'react'
 import { useAppStore } from '@/store/appStore'
-import { buildMonthlySummary } from '@/lib/utils'
-import { endOfMonth, parseISO, differenceInCalendarDays } from 'date-fns'
+import { buildMonthlySummary, getLast6Months } from '@/lib/utils'
+import { endOfMonth, parseISO, differenceInCalendarDays, format } from 'date-fns'
 
 function useHealthScore() {
   const { transactions, budgets, emergencyFund, selectedMonth } = useAppStore()
@@ -136,31 +136,96 @@ function Bar({ value, tone = 'good', height = 4 }: { value: number; tone?: strin
   )
 }
 
+function SavingsSparkline() {
+  const { transactions, settings } = useAppStore()
+
+  const months = useMemo(() => {
+    return getLast6Months().map(m => {
+      const summary = buildMonthlySummary(transactions, m, settings)
+      const rate = summary.totalIncome > 0 ? (summary.net / summary.totalIncome) * 100 : 0
+      return { month: m, rate, label: format(parseISO(`${m}-01`), 'MMM') }
+    })
+  }, [transactions, settings])
+
+  const max = Math.max(...months.map(m => m.rate), 30)
+  const min = Math.min(...months.map(m => m.rate), 0)
+  const range = max - min || 1
+  const W = 120, H = 36, PAD = 4
+
+  const points = months.map((m, i) => {
+    const x = PAD + (i / (months.length - 1)) * (W - PAD * 2)
+    const y = H - PAD - ((m.rate - min) / range) * (H - PAD * 2)
+    return `${x},${y}`
+  }).join(' ')
+
+  const latest = months[months.length - 1]?.rate ?? 0
+  const rateColor = latest >= 20 ? 'var(--good-ink)' : latest >= 10 ? 'var(--warn-ink)' : 'var(--bad-ink)'
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 8, marginTop: 4 }}>
+      <div>
+        <p style={{ fontSize: 10, color: 'var(--text-4)', margin: '0 0 2px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Savings Rate</p>
+        <p style={{ fontSize: 16, fontWeight: 700, color: rateColor, margin: 0 }}>{latest.toFixed(1)}%</p>
+        <p style={{ fontSize: 10, color: 'var(--text-4)', margin: '1px 0 0' }}>this month</p>
+      </div>
+      <svg width={W} height={H} style={{ flex: 1 }}>
+        <polyline
+          points={points}
+          fill="none"
+          stroke={latest >= 20 ? 'var(--good)' : latest >= 10 ? 'var(--warn)' : 'var(--bad)'}
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        {/* Zero line */}
+        {min < 0 && (
+          <line
+            x1={PAD} y1={H - PAD - ((0 - min) / range) * (H - PAD * 2)}
+            x2={W - PAD} y2={H - PAD - ((0 - min) / range) * (H - PAD * 2)}
+            stroke="var(--bad)" strokeWidth={0.5} strokeDasharray="2 2" opacity={0.4}
+          />
+        )}
+        {/* Month labels */}
+        {months.map((m, i) => (
+          <text key={m.month}
+            x={PAD + (i / (months.length - 1)) * (W - PAD * 2)}
+            y={H}
+            textAnchor="middle" fontSize={8} fill="var(--text-4)"
+          >{m.label}</text>
+        ))}
+      </svg>
+    </div>
+  )
+}
+
 export default function HealthCard() {
   const { score, parts, description } = useHealthScore()
 
   return (
-    <div className="card" style={{ display: 'flex', gap: 22, alignItems: 'stretch' }}>
-      <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-        <HealthRing score={score} size={150} thickness={12} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 12, justifyContent: 'center' }}>
-        <div>
-          <div className="h-eyebrow">Financial health</div>
-          <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 6, lineHeight: 1.45 }}>
-            {description}
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', gap: 22, alignItems: 'center' }}>
+        <div style={{ flexShrink: 0 }}>
+          <HealthRing score={score} size={120} thickness={10} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <div className="h-eyebrow">Financial health</div>
+            <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 4, lineHeight: 1.45 }}>
+              {description}
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {parts.map(p => (
+              <div key={p.k} style={{ display: 'grid', gridTemplateColumns: '70px 1fr 28px', gap: 10, alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-3)', fontSize: 11.5 }}>{p.k}</span>
+                <Bar value={p.v} tone={p.v >= 75 ? 'good' : p.v >= 50 ? 'warn' : 'bad'} height={4} />
+                <span className="num" style={{ fontWeight: 600, color: 'var(--text-2)', fontSize: 11.5, textAlign: 'right' }}>{p.v}</span>
+              </div>
+            ))}
           </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-          {parts.map(p => (
-            <div key={p.k} style={{ display: 'grid', gridTemplateColumns: '70px 1fr 28px', gap: 10, alignItems: 'center' }}>
-              <span style={{ color: 'var(--text-3)', fontSize: 11.5 }}>{p.k}</span>
-              <Bar value={p.v} tone={p.v >= 75 ? 'good' : p.v >= 50 ? 'warn' : 'bad'} height={4} />
-              <span className="num" style={{ fontWeight: 600, color: 'var(--text-2)', fontSize: 11.5, textAlign: 'right' }}>{p.v}</span>
-            </div>
-          ))}
-        </div>
       </div>
+      <SavingsSparkline />
     </div>
   )
 }

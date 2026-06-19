@@ -14,12 +14,14 @@ import {
   LineChart,
   Settings,
   CheckSquare,
+  TrendingUp,
 } from 'lucide-react'
 
 const NAV = [
   { href: '/',             icon: LayoutDashboard, label: 'Home' },
   { href: '/transactions', icon: ArrowLeftRight,  label: 'Txns' },
   { href: '/planning',     icon: CalendarDays,    label: 'Plan' },
+  { href: '/networth',     icon: TrendingUp,      label: 'Net Worth' },
   { href: '/upcoming',     icon: CalendarClock,   label: 'Upcoming' },
   { href: '/goals',        icon: Target,          label: 'Goals' },
   { href: '/projects',     icon: FolderKanban,    label: 'Projects' },

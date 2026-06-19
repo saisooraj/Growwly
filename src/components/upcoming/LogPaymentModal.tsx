@@ -4,8 +4,9 @@ import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { X, IndianRupee } from 'lucide-react'
 import { format } from 'date-fns'
-import { addUpcomingPayment, addTransaction, updateUpcomingPayment } from '@/lib/firestore'
+import { addUpcomingPayment, addTransaction, updateUpcomingPayment, setEmergencyFund } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
+import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
 import { formatCurrencyFull } from '@/lib/utils'
 import type { UpcomingExpense, UpcomingPayment } from '@/types'
@@ -21,6 +22,7 @@ interface Props {
 
 export default function LogPaymentModal({ open, onClose, item, alreadyPaid, editPayment }: Props) {
   const { user } = useAuth()
+  const { emergencyFund } = useAppStore()
   const refresh  = useRefreshData()
 
   const isEditing = !!editPayment
@@ -31,7 +33,12 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
   const [date, setDate]           = useState(format(new Date(), 'yyyy-MM-dd'))
   const [notes, setNotes]         = useState('')
   const [alsoLog, setAlsoLog]     = useState(true)
+  const [useEF, setUseEF]         = useState(false)
+  const [efAmount, setEfAmount]   = useState('')
   const [saving, setSaving]       = useState(false)
+
+  const efBalance = emergencyFund?.currentBalance ?? 0
+  const canUseEF  = !isEditing && !isIncome && efBalance > 0
 
   useEffect(() => {
     if (open) {
@@ -44,6 +51,8 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
         setDate(format(new Date(), 'yyyy-MM-dd'))
         setNotes('')
         setAlsoLog(true)
+        setUseEF(false)
+        setEfAmount('')
       }
     }
   }, [open, editPayment, remaining])
@@ -51,35 +60,63 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!user || !item || !amount || Number(amount) <= 0) return
+
+    const totalAmt = Number(amount)
+    const efAmt = useEF && canUseEF ? Math.min(Number(efAmount) || 0, totalAmt, efBalance) : 0
+
+    if (useEF && efAmt <= 0) {
+      toast.error('Enter a valid EF amount')
+      return
+    }
+
     setSaving(true)
     try {
       if (isEditing && editPayment) {
-        await updateUpcomingPayment(editPayment.id, {
-          amount: Number(amount),
-          date,
-          notes,
-        })
+        await updateUpcomingPayment(editPayment.id, { amount: totalAmt, date, notes })
       } else {
         let linkedTransactionId: string | undefined
 
         if (alsoLog) {
+          const efNote = efAmt > 0 ? ` (${formatCurrencyFull(efAmt)} from Emergency Fund)` : ''
           linkedTransactionId = await addTransaction(user.uid, {
             type: isIncome ? 'income' : 'expense',
-            amount: Number(amount),
+            amount: totalAmt,
             category: item.category ?? (isIncome ? 'Other Income' : 'Other'),
             date,
-            notes: notes || (isIncome ? `Received: ${item.label}` : `Payment towards: ${item.label}`),
+            notes: (notes || (isIncome ? `Received: ${item.label}` : `Payment towards: ${item.label}`)) + efNote,
             isRecurring: false,
           })
         }
 
         await addUpcomingPayment(user.uid, {
           upcomingId: item.id,
-          amount: Number(amount),
+          amount: totalAmt,
           date,
           notes,
           ...(linkedTransactionId ? { linkedTransactionId } : {}),
         })
+
+        // Deduct from EF + log an ef_withdrawal transfer so it's visible in
+        // transactions and offsets cashNet correctly
+        if (efAmt > 0 && emergencyFund && user) {
+          await Promise.all([
+            setEmergencyFund(user.uid, {
+              targetAmount: emergencyFund.targetAmount,
+              currentBalance: Math.max(0, emergencyFund.currentBalance - efAmt),
+              usedAmount: (emergencyFund.usedAmount ?? 0) + efAmt,
+              lastUpdated: new Date().toISOString(),
+            }),
+            addTransaction(user.uid, {
+              type: 'transfer',
+              transferKind: 'ef_withdrawal',
+              amount: efAmt,
+              category: 'Other',
+              date,
+              notes: `EF withdrawal for: ${item.label}`,
+              isRecurring: false,
+            }),
+          ])
+        }
       }
 
       await refresh()
@@ -202,6 +239,69 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
                       onChange={e => setNotes(e.target.value)}
                     />
                   </div>
+
+                  {/* Emergency Fund partial withdrawal */}
+                  {canUseEF && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <label style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: 12, borderRadius: 10, cursor: 'pointer',
+                        background: useEF ? 'color-mix(in oklch, var(--warn) 10%, transparent)' : 'var(--surface-2)',
+                        border: `1px solid ${useEF ? 'var(--warn)' : 'var(--border)'}`,
+                        transition: 'all .15s',
+                      }}>
+                        <input type="checkbox" checked={useEF} onChange={e => { setUseEF(e.target.checked); if (!e.target.checked) setEfAmount('') }} style={{ display: 'none' }} />
+                        <div style={{
+                          width: 36, height: 20, borderRadius: 999, flexShrink: 0,
+                          background: useEF ? 'var(--warn)' : 'var(--border-strong)',
+                          position: 'relative', transition: 'background .2s',
+                        }}>
+                          <div style={{
+                            position: 'absolute', top: 2, left: useEF ? 18 : 2,
+                            width: 16, height: 16, borderRadius: '50%',
+                            background: '#fff', transition: 'left .2s',
+                            boxShadow: '0 1px 3px rgba(0,0,0,.2)',
+                          }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: useEF ? 'var(--warn-ink)' : 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                            🆘 Part of this came from Emergency Fund
+                          </div>
+                          <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 1 }}>
+                            Available: {formatCurrencyFull(efBalance)}
+                          </div>
+                        </div>
+                      </label>
+
+                      {useEF && (
+                        <div>
+                          <label className="label">Amount from Emergency Fund (₹)</label>
+                          <input
+                            type="number"
+                            min="0.01"
+                            max={Math.min(Number(amount) || 0, efBalance)}
+                            step="0.01"
+                            className="input"
+                            style={{ fontSize: 16, fontWeight: 600 }}
+                            placeholder="e.g. 2000"
+                            value={efAmount}
+                            onChange={e => setEfAmount(e.target.value)}
+                            autoFocus
+                          />
+                          {Number(efAmount) > 0 && (
+                            <p style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 4 }}>
+                              EF balance after: {formatCurrencyFull(Math.max(0, efBalance - Number(efAmount)))}
+                            </p>
+                          )}
+                          {Number(efAmount) > efBalance && (
+                            <p style={{ fontSize: 11.5, color: 'var(--bad-ink)', marginTop: 4 }}>
+                              Exceeds EF balance of {formatCurrencyFull(efBalance)}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Also log as transaction toggle — new payments only */}
                   {!isEditing && <label style={{

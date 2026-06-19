@@ -14,6 +14,8 @@ import {
   getUserUpcoming,
   getUserUpcomingPayments,
   getUserTasks,
+  getUserAssets,
+  getUserLiabilities,
 } from '@/lib/firestore'
 
 export function useData() {
@@ -29,6 +31,8 @@ export function useData() {
     setUpcomingExpenses,
     setUpcomingPayments,
     setTasks,
+    setAssets,
+    setLiabilities,
     setLoading,
     setInitialized,
     initialized,
@@ -46,7 +50,7 @@ export function useData() {
       if (!user) return
       setLoading(true)
       try {
-        const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming, upcomingPmts, tasks] =
+        const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming, upcomingPmts, tasks, assets, liabilities] =
           await Promise.all([
             getUserTransactions(user.uid),
             getUserBudgets(user.uid),
@@ -58,6 +62,8 @@ export function useData() {
             getUserUpcoming(user.uid).catch(() => []),
             getUserUpcomingPayments(user.uid).catch(() => []),
             getUserTasks(user.uid).catch(() => []),
+            getUserAssets(user.uid).catch(() => []),
+            getUserLiabilities(user.uid).catch(() => []),
           ])
         setTransactions(txs)
         setBudgets(budgets)
@@ -69,6 +75,8 @@ export function useData() {
         setUpcomingExpenses(upcoming)
         setUpcomingPayments(upcomingPmts)
         setTasks(tasks)
+        setAssets(assets)
+        setLiabilities(liabilities)
         setInitialized(true)
       } finally {
         setLoading(false)
@@ -92,16 +100,16 @@ export function useRefreshData() {
     setUpcomingExpenses,
     setUpcomingPayments,
     setTasks,
+    setAssets,
+    setLiabilities,
     setLoading,
   } = useAppStore()
 
   return async function refresh() {
     if (!user) return
-    // Do NOT touch `initialized` here — setting it false triggers useData to
-    // start a concurrent reload which can race and restore stale data.
     setLoading(true)
     try {
-      const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming, upcomingPmts, tasks] =
+      const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming, upcomingPmts, tasks, assets, liabilities] =
         await Promise.all([
           getUserTransactions(user.uid),
           getUserBudgets(user.uid),
@@ -113,6 +121,8 @@ export function useRefreshData() {
           getUserUpcoming(user.uid).catch(() => []),
           getUserUpcomingPayments(user.uid).catch(() => []),
           getUserTasks(user.uid).catch(() => []),
+          getUserAssets(user.uid).catch(() => []),
+          getUserLiabilities(user.uid).catch(() => []),
         ])
       setTransactions(txs)
       setBudgets(budgets)
@@ -124,6 +134,8 @@ export function useRefreshData() {
       setUpcomingExpenses(upcoming)
       setUpcomingPayments(upcomingPmts)
       setTasks(tasks)
+      setAssets(assets)
+      setLiabilities(liabilities)
     } finally {
       setLoading(false)
     }

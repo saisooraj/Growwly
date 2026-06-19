@@ -15,6 +15,7 @@ import {
   LineChart,
   Target,
   CheckSquare,
+  TrendingUp,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
@@ -24,6 +25,7 @@ const NAV = [
   { href: '/',             icon: LayoutDashboard, label: 'Overview' },
   { href: '/transactions', icon: ArrowLeftRight,  label: 'Transactions' },
   { href: '/planning',     icon: CalendarDays,    label: 'Planning' },
+  { href: '/networth',     icon: TrendingUp,      label: 'Net Worth' },
   { href: '/upcoming',     icon: CalendarClock,   label: 'Upcoming' },
   { href: '/goals',        icon: Target,          label: 'Savings' },
   { href: '/projects',     icon: FolderKanban,    label: 'Projects' },

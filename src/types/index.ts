@@ -5,6 +5,7 @@ export type TransferKind =
   | 'loan_repayment_received'
   | 'loan_repayment_paid'
   | 'savings_transfer'
+  | 'ef_withdrawal'
 
 export type Category = string
 
@@ -104,6 +105,7 @@ export interface UserSettings {
   salaryCycleRule?: 'none' | 'last-working-day' | 'fixed-day'
   salaryCycleFixedDay?: number                    // 1–31, used when rule = 'fixed-day'
   cycleOverrides?: Record<string, string>         // { "2026-06": "2026-05-30" } per-month overrides
+  spendingRule?: { needs: number; wants: number; savings: number }
   customCategories?: string[]                     // user-defined categories saved for reuse
   dailyLivingCost?: number                        // legacy — superseded by dailyLivingSchedules
   dailyLivingItems?: { label: string; amount: number }[]  // legacy
@@ -255,4 +257,47 @@ export interface FinancialPulse {
   spendAnalysis: PulseSpendCategory[]
   goals: PulseGoal[]
   borrowingAlerts: PulseBorrowingAlert[]
+}
+
+// ── Net Worth ─────────────────────────────────────────────────────────────────
+
+export type AssetKind =
+  | 'cash'
+  | 'fd_rd'
+  | 'gold_grams'
+  | 'mutual_fund'
+  | 'stocks'
+  | 'real_estate'
+  | 'vehicle'
+  | 'other'
+
+export interface Asset {
+  id: string
+  userId: string
+  name: string
+  kind: AssetKind
+  value: number        // current value in ₹ (for gold_grams: value = grams)
+  createdAt: string
+  updatedAt: string
+}
+
+export type LiabilityKind =
+  | 'home_loan'
+  | 'car_loan'
+  | 'personal_loan'
+  | 'credit_card'
+  | 'other'
+
+export interface Liability {
+  id: string
+  userId: string
+  name: string
+  kind: LiabilityKind
+  principal: number       // original loan amount (or current balance for credit card)
+  interestRate: number    // annual % (0 for credit card or if unknown)
+  tenureMonths: number    // original tenure (0 for credit card)
+  startDate: string       // YYYY-MM-DD
+  emiAmount?: number      // auto-calculated or manually overridden
+  createdAt: string
+  updatedAt: string
 }

@@ -22,6 +22,8 @@ import type {
   UpcomingExpense,
   UpcomingPayment,
   Task,
+  Asset,
+  Liability,
 } from '@/types'
 
 // ── Transactions ────────────────────────────────────────────────────────────
@@ -397,4 +399,48 @@ export async function updateTask(id: string, data: Partial<Task>): Promise<void>
 
 export async function deleteTask(id: string): Promise<void> {
   await deleteDoc(doc(db, 'tasks', id))
+}
+
+// ── Net Worth — Assets ─────────────────────────────────────────────────────────
+
+export async function getUserAssets(userId: string): Promise<Asset[]> {
+  const q = query(collection(db, 'assets'), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Asset)
+}
+
+export async function addAsset(userId: string, data: Omit<Asset, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  const now = new Date().toISOString()
+  const ref = await addDoc(collection(db, 'assets'), { ...data, userId, createdAt: now, updatedAt: now })
+  return ref.id
+}
+
+export async function updateAsset(id: string, data: Partial<Asset>): Promise<void> {
+  await updateDoc(doc(db, 'assets', id), { ...data, updatedAt: new Date().toISOString() })
+}
+
+export async function deleteAsset(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'assets', id))
+}
+
+// ── Net Worth — Liabilities ────────────────────────────────────────────────────
+
+export async function getUserLiabilities(userId: string): Promise<Liability[]> {
+  const q = query(collection(db, 'liabilities'), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Liability)
+}
+
+export async function addLiability(userId: string, data: Omit<Liability, 'id' | 'userId' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  const now = new Date().toISOString()
+  const ref = await addDoc(collection(db, 'liabilities'), { ...data, userId, createdAt: now, updatedAt: now })
+  return ref.id
+}
+
+export async function updateLiability(id: string, data: Partial<Liability>): Promise<void> {
+  await updateDoc(doc(db, 'liabilities', id), { ...data, updatedAt: new Date().toISOString() })
+}
+
+export async function deleteLiability(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'liabilities', id))
 }
