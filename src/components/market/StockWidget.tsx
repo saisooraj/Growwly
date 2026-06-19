@@ -198,7 +198,10 @@ export default function StockWidget() {
       )}
 
       <p className="text-xs text-slate-400 text-center">
-        {data[0]?.marketState === 'REGULAR' ? '🟢 Market Open' : '🔴 Market Closed'} · Data from Yahoo Finance · Refreshes every 60s
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: data[0]?.marketState === 'REGULAR' ? '#22c55e' : '#ef4444', display: 'inline-block', flexShrink: 0 }} />
+          {data[0]?.marketState === 'REGULAR' ? 'Market Open' : 'Market Closed'}
+        </span> · Data from Yahoo Finance · Refreshes every 60s
       </p>
     </div>
   )

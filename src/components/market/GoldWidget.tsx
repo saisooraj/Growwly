@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { IconCoin } from '@tabler/icons-react'
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from 'recharts'
 import { format, parseISO } from 'date-fns'
 
@@ -51,7 +52,7 @@ export default function GoldWidget() {
     return (
       <div className="card space-y-3">
         <div className="flex items-center gap-2">
-          <span className="text-lg">🪙</span>
+          <IconCoin size={18} className="text-amber-500" stroke={1.5} />
           <h3 className="font-semibold text-slate-800">Gold — 22K</h3>
         </div>
         <div className="space-y-2">
@@ -82,7 +83,7 @@ export default function GoldWidget() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-lg">🪙</span>
+          <IconCoin size={18} className="text-amber-500" stroke={1.5} />
           <h3 className="font-semibold text-slate-800">Gold — 22K (IBJA)</h3>
         </div>
         <div className="flex items-center gap-2">

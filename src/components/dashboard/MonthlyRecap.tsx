@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { IconChartBar, IconTrophy, IconCoin } from '@tabler/icons-react'
 import { useAppStore } from '@/store/appStore'
 import { buildMonthlySummary, formatCurrencyFull, getLast6Months } from '@/lib/utils'
 import { format, subMonths, parseISO } from 'date-fns'
@@ -66,7 +67,7 @@ export default function MonthlyRecap() {
   const slides = [
     // Slide 0: Spending overview
     <div key="spend" className="text-center py-4 space-y-4">
-      <p className="text-4xl">📊</p>
+      <div className="flex justify-center"><IconChartBar size={40} className="text-brand-500" stroke={1.5} /></div>
       <p className="text-lg font-bold text-slate-800 dark:text-slate-100">{prevLabel} recap</p>
       <div className="grid grid-cols-2 gap-3">
         <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#1a1d30]">
@@ -83,13 +84,13 @@ export default function MonthlyRecap() {
         <p className={`text-2xl font-bold ${prevSummary.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>
           {prevSummary.net >= 0 ? '+' : ''}{formatCurrencyFull(prevSummary.net)}
         </p>
-        <p className="text-xs text-slate-400 mt-0.5">{prevSummary.net >= 0 ? 'You saved money last month 🎉' : 'Spending exceeded income'}</p>
+        <p className="text-xs text-slate-400 mt-0.5">{prevSummary.net >= 0 ? 'You saved money last month' : 'Spending exceeded income'}</p>
       </div>
     </div>,
 
     // Slide 1: Top category + trend
     <div key="category" className="text-center py-4 space-y-4">
-      <p className="text-4xl">🏆</p>
+      <div className="flex justify-center"><IconTrophy size={40} className="text-amber-500" stroke={1.5} /></div>
       <p className="text-lg font-bold text-slate-800 dark:text-slate-100">Biggest spend</p>
       {topCategory ? (
         <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/10">
@@ -120,7 +121,7 @@ export default function MonthlyRecap() {
 
     // Slide 2: Borrowings + emergency fund
     <div key="money" className="text-center py-4 space-y-4">
-      <p className="text-4xl">💸</p>
+      <div className="flex justify-center"><IconCoin size={40} className="text-brand-500" stroke={1.5} /></div>
       <p className="text-lg font-bold text-slate-800 dark:text-slate-100">Money owed</p>
       <div className="grid grid-cols-2 gap-3">
         <div className="p-3 rounded-xl bg-red-50 dark:bg-red-900/10">
@@ -212,7 +213,7 @@ export default function MonthlyRecap() {
                       onClick={close}
                       className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium transition-colors"
                     >
-                      Start {format(new Date(), 'MMMM')} fresh 🚀
+                      Start {format(new Date(), 'MMMM')} fresh
                     </button>
                   )}
 

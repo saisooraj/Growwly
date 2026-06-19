@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, TrendingDown, TrendingUp, Minus, Calendar, AlertCircle } from 'lucide-react'
+import { X, TrendingDown, TrendingUp, Minus, Calendar, AlertCircle, Zap } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import type { FinancialPulse } from '@/types'
 import { formatCurrency, formatCurrencyFull } from '@/lib/utils'
@@ -409,7 +409,7 @@ export default function PulseSheet({ open, onClose, pulse }: Props) {
         }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>⚡ {monthLabel} Pulse</span>
+              <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 5 }}><Zap size={14} /> {monthLabel} Pulse</span>
               <span style={{
                 fontSize: 11.5, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
                 background: colors.bg, color: colors.ink,

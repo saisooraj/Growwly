@@ -322,7 +322,7 @@ export function computePulse(
   if (emergencyFund && emergencyFund.targetAmount > 0) {
     goals.push({
       label: 'Emergency Fund',
-      emoji: '🛡️',
+      emoji: 'IconAlertOctagon',
       current: emergencyFund.currentBalance,
       target: emergencyFund.targetAmount,
       pct: Math.min((emergencyFund.currentBalance / emergencyFund.targetAmount) * 100, 100),
@@ -333,7 +333,7 @@ export function computePulse(
     if (g.targetAmount <= 0) continue
     goals.push({
       label: g.name,
-      emoji: g.emoji || '🎯',
+      emoji: g.emoji || 'IconTarget',
       current: g.currentAmount,
       target: g.targetAmount,
       pct: Math.min((g.currentAmount / g.targetAmount) * 100, 100),
@@ -345,7 +345,7 @@ export function computePulse(
     if (p.totalBudget <= 0) continue
     goals.push({
       label: p.name,
-      emoji: '📦',
+      emoji: 'IconCrane',
       current: p.paid,
       target: p.totalBudget,
       pct: Math.min((p.paid / p.totalBudget) * 100, 100),

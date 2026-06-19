@@ -3,6 +3,7 @@
 import { Fragment, useState, useEffect, useCallback } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { X, RefreshCw, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Split, UserPlus, Trash2 } from 'lucide-react'
+import { IconMedal, IconCrane } from '@tabler/icons-react'
 import { format } from 'date-fns'
 import { addTransaction, updateTransaction, updateProject, addBorrowing, setUserSettings } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
@@ -651,7 +652,7 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                         <label className="label" style={{ margin: 0 }}>Link to Project (optional)</label>
                         {(category === 'Gold' || category === 'Construction') && projectId && (
                           <span style={{ fontSize: 10.5, color: 'var(--brand-ink)', fontWeight: 500 }}>
-                            Auto-linked {category === 'Gold' ? '🥇' : '🏗️'}
+                            Auto-linked {category === 'Gold' ? <IconMedal size={12} stroke={1.5} /> : <IconCrane size={12} stroke={1.5} />}
                           </span>
                         )}
                       </div>

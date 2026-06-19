@@ -166,7 +166,7 @@ export default function SavingsGoals() {
 
                 <div className="flex items-center justify-between text-xs">
                   <span className={`font-semibold ${done ? 'text-green-600' : 'text-brand-600'}`}>
-                    {done ? '🎉 Goal reached!' : `${pct.toFixed(0)}% done`}
+                    {done ? 'Goal reached!' : `${pct.toFixed(0)}% done`}
                   </span>
                   {!done && monthlyNeeded && (
                     <span className="text-slate-400">{formatCurrencyFull(monthlyNeeded)}/mo needed</span>

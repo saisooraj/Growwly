@@ -3,6 +3,7 @@
 import { Fragment, useState, useEffect } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { X, IndianRupee } from 'lucide-react'
+import { IconAlertOctagon } from '@tabler/icons-react'
 import { format } from 'date-fns'
 import { addUpcomingPayment, addTransaction, updateUpcomingPayment, setEmergencyFund } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
@@ -265,7 +266,7 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
                         </div>
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 500, color: useEF ? 'var(--warn-ink)' : 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                            🆘 Part of this came from Emergency Fund
+                            <IconAlertOctagon size={14} /> Part of this came from Emergency Fund
                           </div>
                           <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 1 }}>
                             Available: {formatCurrencyFull(efBalance)}
