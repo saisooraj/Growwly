@@ -34,6 +34,7 @@ export default function SettingsPage() {
   const [monthlyIncome, setMonthlyIncome] = useState('')
   const [efTarget, setEfTarget] = useState('')
   const [saving, setSaving] = useState(false)
+  const [editingTargets, setEditingTargets] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,7 +73,8 @@ export default function SettingsPage() {
         pushReminderEnabled: pushState === 'subscribed',
       })
       await refresh()
-      toast.success('Settings saved')
+      toast.success('Saved')
+      setEditingTargets(false)
     } catch {
       toast.error('Failed to save settings')
     } finally {
@@ -315,25 +317,63 @@ export default function SettingsPage() {
 
         {/* Budget Targets */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Wallet size={14} style={{ color: 'var(--brand)' }} />
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Budget Targets</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Wallet size={14} style={{ color: 'var(--brand)' }} />
+              <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Budget Targets</h2>
+            </div>
+            {!editingTargets && (
+              <button
+                onClick={() => setEditingTargets(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text-3)', fontSize: 12 }}
+              >
+                <Pencil size={12} /> Edit
+              </button>
+            )}
           </div>
-          <div>
-            <label className="label">Monthly Income Target (₹)</label>
-            <input type="number" className="input" placeholder="e.g. 80000" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} />
-          </div>
-          <div>
-            <label className="label">Weekly Spending Budget (₹)</label>
-            <input type="number" className="input" placeholder="e.g. 3000" value={weeklyBudget} onChange={(e) => setWeeklyBudget(e.target.value)} />
-          </div>
-          <div>
-            <label className="label">Emergency Fund Target (₹)</label>
-            <input type="number" className="input" placeholder="e.g. 200000" value={efTarget} onChange={(e) => setEfTarget(e.target.value)} />
-          </div>
-          <button onClick={saveSettings} disabled={saving} className="btn-primary" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>
-            {saving ? 'Saving…' : 'Save Settings'}
-          </button>
+
+          {!editingTargets ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[
+                { label: 'Monthly Income Target', value: settings?.monthlyIncomeTarget },
+                { label: 'Weekly Spending Budget', value: settings?.weeklyBudget },
+                { label: 'Emergency Fund Target', value: settings?.emergencyFundTarget },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)' }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{label}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: value ? 'var(--text)' : 'var(--text-4)' }}>
+                    {value ? `₹${Number(value).toLocaleString('en-IN')}` : 'Not set'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="label">Monthly Income Target (₹)</label>
+                <input type="number" className="input" placeholder="e.g. 80000" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} autoFocus />
+              </div>
+              <div>
+                <label className="label">Weekly Spending Budget (₹)</label>
+                <input type="number" className="input" placeholder="e.g. 3000" value={weeklyBudget} onChange={(e) => setWeeklyBudget(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Emergency Fund Target (₹)</label>
+                <input type="number" className="input" placeholder="e.g. 200000" value={efTarget} onChange={(e) => setEfTarget(e.target.value)} />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => { setEditingTargets(false); setMonthlyIncome(String(settings?.monthlyIncomeTarget ?? '')); setWeeklyBudget(String(settings?.weeklyBudget ?? '')); setEfTarget(String(settings?.emergencyFundTarget ?? '')) }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-2)', fontSize: 13 }}
+                >
+                  <X size={13} /> Cancel
+                </button>
+                <button onClick={saveSettings} disabled={saving} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>
+                  {saving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Salary Cycle */}
