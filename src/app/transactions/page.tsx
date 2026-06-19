@@ -51,7 +51,7 @@ function TransactionsInner() {
     ...EXPENSE_CATEGORIES,
     ...INCOME_CATEGORIES,
     ...customCats.filter(c => ![...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES].includes(c)),
-  ]
+  ].sort((a, b) => a.localeCompare(b))
 
   function exportCSV() {
     const rows = [
