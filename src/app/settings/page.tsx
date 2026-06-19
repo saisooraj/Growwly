@@ -12,6 +12,7 @@ import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { downloadJSON, getLast6Months } from '@/lib/utils'
 import { getCycleRange, getLastWorkingDay, formatCycleRange } from '@/lib/cycle'
 import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X } from 'lucide-react'
+import { IconLeaf, IconFlame } from '@tabler/icons-react'
 import LinkedAccounts from '@/components/auth/LinkedAccounts'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
@@ -296,8 +297,8 @@ export default function SettingsPage() {
           </div>
           <div className="grid grid-cols-2" style={{ gap: 10 }}>
             {([
-              { value: 'normal' as const,       label: 'Normal',       desc: 'Standard budget tracking',              emoji: '🧘' },
-              { value: 'high-expense' as const, label: 'High Expense', desc: 'Cash pressure alerts, borrow tracking', emoji: '🔥' },
+              { value: 'normal' as const,       label: 'Normal',       desc: 'Standard budget tracking',              Icon: IconLeaf,  color: 'var(--good-ink)' },
+              { value: 'high-expense' as const, label: 'High Expense', desc: 'Cash pressure alerts, borrow tracking', Icon: IconFlame, color: 'var(--warn-ink)' },
             ]).map((opt) => (
               <button
                 key={opt.value}
@@ -309,7 +310,7 @@ export default function SettingsPage() {
                   cursor: 'pointer', transition: 'all .15s',
                 }}
               >
-                <span style={{ fontSize: 20, display: 'block', marginBottom: 4 }}>{opt.emoji}</span>
+                <opt.Icon size={22} style={{ color: opt.color, marginBottom: 4 }} />
                 <p style={{ fontSize: 13, fontWeight: 500, color: mode === opt.value ? 'var(--brand-ink)' : 'var(--text)', margin: 0 }}>{opt.label}</p>
                 <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, marginTop: 2 }}>{opt.desc}</p>
               </button>

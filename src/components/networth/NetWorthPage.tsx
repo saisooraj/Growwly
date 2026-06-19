@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Pencil, Trash2, TrendingUp, Home, Car, Landmark, CreditCard, Coins, BarChart2, Package, Wallet, Eye, EyeOff } from 'lucide-react'
+import { IconLifebuoy } from '@tabler/icons-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
@@ -191,7 +192,7 @@ export default function NetWorthPage() {
         {emergencyFund?.currentBalance ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)', marginBottom: 8 }}>
             <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--good-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontSize: 16 }}>🆘</span>
+              <IconLifebuoy size={16} style={{ color: 'var(--good-ink)' }} />
             </div>
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0 }}>Emergency Fund</p>
