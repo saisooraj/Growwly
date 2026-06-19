@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Mail, Chrome, Check, Link2, Unlink, Eye, EyeOff, ArrowLeft } from 'lucide-react'
+import { Mail, Check, Link2, Unlink, Eye, EyeOff, ArrowLeft } from 'lucide-react'
+import GoogleIcon from '@/components/ui/GoogleIcon'
 import { useAuth } from '@/context/AuthContext'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
@@ -178,7 +179,7 @@ export default function LinkedAccounts() {
           <>
             <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Link your Google account so you can sign in with Google. Your data stays the same.</p>
             <button className="btn-primary" onClick={handleLinkGoogle} disabled={loading} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <Chrome size={14} /> {loading ? 'Connecting…' : 'Connect Google Account'}
+              <GoogleIcon size={14} /> {loading ? 'Connecting…' : 'Connect Google Account'}
             </button>
           </>
         )}
@@ -223,7 +224,7 @@ export default function LinkedAccounts() {
   return (
     <div>
       <ProviderRow
-        icon={<Chrome size={15} />}
+        icon={<GoogleIcon size={15} />}
         label="Google"
         sub={hasGoogle ? (user.providerData.find(p => p.providerId === 'google.com')?.email ?? 'Linked') : 'Not linked'}
         linked={hasGoogle}
