@@ -85,12 +85,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u)
-      setLoading(false)
-    })
-    getRedirectResult(auth).catch(() => {})
-    return unsub
+    let unsub: (() => void) | null = null
+
+    async function init() {
+      try {
+        await getRedirectResult(auth)
+      } catch (err: unknown) {
+        const code = (err as { code?: string })?.code ?? ''
+        // Ignore benign errors; log anything unexpected
+        if (code && code !== 'auth/no-current-user' && code !== 'auth/null-user') {
+          console.warn('[Auth] Redirect sign-in error:', code)
+        }
+      }
+      // Subscribe AFTER redirect result is resolved so onAuthStateChanged
+      // fires with the final user state, not the intermediate null
+      unsub = onAuthStateChanged(auth, (u) => {
+        setUser(u)
+        setLoading(false)
+      })
+    }
+
+    init()
+    return () => { unsub?.() }
   }, [])
 
   // ── Google ──────────────────────────────────────────────────────────────────
