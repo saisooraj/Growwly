@@ -464,8 +464,8 @@ export default function SettingsPage() {
             </>
           )}
 
-          {/* Per-month override table */}
-          {cycleRule !== 'none' && (
+          {/* Per-month override table — only in edit mode */}
+          {editingCycle && cycleRule !== 'none' && (
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
               <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 10 }}>
                 Cycle start dates <span style={{ fontWeight: 400, color: 'var(--text-3)' }}>— edit if salary came on a different day</span>
