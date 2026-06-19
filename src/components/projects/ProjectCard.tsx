@@ -16,9 +16,9 @@ interface Props {
 }
 
 const STATUS_MAP = {
-  active: { label: 'Active', color: 'bg-green-100 text-green-700' },
-  completed: { label: 'Completed', color: 'bg-blue-100 text-blue-700' },
-  paused: { label: 'Paused', color: 'bg-slate-100 text-slate-600' },
+  active:    { label: 'Active',    color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
+  completed: { label: 'Completed', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+  paused:    { label: 'Paused',    color: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400' },
 }
 
 export default function ProjectCard({ project, onEdit }: Props) {
