@@ -46,7 +46,12 @@ function TransactionsInner() {
     })
   }, [monthTxs, typeFilter, catFilter])
 
-  const allCats = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]
+  const customCats = settings?.customCategories ?? []
+  const allCats = [
+    ...EXPENSE_CATEGORIES,
+    ...INCOME_CATEGORIES,
+    ...customCats.filter(c => ![...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES].includes(c)),
+  ]
 
   function exportCSV() {
     const rows = [
@@ -160,9 +165,13 @@ function TransactionsInner() {
               }}
             >
               <option value="all">All Categories</option>
-              {allCats.map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
+              {allCats.map(c => {
+                const isCustom = customCats.includes(c)
+                const label = isCustom
+                  ? (() => { const sp = c.indexOf(' '); return (sp > 0 && (c.codePointAt(0) ?? 0) > 255) ? c.slice(sp + 1) : c })()
+                  : c
+                return <option key={c} value={c}>{label}</option>
+              })}
             </select>
           )}
 
