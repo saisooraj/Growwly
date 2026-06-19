@@ -16,6 +16,7 @@ import {
   getUserTasks,
   getUserAssets,
   getUserLiabilities,
+  migrateCustomCategoryIcons,
 } from '@/lib/firestore'
 
 export function useData() {
@@ -78,6 +79,14 @@ export function useData() {
         setAssets(assets)
         setLiabilities(liabilities)
         setInitialized(true)
+
+        // One-time migration: emoji-prefixed custom categories → Tabler icon names
+        if (settings && (settings.customCategories ?? []).some(c => {
+          const sp = c.indexOf(' ')
+          return sp > 0 && (c.codePointAt(0) ?? 0) > 255 && !c.startsWith('Icon')
+        })) {
+          migrateCustomCategoryIcons(user.uid, settings, txs).catch(() => {})
+        }
       } finally {
         setLoading(false)
       }

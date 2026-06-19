@@ -208,6 +208,56 @@ export async function setUserSettings(
   }
 }
 
+// ── Custom category icon migration ───────────────────────────────────────────
+
+/**
+ * One-time migration: converts emoji-prefixed custom categories (old format)
+ * to icon-name-prefixed format (new format) for both settings and transactions.
+ * Returns the number of categories that were migrated, or 0 if nothing to do.
+ */
+export async function migrateCustomCategoryIcons(
+  userId: string,
+  settings: UserSettings,
+  transactions: Transaction[],
+): Promise<number> {
+  const { migrateEmojiCategory } = await import('./categoryIcons')
+
+  const oldCats = settings.customCategories ?? []
+  const renames: Record<string, string> = {}
+
+  for (const cat of oldCats) {
+    const migrated = migrateEmojiCategory(cat)
+    if (migrated !== cat) renames[cat] = migrated
+  }
+
+  if (Object.keys(renames).length === 0) return 0
+
+  const newCats = oldCats.map(c => renames[c] ?? c)
+
+  // Build updated categoryBuckets if present
+  const oldBuckets = settings.categoryBuckets
+  let newBuckets = oldBuckets
+  if (oldBuckets) {
+    newBuckets = {
+      needs:   (oldBuckets.needs   ?? []).map(c => renames[c] ?? c),
+      savings: (oldBuckets.savings ?? []).map(c => renames[c] ?? c),
+    }
+  }
+
+  await setUserSettings(userId, {
+    customCategories: newCats,
+    ...(newBuckets ? { categoryBuckets: newBuckets } : {}),
+  })
+
+  // Update all transactions whose category matches an old name
+  const affectedTxs = transactions.filter(t => renames[t.category])
+  await Promise.all(
+    affectedTxs.map(t => updateTransaction(t.id, { category: renames[t.category] }))
+  )
+
+  return Object.keys(renames).length
+}
+
 // ── Push Subscriptions ────────────────────────────────────────────────────────
 
 export async function savePushSubscription(
