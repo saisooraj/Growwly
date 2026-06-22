@@ -11,26 +11,32 @@ import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import { useAppStore } from '@/store/appStore'
 import {
   buildMonthlySummary,
+  buildSavingsByVehicle,
+  isSavingsTransfer,
   formatCurrencyFull,
   EXPENSE_CATEGORIES,
   INCOME_CATEGORIES,
   getTransactionsForMonth,
 } from '@/lib/utils'
 import type { TransactionType } from '@/types'
-import { getCategoryDisplayName } from '@/lib/categoryIcons'
+import { getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
 
-const TYPE_OPTS: { id: TransactionType | 'all'; label: string }[] = [
+type FilterType = TransactionType | 'all' | 'savings'
+
+const TYPE_OPTS: { id: FilterType; label: string }[] = [
   { id: 'all',      label: 'All' },
   { id: 'expense',  label: 'Expenses' },
   { id: 'income',   label: 'Income' },
+  { id: 'savings',  label: 'Savings' },
   { id: 'transfer', label: 'Transfers' },
 ]
 
 function TransactionsInner() {
   const searchParams = useSearchParams()
   const [addOpen, setAddOpen]       = useState(false)
-  const [typeFilter, setTypeFilter] = useState<TransactionType | 'all'>('all')
+  const [typeFilter, setTypeFilter] = useState<FilterType>((searchParams.get('type') as FilterType) ?? 'all')
   const [catFilter, setCatFilter]   = useState<string>(searchParams.get('cat') ?? 'all')
+  const [vehicleFilter, setVehicleFilter] = useState<string>(searchParams.get('vehicle') ?? 'all')
   const [showIncome,   setShowIncome]   = useState(false)
   const [showExpenses, setShowExpenses] = useState(false)
   const [showNet,      setShowNet]      = useState(false)
@@ -41,11 +47,39 @@ function TransactionsInner() {
 
   const filtered = useMemo(() => {
     return monthTxs.filter(t => {
+      const savings = isSavingsTransfer(t)
+      if (typeFilter === 'savings') {
+        if (!savings) return false
+        if (vehicleFilter !== 'all' && (t.savingsVehicle ?? '') !== vehicleFilter) return false
+        return true
+      }
+      if (typeFilter === 'transfer') return t.type === 'transfer' && !savings  // loans only
       if (typeFilter !== 'all' && t.type !== typeFilter) return false
       if (catFilter  !== 'all' && t.category !== catFilter) return false
       return true
     })
-  }, [monthTxs, typeFilter, catFilter])
+  }, [monthTxs, typeFilter, catFilter, vehicleFilter])
+
+  // Savings aggregates (selected month, respecting the vehicle sub-filter)
+  const savingsView = useMemo(() => {
+    const inScope = monthTxs.filter(t => isSavingsTransfer(t) && (vehicleFilter === 'all' || (t.savingsVehicle ?? '') === vehicleFilter))
+    let contributed = 0, withdrawn = 0
+    for (const t of inScope) {
+      if (t.transferKind === 'savings_withdrawal' || t.transferKind === 'ef_withdrawal') withdrawn += t.amount
+      else contributed += t.amount
+    }
+    const allTime = buildSavingsByVehicle(transactions)
+    const balance = vehicleFilter === 'all'
+      ? Object.values(allTime).reduce((s, v) => s + v.balance, 0)
+      : (allTime[vehicleFilter]?.balance ?? 0)
+    return { contributed, withdrawn, net: contributed - withdrawn, balance }
+  }, [monthTxs, transactions, vehicleFilter])
+
+  // Vehicles the user has actually used (for the sub-filter dropdown)
+  const usedVehicles = useMemo(
+    () => Object.keys(buildSavingsByVehicle(transactions)).sort((a, b) => a.localeCompare(b)),
+    [transactions]
+  )
 
   const customCats = settings?.customCategories ?? []
   const allCats = [
@@ -152,8 +186,8 @@ function TransactionsInner() {
             ))}
           </div>
 
-          {/* Category filter (hidden for transfer/all) */}
-          {typeFilter !== 'transfer' && (
+          {/* Category filter (income / expense / all) */}
+          {typeFilter !== 'transfer' && typeFilter !== 'savings' && (
             <select
               value={catFilter}
               onChange={e => setCatFilter(e.target.value)}
@@ -172,6 +206,26 @@ function TransactionsInner() {
             </select>
           )}
 
+          {/* Vehicle filter (savings) */}
+          {typeFilter === 'savings' && usedVehicles.length > 0 && (
+            <select
+              value={vehicleFilter}
+              onChange={e => setVehicleFilter(e.target.value)}
+              style={{
+                fontSize: 12, padding: '5px 10px',
+                background: 'var(--surface-2)',
+                border: '1px solid var(--border)',
+                borderRadius: 8, color: 'var(--text-2)',
+                outline: 'none', cursor: 'pointer',
+              }}
+            >
+              <option value="all">All Vehicles</option>
+              {usedVehicles.map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          )}
+
           <button
             onClick={exportCSV}
             className="btn btn-sm btn-ghost"
@@ -180,6 +234,42 @@ function TransactionsInner() {
             <Download size={13} /> Export CSV
           </button>
         </div>
+
+        {/* Savings summary (only on the Savings filter) */}
+        {typeFilter === 'savings' && (
+          <div className="card-sm" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+            {(() => {
+              const meta = vehicleFilter !== 'all' ? getSavingsVehicleMeta(vehicleFilter) : null
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 160 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: (meta?.color ?? 'var(--brand)') + '20' }}>
+                    {meta ? <meta.Icon size={18} color={meta.color} stroke={1.5} /> : <span style={{ color: 'var(--brand)' }}>₹</span>}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{vehicleFilter === 'all' ? 'Total saved (all-time)' : `${vehicleFilter} · balance`}</div>
+                    <div className="display-num" style={{ fontSize: 20, color: 'var(--text)' }}>{formatCurrencyFull(savingsView.balance)}</div>
+                  </div>
+                </div>
+              )
+            })()}
+            <div style={{ display: 'flex', gap: 18 }}>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>In this month</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--good-ink)' }}>+{formatCurrencyFull(savingsView.contributed)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Out this month</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--bad-ink)' }}>−{formatCurrencyFull(savingsView.withdrawn)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Net</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: savingsView.net >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
+                  {savingsView.net >= 0 ? '+' : '−'}{formatCurrencyFull(Math.abs(savingsView.net))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Transaction list */}
         <div className="card" style={{ padding: 0 }}>
@@ -193,7 +283,7 @@ function TransactionsInner() {
             <TransactionList
             transactions={filtered}
             groupByDay
-            defaultExpandAll={catFilter !== 'all'}
+            defaultExpandAll={catFilter !== 'all' || vehicleFilter !== 'all'}
             showBorrowings={catFilter === 'all' && typeFilter === 'all'}
           />
           </div>

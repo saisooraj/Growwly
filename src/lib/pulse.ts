@@ -247,11 +247,12 @@ export function computePulse(
     paidByUpcoming.set(p.upcomingId, (paidByUpcoming.get(p.upcomingId) ?? 0) + p.amount)
   }
 
-  // Upcoming expenses in next 30 days (expense direction only, only if still remaining)
+  // Upcoming expenses: anything still owed that is either overdue (past due date)
+  // or due within the next 30 days. Overdue items stay until paid.
   const relevantUpcoming = upcomingExpenses.filter(u => {
     const d = parseISO(u.dueDate)
     const remaining = u.amount - (paidByUpcoming.get(u.id) ?? 0)
-    return isAfter(d, now) && isBefore(d, thirtyDaysOut) &&
+    return isBefore(d, thirtyDaysOut) &&
            (u.flowType === 'expense' || !u.flowType) &&
            remaining > 0
   })
@@ -261,7 +262,9 @@ export function computePulse(
   }, 0)
 
   const totalCashIn = curSummary.totalIncome + curSummary.totalBorrowed
-  const freeCash    = Math.max(totalCashIn - curSummary.totalExpenses - upcomingTotal, 0)
+  // Cash already committed to savings vehicles this month is no longer free.
+  const netSavingsOut = Math.max(0, curSummary.savingsContributed - curSummary.savingsWithdrawn)
+  const freeCash    = Math.max(totalCashIn - curSummary.totalExpenses - upcomingTotal - netSavingsOut, 0)
   const dailyBudget = daysLeft > 0 ? Math.round(freeCash / daysLeft) : 0
 
   const cashPosition: PulseCashPosition = {
@@ -281,11 +284,13 @@ export function computePulse(
   for (const u of relevantUpcoming) {
     const d = parseISO(u.dueDate)
     const remaining = u.amount - (paidByUpcoming.get(u.id) ?? 0)
+    const daysUntil = differenceInCalendarDays(d, now)
     upcoming.push({
       label: u.label,
       amount: remaining,
       dueDate: u.dueDate,
-      daysUntil: differenceInCalendarDays(d, now),
+      daysUntil,
+      isOverdue: daysUntil < 0,
       type: 'expense',
     })
   }
@@ -298,10 +303,12 @@ export function computePulse(
         amount: b.amount - b.repaidAmount,
         dueDate: b.dueDate,
         daysUntil: differenceInCalendarDays(d, now),
+        isOverdue: false,
         type: 'borrowing',
       })
     }
   }
+  // Overdue first (most overdue at top), then soonest due
   upcoming.sort((a, b) => a.daysUntil - b.daysUntil)
 
   // ── Allocations ────────────────────────────────────────────────────────────

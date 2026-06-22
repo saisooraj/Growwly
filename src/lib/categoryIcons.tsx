@@ -272,6 +272,33 @@ export const GOAL_ICONS: PaletteIcon[] = [
   { name: 'IconStar',          Icon: IconStar,          label: 'Dream',        group: 'Goals' },
 ]
 
+// ── Savings vehicle icons + colors ────────────────────────────────────────────
+
+interface SavingsVehicleMeta { Icon: TablerIconComponent; color: string }
+
+const SAVINGS_VEHICLE_META: Record<string, SavingsVehicleMeta> = {
+  'Emergency Fund':    { Icon: IconAlertOctagon, color: '#14b8a6' },
+  'SIP / Investments': { Icon: IconTrendingUp,   color: '#10b981' },
+  'Stocks':            { Icon: IconChartBar,     color: '#6366f1' },
+  'PF / EPF':          { Icon: IconBuildingBank, color: '#0ea5e9' },
+  'Gold':              { Icon: IconMedal,        color: '#f59e0b' },
+  'Fixed Deposit':     { Icon: IconCoin,         color: '#8b5cf6' },
+  'Recurring Deposit': { Icon: IconCoin,         color: '#a855f7' },
+  'NPS':               { Icon: IconShield,       color: '#06b6d4' },
+  'Other Savings':     { Icon: IconPackage,      color: '#94a3b8' },
+}
+
+export function getSavingsVehicleMeta(vehicle: string): SavingsVehicleMeta {
+  return SAVINGS_VEHICLE_META[vehicle] ?? { Icon: IconCoin, color: '#94a3b8' }
+}
+
+interface SavingsIconProps { vehicle: string; size?: number; color?: string; stroke?: number }
+
+export function SavingsIcon({ vehicle, size = 16, color, stroke = 1.5 }: SavingsIconProps) {
+  const meta = getSavingsVehicleMeta(vehicle)
+  return <meta.Icon size={size} color={color ?? meta.color} stroke={stroke} />
+}
+
 // ── Goal icon renderer ────────────────────────────────────────────────────────
 
 const GOAL_EMOJI_ICON_MAP: Record<string, TablerIconComponent> = {

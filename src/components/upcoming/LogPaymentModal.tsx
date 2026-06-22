@@ -9,7 +9,7 @@ import { addUpcomingPayment, addTransaction, updateUpcomingPayment, setEmergency
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
-import { formatCurrencyFull } from '@/lib/utils'
+import { formatCurrencyFull, EMERGENCY_FUND_VEHICLE } from '@/lib/utils'
 import type { UpcomingExpense, UpcomingPayment } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -109,7 +109,8 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
             }),
             addTransaction(user.uid, {
               type: 'transfer',
-              transferKind: 'ef_withdrawal',
+              transferKind: 'savings_withdrawal',
+              savingsVehicle: EMERGENCY_FUND_VEHICLE,
               amount: efAmt,
               category: 'Other',
               date,

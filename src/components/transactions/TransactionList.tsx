@@ -2,10 +2,11 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { format, parseISO, isToday, isYesterday } from 'date-fns'
-import { TrendingUp, TrendingDown, ArrowLeftRight, ChevronDown, ChevronRight, ArrowUp, ArrowDown, UserMinus, UserPlus } from 'lucide-react'
+import { ArrowLeftRight, ChevronDown, ChevronRight, ArrowUp, ArrowDown, UserMinus, UserPlus } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
-import { formatCurrencyFull, CATEGORY_COLORS, getTransactionsForMonth, TRANSFER_KINDS } from '@/lib/utils'
+import { formatCurrencyFull, CATEGORY_COLORS, getTransactionsForMonth, getTransferDisplay } from '@/lib/utils'
 import { getCycleRange } from '@/lib/cycle'
+import { getSavingsVehicleMeta, getCategoryDisplayName, CategoryIcon } from '@/lib/categoryIcons'
 import type { Transaction, Borrowing } from '@/types'
 import TransactionDetailModal from './TransactionDetailModal'
 
@@ -39,14 +40,6 @@ function borrowingToViewTx(b: Borrowing): ViewTx {
   }
 }
 
-function transferLabel(tx: Transaction): string {
-  return TRANSFER_KINDS.find(k => k.id === tx.transferKind)?.label ?? 'Transfer'
-}
-
-function transferDir(tx: Transaction): 'in' | 'out' {
-  return TRANSFER_KINDS.find(k => k.id === tx.transferKind)?.dir ?? 'out'
-}
-
 function dayLabel(dateStr: string): string {
   const d = parseISO(dateStr)
   if (isToday(d))     return `Today · ${format(d, 'MMM d')}`
@@ -73,18 +66,24 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
     amountColor = isLent ? 'var(--warn-ink)' : 'var(--info-ink)'
     prefix      = isLent ? '−' : '+'
   } else if (isTransfer) {
-    const dir = transferDir(tx)
-    color       = 'var(--info)'
-    icon        = <ArrowLeftRight size={15} style={{ color }} />
-    label       = transferLabel(tx)
-    amountColor = dir === 'in' ? 'var(--good-ink)' : 'var(--text-2)'
-    prefix      = dir === 'in' ? '+' : '−'
+    const disp = getTransferDisplay(tx)
+    if (disp.isSavings) {
+      const vehicle = tx.savingsVehicle || disp.label
+      const meta = getSavingsVehicleMeta(vehicle)
+      color     = meta.color
+      icon      = <meta.Icon size={15} style={{ color }} stroke={1.5} />
+      label     = disp.label
+    } else {
+      color     = 'var(--info)'
+      icon      = <ArrowLeftRight size={15} style={{ color }} />
+      label     = disp.label
+    }
+    amountColor = disp.dir === 'in' ? 'var(--good-ink)' : 'var(--text-2)'
+    prefix      = disp.dir === 'in' ? '+' : '−'
   } else {
     color       = CATEGORY_COLORS[tx.category] ?? '#94a3b8'
-    icon        = isIncome
-      ? <TrendingUp   size={15} style={{ color }} />
-      : <TrendingDown size={15} style={{ color }} />
-    label       = tx.category
+    icon        = <CategoryIcon category={tx.category} size={15} color={color} />
+    label       = getCategoryDisplayName(tx.category)
     amountColor = isIncome ? 'var(--good-ink)' : 'var(--text)'
     prefix      = isIncome ? '+' : '−'
   }
@@ -128,7 +127,9 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
             </span>
           )}
           {isTransfer && (
-            <span className="pill info" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0 }}>transfer</span>
+            getTransferDisplay(tx).isSavings
+              ? <span className="pill" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0, background: 'var(--good-soft)', color: 'var(--good-ink)', border: 'none' }}>savings</span>
+              : <span className="pill info" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0 }}>transfer</span>
           )}
           {tx.isRecurring && (
             <span className="pill" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0 }}>recurring</span>
@@ -166,7 +167,7 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
       if (tx.type === 'income') income += tx.amount
       else if (tx.type === 'expense') expenses += tx.amount
       else {
-        const dir = transferDir(tx)
+        const { dir } = getTransferDisplay(tx)
         if (dir === 'in') income += tx.amount
         else expenses += tx.amount
       }

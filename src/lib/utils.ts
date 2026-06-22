@@ -64,15 +64,17 @@ export function buildMonthlySummary(
   let totalIncome = 0
   let totalExpenses = 0
 
-  let repaymentReceived = 0  // lent money came back
-  let repaymentPaid     = 0  // borrowed money repaid by you
-  let efWithdrawn       = 0  // drawn from emergency fund (own savings, offsets expense)
+  let repaymentReceived  = 0  // lent money came back
+  let repaymentPaid      = 0  // borrowed money repaid by you
+  let savingsContributed = 0  // cash moved into savings vehicles (out of pocket)
+  let savingsWithdrawn   = 0  // cash pulled back out of savings (incl. legacy EF withdrawals)
 
   for (const t of monthTxs) {
     if (t.type === 'transfer') {
       if (t.transferKind === 'loan_repayment_received') repaymentReceived += t.amount
       if (t.transferKind === 'loan_repayment_paid')     repaymentPaid     += t.amount
-      if (t.transferKind === 'ef_withdrawal')           efWithdrawn       += t.amount
+      if (t.transferKind === 'savings_contribution' || t.transferKind === 'savings_transfer') savingsContributed += t.amount
+      if (t.transferKind === 'savings_withdrawal'   || t.transferKind === 'ef_withdrawal')    savingsWithdrawn   += t.amount
       continue
     }
     if (t.type === 'income') {
@@ -101,7 +103,8 @@ export function buildMonthlySummary(
   }
 
   const net     = totalIncome - totalExpenses
-  const cashNet = net - totalLent + totalBorrowed + repaymentReceived - repaymentPaid + efWithdrawn
+  const cashNet = net - totalLent + totalBorrowed + repaymentReceived - repaymentPaid
+                  + savingsWithdrawn - savingsContributed
 
   return {
     month,
@@ -115,6 +118,8 @@ export function buildMonthlySummary(
     borrowedOutstanding,
     repaymentReceived,
     repaymentPaid,
+    savingsContributed,
+    savingsWithdrawn,
     byCategory: byCategory as Record<Category, number>,
   }
 }
@@ -162,19 +167,80 @@ export const TRANSFER_KINDS = [
     sub: 'You repaid money you owed',
     dir: 'out' as const,
   },
+] as const
+
+// ── Savings ────────────────────────────────────────────────────────────────
+// Savings movements are stored as transfers (so they stay out of income/expense
+// totals) but reduce/raise true cash flow. A contribution moves cash into a
+// vehicle; a withdrawal pulls it back out.
+
+export const SAVINGS_KINDS = [
   {
-    id: 'savings_transfer' as const,
-    label: 'Savings / Investment',
-    sub: 'Moved to savings or investment account',
+    id: 'savings_contribution' as const,
+    label: 'Contribution',
+    sub: 'Money moved into savings',
     dir: 'out' as const,
   },
   {
-    id: 'ef_withdrawal' as const,
-    label: 'Emergency Fund Used',
-    sub: 'Withdrawn from Emergency Fund',
+    id: 'savings_withdrawal' as const,
+    label: 'Withdrawal',
+    sub: 'Money pulled back out',
     dir: 'in' as const,
   },
 ] as const
+
+// Default vehicle names. Names intentionally match the legacy expense categories
+// they replace (Emergency Fund, SIP / Investments, Gold) so migration is lossless.
+export const SAVINGS_VEHICLES: string[] = [
+  'Emergency Fund',
+  'SIP / Investments',
+  'Stocks',
+  'PF / EPF',
+  'Gold',
+  'Fixed Deposit',
+  'Recurring Deposit',
+  'NPS',
+  'Other Savings',
+]
+
+export const EMERGENCY_FUND_VEHICLE = 'Emergency Fund'
+
+const SAVINGS_KIND_IDS = new Set<string>(['savings_contribution', 'savings_withdrawal', 'savings_transfer', 'ef_withdrawal'])
+
+export function isSavingsTransfer(t: Pick<Transaction, 'type' | 'transferKind'>): boolean {
+  return t.type === 'transfer' && !!t.transferKind && SAVINGS_KIND_IDS.has(t.transferKind)
+}
+
+/** Unified display metadata for any transfer row (loan or savings). */
+export function getTransferDisplay(tx: Pick<Transaction, 'transferKind' | 'savingsVehicle'>):
+  { label: string; dir: 'in' | 'out'; isSavings: boolean } {
+  const k = tx.transferKind
+  if (k === 'savings_contribution' || k === 'savings_transfer')
+    return { label: tx.savingsVehicle || 'Savings', dir: 'out', isSavings: true }
+  if (k === 'savings_withdrawal' || k === 'ef_withdrawal')
+    return { label: tx.savingsVehicle || EMERGENCY_FUND_VEHICLE, dir: 'in', isSavings: true }
+  const loan = TRANSFER_KINDS.find(t => t.id === k)
+  return { label: loan?.label ?? 'Transfer', dir: loan?.dir ?? 'out', isSavings: false }
+}
+
+/** All-time balance per savings vehicle: contributions − withdrawals. */
+export function buildSavingsByVehicle(
+  transactions: Transaction[]
+): Record<string, { contributed: number; withdrawn: number; balance: number }> {
+  const out: Record<string, { contributed: number; withdrawn: number; balance: number }> = {}
+  for (const t of transactions) {
+    if (!isSavingsTransfer(t)) continue
+    const vehicle = t.savingsVehicle
+      || (t.transferKind === 'ef_withdrawal' ? EMERGENCY_FUND_VEHICLE : 'Other Savings')
+    const row = out[vehicle] ?? { contributed: 0, withdrawn: 0, balance: 0 }
+    const { dir } = getTransferDisplay(t)
+    if (dir === 'out') row.contributed += t.amount
+    else row.withdrawn += t.amount
+    row.balance = row.contributed - row.withdrawn
+    out[vehicle] = row
+  }
+  return out
+}
 
 export const EXPENSE_CATEGORIES: Category[] = [
   'Food & Dining',
@@ -195,13 +261,11 @@ export const EXPENSE_CATEGORIES: Category[] = [
   'Gifts & Donations',
   'Living Expenses',
   'Rent / Deposit',
-  'SIP / Investments',
   'Gold',
   'Construction',
   'Family',
   'Family Events',
   'Borrowed / Loan',
-  'Emergency Fund',
   'Food with Her',
   'Treat',
   'Office Expense',

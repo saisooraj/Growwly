@@ -20,8 +20,12 @@ const DEFAULT_NEEDS = [
   'Home & Maintenance', 'Education', 'Family',
 ]
 const DEFAULT_SAVINGS = [
-  'SIP / Investments', 'Emergency Fund', 'Gold', 'Construction',
+  'Gold', 'Construction',
 ]
+
+// Pseudo-category representing real savings transactions (contributions to
+// vehicles) so they land in the Savings bucket of the 50/30/20 rule.
+const SAVINGS_TXN_LABEL = 'Savings & Investments'
 
 type Bucket = 'needs' | 'wants' | 'savings'
 
@@ -162,6 +166,13 @@ export default function SpendingRuleCard() {
       const b: Bucket = needsSet.has(cat) ? 'needs' : savingsSet.has(cat) ? 'savings' : 'wants'
       byBucket[b] += amt
       byCategory[cat] = { amt, bucket: b }
+    }
+
+    // Real savings movements (contributions to vehicles) count toward the
+    // Savings bucket — they're not expense categories anymore.
+    if (summary.savingsContributed > 0) {
+      byBucket.savings += summary.savingsContributed
+      byCategory[SAVINGS_TXN_LABEL] = { amt: summary.savingsContributed, bucket: 'savings' }
     }
 
     return { byBucket, byCategory, totalIncome: income }

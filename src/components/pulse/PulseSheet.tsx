@@ -173,24 +173,31 @@ function UpcomingSection({ items }: { items: FinancialPulse['upcoming'] }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {items.map((item, i) => {
-        const urgent = item.daysUntil <= 5
+        const overdue = item.isOverdue
+        const urgent = !overdue && item.daysUntil <= 5
+        const accent = overdue ? 'var(--bad)' : 'var(--warn)'
+        const accentInk = overdue ? 'var(--bad-ink)' : 'var(--warn-ink)'
+        const daysOverdue = Math.abs(item.daysUntil)
         return (
           <div key={i} style={{
             display: 'flex', alignItems: 'center', gap: 10,
             padding: '10px 12px', borderRadius: 10,
-            background: urgent ? 'color-mix(in oklch, var(--warn) 8%, transparent)' : 'var(--surface-2)',
-            border: urgent ? '1px solid color-mix(in oklch, var(--warn) 25%, transparent)' : '1px solid transparent',
+            background: (overdue || urgent) ? `color-mix(in oklch, ${accent} 8%, transparent)` : 'var(--surface-2)',
+            border: (overdue || urgent) ? `1px solid color-mix(in oklch, ${accent} 25%, transparent)` : '1px solid transparent',
           }}>
+            {overdue && <AlertCircle size={15} style={{ color: accentInk, flexShrink: 0 }} />}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {item.label}
               </div>
-              <div style={{ fontSize: 11.5, color: urgent ? 'var(--warn-ink)' : 'var(--text-3)', marginTop: 2 }}>
-                {item.daysUntil === 0 ? 'Due today' : item.daysUntil === 1 ? 'Due tomorrow' : `in ${item.daysUntil} days`}
+              <div style={{ fontSize: 11.5, color: (overdue || urgent) ? accentInk : 'var(--text-3)', marginTop: 2, fontWeight: overdue ? 600 : 400 }}>
+                {overdue
+                  ? `Overdue by ${daysOverdue} ${daysOverdue === 1 ? 'day' : 'days'}`
+                  : item.daysUntil === 0 ? 'Due today' : item.daysUntil === 1 ? 'Due tomorrow' : `in ${item.daysUntil} days`}
                 {' · '}{format(parseISO(item.dueDate), 'MMM d')}
               </div>
             </div>
-            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', flexShrink: 0 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: overdue ? accentInk : 'var(--text)', flexShrink: 0 }}>
               {formatCurrency(item.amount)}
             </span>
           </div>

@@ -2,11 +2,12 @@
 
 import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { X, Edit2, Trash2, Calendar, Tag, FileText, Repeat, Folder, ArrowLeftRight, TrendingUp, TrendingDown } from 'lucide-react'
+import { X, Edit2, Trash2, Calendar, Tag, FileText, Repeat, Folder, ArrowLeftRight } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { deleteTransaction } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
-import { formatCurrencyFull, CATEGORY_COLORS, TRANSFER_KINDS } from '@/lib/utils'
+import { formatCurrencyFull, CATEGORY_COLORS, getTransferDisplay } from '@/lib/utils'
+import { CategoryIcon, getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import { useAppStore } from '@/store/appStore'
 import type { Transaction } from '@/types'
 import AddTransactionModal from './AddTransactionModal'
@@ -55,20 +56,22 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
 
   const isTransfer = tx.type === 'transfer'
   const isIncome   = tx.type === 'income'
-  const color      = isTransfer ? 'var(--info)' : (CATEGORY_COLORS[tx.category] ?? '#94a3b8')
-  const kindInfo   = isTransfer ? TRANSFER_KINDS.find(k => k.id === tx.transferKind) : null
-  const project    = tx.projectId ? projects.find(p => p.id === tx.projectId) : null
+  const transferDisp = isTransfer ? getTransferDisplay(tx) : null
+  const color = isTransfer
+    ? (transferDisp?.isSavings ? getSavingsVehicleMeta(tx.savingsVehicle || 'Other Savings').color : 'var(--info)')
+    : (CATEGORY_COLORS[tx.category] ?? '#94a3b8')
+  const project = tx.projectId ? projects.find(p => p.id === tx.projectId) : null
 
   const amountColor = isTransfer
-    ? (kindInfo?.dir === 'in' ? 'var(--good)' : 'var(--text-2)')
+    ? (transferDisp?.dir === 'in' ? 'var(--good)' : 'var(--text-2)')
     : isIncome ? 'var(--good-ink)' : 'var(--bad-ink)'
 
   const prefix = isTransfer
-    ? (kindInfo?.dir === 'in' ? '+' : '−')
+    ? (transferDisp?.dir === 'in' ? '+' : '−')
     : (isIncome ? '+' : '−')
 
   const typeLabel = isTransfer
-    ? (kindInfo?.label ?? 'Transfer')
+    ? (transferDisp?.label ?? 'Transfer')
     : isIncome ? 'Income' : 'Expense'
 
   const typePillClass = isTransfer ? 'info' : isIncome ? 'good' : 'bad'
@@ -113,15 +116,15 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
                       {isTransfer
-                        ? <ArrowLeftRight size={16} style={{ color }} />
-                        : isIncome
-                          ? <TrendingUp size={16} style={{ color }} />
-                          : <TrendingDown size={16} style={{ color }} />
+                        ? (transferDisp?.isSavings
+                            ? (() => { const m = getSavingsVehicleMeta(tx.savingsVehicle || 'Other Savings'); return <m.Icon size={16} color={m.color} stroke={1.5} /> })()
+                            : <ArrowLeftRight size={16} style={{ color }} />)
+                        : <CategoryIcon category={tx.category} size={16} color={color} />
                       }
                     </div>
                     <div>
                       <Dialog.Title style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', lineHeight: 1.2 }}>
-                        {isTransfer ? (kindInfo?.label ?? 'Transfer') : tx.category}
+                        {isTransfer ? (transferDisp?.label ?? 'Transfer') : getCategoryDisplayName(tx.category)}
                       </Dialog.Title>
                       <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
                         {format(parseISO(tx.date), 'dd MMM yyyy')}
@@ -153,9 +156,9 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
                       {typeLabel}
                     </span>
                   </div>
-                  {isTransfer && kindInfo && (
+                  {isTransfer && tx.savingsVehicle && (
                     <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-3)' }}>
-                      {kindInfo.sub}
+                      {tx.savingsVehicle}
                     </div>
                   )}
                 </div>
@@ -170,11 +173,8 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
                   {!isTransfer && (
                     <Row icon={<Tag size={14} />} label="Category">
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{
-                          display: 'inline-block', width: 8, height: 8, borderRadius: 2,
-                          background: CATEGORY_COLORS[tx.category] ?? '#94a3b8',
-                        }} />
-                        {tx.category}
+                        <CategoryIcon category={tx.category} size={14} color={CATEGORY_COLORS[tx.category] ?? '#94a3b8'} />
+                        {getCategoryDisplayName(tx.category)}
                       </span>
                     </Row>
                   )}

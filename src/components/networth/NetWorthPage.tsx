@@ -1,13 +1,16 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Pencil, Trash2, TrendingUp, Home, Car, Landmark, CreditCard, Coins, BarChart2, Package, Wallet, Eye, EyeOff } from 'lucide-react'
+import { Plus, Pencil, Trash2, TrendingUp, Home, Car, Landmark, CreditCard, Coins, BarChart2, Package, Wallet, Eye, EyeOff, ExternalLink } from 'lucide-react'
 import { IconLifebuoy } from '@tabler/icons-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
+import { useRouter } from 'next/navigation'
 import { useRefreshData } from '@/hooks/useData'
-import { addAsset, updateAsset, deleteAsset, addLiability, updateLiability, deleteLiability } from '@/lib/firestore'
-import { formatCurrencyFull, buildMonthlySummary } from '@/lib/utils'
+import { addAsset, updateAsset, deleteAsset, addLiability, updateLiability, deleteLiability, setEmergencyFund } from '@/lib/firestore'
+import AddTransactionModal from '@/components/transactions/AddTransactionModal'
+import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE } from '@/lib/utils'
+import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import type { Asset, AssetKind, Liability, LiabilityKind } from '@/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
@@ -87,14 +90,45 @@ function SectionHeader({ title, onAdd }: { title: string; onAdd: () => void }) {
 
 export default function NetWorthPage() {
   const { user } = useAuth()
-  const { assets, liabilities, emergencyFund } = useAppStore()
+  const { assets, liabilities, emergencyFund, transactions } = useAppStore()
   const refresh = useRefreshData()
+  const router = useRouter()
 
   const [masked, setMasked] = useState(true)
   const [goldPrice, setGoldPrice] = useState<number | null>(null)
   const [assetModal, setAssetModal] = useState<{ open: boolean; item?: Asset }>({ open: false })
   const [liabilityModal, setLiabilityModal] = useState<{ open: boolean; item?: Liability }>({ open: false })
   const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
+  const [savingsModalOpen, setSavingsModalOpen] = useState(false)
+
+  // EF inline edit state
+  const [efEditing, setEfEditing] = useState(false)
+  const [efBalance, setEfBalance] = useState('')
+  const [efTarget, setEfTarget] = useState('')
+  const [efSaving, setEfSaving] = useState(false)
+
+  function openEfEdit() {
+    setEfBalance(String(emergencyFund?.currentBalance ?? ''))
+    setEfTarget(String(emergencyFund?.targetAmount ?? ''))
+    setEfEditing(true)
+  }
+
+  async function saveEf() {
+    if (!user) return
+    setEfSaving(true)
+    try {
+      await setEmergencyFund(user.uid, {
+        targetAmount:   Number(efTarget)  || emergencyFund?.targetAmount  || 0,
+        currentBalance: Number(efBalance) || 0,
+        usedAmount:     emergencyFund?.usedAmount ?? 0,
+        lastUpdated:    new Date().toISOString(),
+      })
+      await refresh()
+      setEfEditing(false)
+      toast.success('Emergency Fund updated')
+    } catch { toast.error('Failed to save') }
+    finally { setEfSaving(false) }
+  }
 
   useEffect(() => {
     fetch('/api/market/gold')
@@ -108,11 +142,24 @@ export default function NetWorthPage() {
     return a.value
   }
 
+  // Savings vehicles (transaction-derived), excluding Emergency Fund which is
+  // tracked separately above to avoid double-counting.
+  const savingsVehicles = useMemo(() => {
+    const byVehicle = buildSavingsByVehicle(transactions)
+    return Object.entries(byVehicle)
+      .filter(([name, v]) => name !== EMERGENCY_FUND_VEHICLE && v.balance > 0)
+      .map(([name, v]) => ({ name, balance: v.balance }))
+      .sort((a, b) => b.balance - a.balance)
+  }, [transactions])
+
+  const savingsTotal = useMemo(() => savingsVehicles.reduce((s, v) => s + v.balance, 0), [savingsVehicles])
+
   const totalAssets = useMemo(() => {
     let total = assets.reduce((s, a) => s + assetValue(a), 0)
     if (emergencyFund?.currentBalance) total += emergencyFund.currentBalance
+    total += savingsTotal
     return total
-  }, [assets, goldPrice, emergencyFund])
+  }, [assets, goldPrice, emergencyFund, savingsTotal])
 
   const totalLiabilities = useMemo(() =>
     liabilities.reduce((s, l) => {
@@ -189,18 +236,57 @@ export default function NetWorthPage() {
       <div className="card">
         <SectionHeader title="Assets" onAdd={() => setAssetModal({ open: true })} />
 
-        {emergencyFund?.currentBalance ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)', marginBottom: 8 }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--good-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <IconLifebuoy size={16} style={{ color: 'var(--good-ink)' }} />
+        {(emergencyFund?.currentBalance || efEditing) ? (
+          <div style={{ marginBottom: 8, borderRadius: 10, background: 'var(--surface-2)', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--good-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <IconLifebuoy size={16} style={{ color: 'var(--good-ink)' }} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0 }}>Emergency Fund</p>
+                {emergencyFund && !efEditing && (
+                  <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
+                    Target {fmt(emergencyFund.targetAmount)}
+                  </p>
+                )}
+              </div>
+              {!efEditing && (
+                <>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--good-ink)' }}>{fmt(emergencyFund!.currentBalance)}</p>
+                  <button onClick={openEfEdit} style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)' }}>
+                    <Pencil size={13} />
+                  </button>
+                </>
+              )}
             </div>
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0 }}>Emergency Fund</p>
-              <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>Auto-linked from EF tracker</p>
-            </div>
-            <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--good-ink)' }}>{fmt(emergencyFund.currentBalance)}</p>
+            {efEditing && (
+              <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Current Balance (₹)</label>
+                    <input className="input" style={{ fontSize: 13 }} type="number" min="0" value={efBalance} onChange={e => setEfBalance(e.target.value)} autoFocus />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Target Amount (₹)</label>
+                    <input className="input" style={{ fontSize: 13 }} type="number" min="0" value={efTarget} onChange={e => setEfTarget(e.target.value)} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={saveEf} disabled={efSaving} className="btn-primary" style={{ flex: 1, justifyContent: 'center', padding: '8px', fontSize: 13 }}>
+                    {efSaving ? 'Saving…' : 'Save'}
+                  </button>
+                  <button onClick={() => setEfEditing(false)} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 13, cursor: 'pointer' }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        ) : null}
+        ) : (
+          <button onClick={openEfEdit} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 10, border: '1px dashed var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-3)', fontSize: 12, marginBottom: 8, width: '100%' }}>
+            <Plus size={13} /> Set up Emergency Fund
+          </button>
+        )}
 
         {assets.length === 0 && !emergencyFund?.currentBalance ? (
           <p style={{ fontSize: 13, color: 'var(--text-4)', textAlign: 'center', padding: '24px 0' }}>No assets yet. Add your first one.</p>
@@ -228,6 +314,50 @@ export default function NetWorthPage() {
                     <button onClick={() => setAssetModal({ open: true, item: a })} style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)' }}><Pencil size={13} /></button>
                     <button onClick={() => handleDeleteAsset(a.id)} style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)' }}><Trash2 size={13} /></button>
                   </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Savings & Investments (derived from savings transactions) */}
+      <div className="card">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Savings & Investments</h2>
+            {savingsVehicles.length > 0 && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--good-ink)' }}>{fmt(savingsTotal)}</span>}
+          </div>
+          <button
+            onClick={() => setSavingsModalOpen(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+          >
+            <Plus size={13} /> Log
+          </button>
+        </div>
+        {savingsVehicles.length === 0 ? (
+          <p style={{ fontSize: 13, color: 'var(--text-4)', textAlign: 'center', padding: '24px 0' }}>No savings logged yet. Tap Log to add one.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {savingsVehicles.map(v => {
+              const meta = getSavingsVehicleMeta(v.name)
+              return (
+                <div key={v.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: meta.color + '20' }}>
+                    <meta.Icon size={15} color={meta.color} stroke={1.5} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.name}</p>
+                    <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>Net contributions</p>
+                  </div>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--good-ink)', whiteSpace: 'nowrap' }}>{fmt(v.balance)}</p>
+                  <button
+                    onClick={() => router.push(`/transactions?type=savings&vehicle=${encodeURIComponent(v.name)}`)}
+                    style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)', flexShrink: 0 }}
+                    title="View transactions"
+                  >
+                    <ExternalLink size={13} />
+                  </button>
                 </div>
               )
             })}
@@ -298,6 +428,7 @@ export default function NetWorthPage() {
       {liabilityModal.open && (
         <LiabilityModal item={liabilityModal.item} onSave={handleSaveLiability} onClose={() => setLiabilityModal({ open: false })} />
       )}
+      <AddTransactionModal open={savingsModalOpen} onClose={() => { setSavingsModalOpen(false); refresh() }} />
       {confirm && (
         <ConfirmDialog open message={confirm.message} onConfirm={confirm.onConfirm} onClose={() => setConfirm(null)} />
       )}

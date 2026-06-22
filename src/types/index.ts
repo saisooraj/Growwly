@@ -4,8 +4,10 @@ export type TransferKind =
   | 'loan_given'
   | 'loan_repayment_received'
   | 'loan_repayment_paid'
-  | 'savings_transfer'
-  | 'ef_withdrawal'
+  | 'savings_transfer'        // legacy → savings_contribution
+  | 'ef_withdrawal'           // legacy → savings_withdrawal (Emergency Fund)
+  | 'savings_contribution'    // cash → a savings vehicle
+  | 'savings_withdrawal'      // a savings vehicle → cash
 
 export type Category = string
 
@@ -24,6 +26,7 @@ export interface Transaction {
   isRecurring?: boolean
   recurringDay?: number // day-of-month to repeat (1–31)
   transferKind?: TransferKind
+  savingsVehicle?: string  // for savings transfers: which vehicle (Emergency Fund, SIP, Stocks…)
   borrowingId?: string  // optional link to a Borrowing record
 }
 
@@ -108,6 +111,7 @@ export interface UserSettings {
   spendingRule?: { needs: number; wants: number; savings: number }
   categoryBuckets?: { needs: string[]; savings: string[] }
   customCategories?: string[]                     // user-defined categories saved for reuse
+  customSavingsVehicles?: string[]                // user-defined savings vehicles saved for reuse
   dailyLivingCost?: number                        // legacy — superseded by dailyLivingSchedules
   dailyLivingItems?: { label: string; amount: number }[]  // legacy
   dailyLivingSchedules?: {                        // per-day-of-week schedules
@@ -155,6 +159,8 @@ export interface MonthlySummary {
   borrowedOutstanding: number
   repaymentReceived: number
   repaymentPaid: number
+  savingsContributed: number   // cash moved into savings vehicles this period
+  savingsWithdrawn: number     // cash pulled back out of savings this period
   byCategory: Record<Category, number>
 }
 
@@ -208,7 +214,8 @@ export interface PulseUpcoming {
   label: string
   amount: number
   dueDate: string
-  daysUntil: number
+  daysUntil: number      // negative when overdue
+  isOverdue: boolean
   type: 'expense' | 'income' | 'borrowing'
 }
 
