@@ -2,12 +2,12 @@
 
 import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { X, Edit2, Trash2, Calendar, Tag, FileText, Repeat, Folder, ArrowLeftRight } from 'lucide-react'
+import { X, Edit2, Trash2, Calendar, FileText, Repeat, Folder, ArrowLeftRight } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { deleteTransaction } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
 import { formatCurrencyFull, CATEGORY_COLORS, getTransferDisplay } from '@/lib/utils'
-import { CategoryIcon, getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
+import { getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import { useAppStore } from '@/store/appStore'
 import type { Transaction } from '@/types'
 import AddTransactionModal from './AddTransactionModal'
@@ -169,15 +169,6 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
                   <Row icon={<Calendar size={14} />} label="Date">
                     {format(parseISO(tx.date), 'EEEE, dd MMMM yyyy')}
                   </Row>
-
-                  {!isTransfer && (
-                    <Row icon={<Tag size={14} />} label="Category">
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        <CategoryIcon category={tx.category} size={14} color={CATEGORY_COLORS[tx.category] ?? '#94a3b8'} />
-                        {getCategoryDisplayName(tx.category)}
-                      </span>
-                    </Row>
-                  )}
 
                   {tx.notes && (
                     <Row icon={<FileText size={14} />} label="Notes">
