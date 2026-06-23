@@ -62,23 +62,24 @@ function TransactionsInner() {
 
   // Savings aggregates (selected month, respecting the vehicle sub-filter)
   const savingsView = useMemo(() => {
+    const openingBalances = settings?.savingsOpeningBalances ?? {}
     const inScope = monthTxs.filter(t => isSavingsTransfer(t) && (vehicleFilter === 'all' || (t.savingsVehicle ?? '') === vehicleFilter))
     let contributed = 0, withdrawn = 0
     for (const t of inScope) {
       if (t.transferKind === 'savings_withdrawal' || t.transferKind === 'ef_withdrawal') withdrawn += t.amount
       else contributed += t.amount
     }
-    const allTime = buildSavingsByVehicle(transactions)
+    const allTime = buildSavingsByVehicle(transactions, openingBalances)
     const balance = vehicleFilter === 'all'
       ? Object.values(allTime).reduce((s, v) => s + v.balance, 0)
       : (allTime[vehicleFilter]?.balance ?? 0)
     return { contributed, withdrawn, net: contributed - withdrawn, balance }
-  }, [monthTxs, transactions, vehicleFilter])
+  }, [monthTxs, transactions, vehicleFilter, settings])
 
   // Vehicles the user has actually used (for the sub-filter dropdown)
   const usedVehicles = useMemo(
-    () => Object.keys(buildSavingsByVehicle(transactions)).sort((a, b) => a.localeCompare(b)),
-    [transactions]
+    () => Object.keys(buildSavingsByVehicle(transactions, settings?.savingsOpeningBalances ?? {})).sort((a, b) => a.localeCompare(b)),
+    [transactions, settings]
   )
 
   const customCats = settings?.customCategories ?? []

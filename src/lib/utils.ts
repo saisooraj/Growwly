@@ -223,20 +223,28 @@ export function getTransferDisplay(tx: Pick<Transaction, 'transferKind' | 'savin
   return { label: loan?.label ?? 'Transfer', dir: loan?.dir ?? 'out', isSavings: false }
 }
 
-/** All-time balance per savings vehicle: contributions − withdrawals. */
+/** All-time balance per savings vehicle: opening balance + contributions − withdrawals. */
 export function buildSavingsByVehicle(
-  transactions: Transaction[]
-): Record<string, { contributed: number; withdrawn: number; balance: number }> {
-  const out: Record<string, { contributed: number; withdrawn: number; balance: number }> = {}
+  transactions: Transaction[],
+  openingBalances: Record<string, number> = {},
+): Record<string, { opening: number; contributed: number; withdrawn: number; balance: number }> {
+  const out: Record<string, { opening: number; contributed: number; withdrawn: number; balance: number }> = {}
+
+  // Seed opening balances first
+  for (const [vehicle, opening] of Object.entries(openingBalances)) {
+    if (opening > 0) out[vehicle] = { opening, contributed: 0, withdrawn: 0, balance: opening }
+  }
+
   for (const t of transactions) {
     if (!isSavingsTransfer(t)) continue
     const vehicle = t.savingsVehicle
       || (t.transferKind === 'ef_withdrawal' ? EMERGENCY_FUND_VEHICLE : 'Other Savings')
-    const row = out[vehicle] ?? { contributed: 0, withdrawn: 0, balance: 0 }
+    const opening = openingBalances[vehicle] ?? 0
+    const row = out[vehicle] ?? { opening, contributed: 0, withdrawn: 0, balance: opening }
     const { dir } = getTransferDisplay(t)
     if (dir === 'out') row.contributed += t.amount
     else row.withdrawn += t.amount
-    row.balance = row.contributed - row.withdrawn
+    row.balance = row.opening + row.contributed - row.withdrawn
     out[vehicle] = row
   }
   return out

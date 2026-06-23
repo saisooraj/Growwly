@@ -7,7 +7,7 @@ import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
 import { useRouter } from 'next/navigation'
 import { useRefreshData } from '@/hooks/useData'
-import { addAsset, updateAsset, deleteAsset, addLiability, updateLiability, deleteLiability, setEmergencyFund } from '@/lib/firestore'
+import { addAsset, updateAsset, deleteAsset, addLiability, updateLiability, deleteLiability, setEmergencyFund, setUserSettings } from '@/lib/firestore'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE } from '@/lib/utils'
 import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
@@ -90,7 +90,7 @@ function SectionHeader({ title, onAdd }: { title: string; onAdd: () => void }) {
 
 export default function NetWorthPage() {
   const { user } = useAuth()
-  const { assets, liabilities, emergencyFund, transactions } = useAppStore()
+  const { assets, liabilities, emergencyFund, transactions, settings } = useAppStore()
   const refresh = useRefreshData()
   const router = useRouter()
 
@@ -100,6 +100,32 @@ export default function NetWorthPage() {
   const [liabilityModal, setLiabilityModal] = useState<{ open: boolean; item?: Liability }>({ open: false })
   const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [savingsModalOpen, setSavingsModalOpen] = useState(false)
+
+  // Vehicle prior-balance inline edit
+  const [editingVehicle, setEditingVehicle] = useState<string | null>(null)
+  const [editingPrior, setEditingPrior]     = useState('')
+  const [vehicleSaving, setVehicleSaving]   = useState(false)
+
+  function openVehicleEdit(name: string) {
+    const current = settings?.savingsOpeningBalances?.[name] ?? 0
+    setEditingPrior(current > 0 ? String(current) : '')
+    setEditingVehicle(name)
+  }
+
+  async function saveVehiclePrior() {
+    if (!user || !editingVehicle) return
+    setVehicleSaving(true)
+    try {
+      const existing = settings?.savingsOpeningBalances ?? {}
+      await setUserSettings(user.uid, {
+        savingsOpeningBalances: { ...existing, [editingVehicle]: Number(editingPrior) || 0 },
+      })
+      await refresh()
+      setEditingVehicle(null)
+      toast.success('Prior balance saved')
+    } catch { toast.error('Failed to save') }
+    finally { setVehicleSaving(false) }
+  }
 
   // EF inline edit state
   const [efEditing, setEfEditing] = useState(false)
@@ -144,13 +170,15 @@ export default function NetWorthPage() {
 
   // Savings vehicles (transaction-derived), excluding Emergency Fund which is
   // tracked separately above to avoid double-counting.
+  const openingBalances = settings?.savingsOpeningBalances ?? {}
+
   const savingsVehicles = useMemo(() => {
-    const byVehicle = buildSavingsByVehicle(transactions)
+    const byVehicle = buildSavingsByVehicle(transactions, openingBalances)
     return Object.entries(byVehicle)
       .filter(([name, v]) => name !== EMERGENCY_FUND_VEHICLE && v.balance > 0)
-      .map(([name, v]) => ({ name, balance: v.balance }))
+      .map(([name, v]) => ({ name, opening: v.opening, contributed: v.contributed, withdrawn: v.withdrawn, balance: v.balance }))
       .sort((a, b) => b.balance - a.balance)
-  }, [transactions])
+  }, [transactions, openingBalances])
 
   const savingsTotal = useMemo(() => savingsVehicles.reduce((s, v) => s + v.balance, 0), [savingsVehicles])
 
@@ -341,23 +369,51 @@ export default function NetWorthPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {savingsVehicles.map(v => {
               const meta = getSavingsVehicleMeta(v.name)
+              const isEditing = editingVehicle === v.name
               return (
-                <div key={v.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: meta.color + '20' }}>
-                    <meta.Icon size={15} color={meta.color} stroke={1.5} />
+                <div key={v.name} style={{ borderRadius: 10, background: 'var(--surface-2)', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: meta.color + '20' }}>
+                      <meta.Icon size={15} color={meta.color} stroke={1.5} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.name}</p>
+                      <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
+                        {v.opening > 0
+                          ? `${fmt(v.opening)} prior + ${fmt(v.contributed)} added`
+                          : 'Net contributions'}
+                      </p>
+                    </div>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--good-ink)', whiteSpace: 'nowrap' }}>{fmt(v.balance)}</p>
+                    <button onClick={() => openVehicleEdit(v.name)} style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)', flexShrink: 0 }} title="Set prior balance">
+                      <Pencil size={13} />
+                    </button>
+                    <button onClick={() => router.push(`/transactions?type=savings&vehicle=${encodeURIComponent(v.name)}`)} style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)', flexShrink: 0 }} title="View transactions">
+                      <ExternalLink size={13} />
+                    </button>
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.name}</p>
-                    <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>Net contributions</p>
-                  </div>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--good-ink)', whiteSpace: 'nowrap' }}>{fmt(v.balance)}</p>
-                  <button
-                    onClick={() => router.push(`/transactions?type=savings&vehicle=${encodeURIComponent(v.name)}`)}
-                    style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)', flexShrink: 0 }}
-                    title="View transactions"
-                  >
-                    <ExternalLink size={13} />
-                  </button>
+                  {isEditing && (
+                    <div style={{ padding: '0 12px 12px', display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Prior balance (₹) — what you had before tracking</label>
+                        <input
+                          className="input" style={{ fontSize: 13 }} type="number" min="0"
+                          placeholder="e.g. 250000"
+                          value={editingPrior}
+                          onChange={e => setEditingPrior(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, paddingTop: 18, flexShrink: 0 }}>
+                        <button onClick={saveVehiclePrior} disabled={vehicleSaving} className="btn-primary" style={{ padding: '8px 14px', fontSize: 13 }}>
+                          {vehicleSaving ? 'Saving…' : 'Save'}
+                        </button>
+                        <button onClick={() => setEditingVehicle(null)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 13, cursor: 'pointer' }}>
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             })}

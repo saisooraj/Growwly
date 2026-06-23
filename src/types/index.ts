@@ -112,6 +112,7 @@ export interface UserSettings {
   categoryBuckets?: { needs: string[]; savings: string[] }
   customCategories?: string[]                     // user-defined categories saved for reuse
   customSavingsVehicles?: string[]                // user-defined savings vehicles saved for reuse
+  savingsOpeningBalances?: Record<string, number> // prior balance per vehicle before tracking started
   dailyLivingCost?: number                        // legacy — superseded by dailyLivingSchedules
   dailyLivingItems?: { label: string; amount: number }[]  // legacy
   dailyLivingSchedules?: {                        // per-day-of-week schedules
