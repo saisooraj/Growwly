@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import { addTransaction } from '@/lib/firestore'
 import { formatCurrencyFull, getCurrentMonth } from '@/lib/utils'
+import { getCategoryDisplayName } from '@/lib/categoryIcons'
 import { format } from 'date-fns'
 import type { Transaction } from '@/types'
 import toast from 'react-hot-toast'
@@ -147,7 +148,7 @@ export default function RecurringPromptModal() {
                   {due.map(t => (
                     <div key={t.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-[#1a1d30]">
                       <div>
-                        <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{t.category}</p>
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{getCategoryDisplayName(t.category)}</p>
                         {t.notes && <p className="text-xs text-slate-400">{t.notes}</p>}
                         <p className="text-xs text-slate-400 mt-0.5">
                           {t.type === 'expense' ? 'Expense' : 'Income'} · {formatCurrencyFull(t.amount)}

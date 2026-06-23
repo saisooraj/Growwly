@@ -278,6 +278,7 @@ export type AssetKind =
   | 'stocks'
   | 'real_estate'
   | 'vehicle'
+  | 'epf_ppf'
   | 'other'
 
 export interface Asset {
@@ -285,7 +286,18 @@ export interface Asset {
   userId: string
   name: string
   kind: AssetKind
-  value: number        // current value in ₹ (for gold_grams: value = grams)
+  value: number          // grams for gold_grams; invested amount for MF/stocks; current value for rest
+  // Gold
+  karat?: 18 | 22 | 24
+  // Mutual Fund
+  schemeCode?: string    // AMFI scheme code
+  units?: number         // units held
+  // Stocks
+  ticker?: string        // e.g. "RELIANCE.NS"
+  quantity?: number      // number of shares
+  avgBuyPrice?: number   // average buy price per share
+  // Common for MF + stocks (what was put in)
+  investedAmount?: number
   createdAt: string
   updatedAt: string
 }

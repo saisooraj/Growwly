@@ -6,7 +6,7 @@ import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import { buildMonthlySummary, formatCurrencyFull, EXPENSE_CATEGORIES } from '@/lib/utils'
-import { CategoryIcon } from '@/lib/categoryIcons'
+import { CategoryIcon, getCategoryDisplayName } from '@/lib/categoryIcons'
 import { setUserSettings } from '@/lib/firestore'
 import toast from 'react-hot-toast'
 
@@ -37,11 +37,6 @@ const BUCKET_META: Record<Bucket, { label: string; color: string; ink: string; s
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function getCatDisplayName(cat: string): string {
-  const sp = cat.indexOf(' ')
-  if (sp > 0 && (cat.codePointAt(0) ?? 0) > 255) return cat.slice(sp + 1)
-  return cat
-}
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
@@ -91,7 +86,7 @@ function BucketRow({
               return (
                 <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--border)' }}>
                   <span style={{ flexShrink: 0, color: 'var(--text-3)' }}><CategoryIcon category={cat} size={14} /></span>
-                  <span style={{ fontSize: 12, color: 'var(--text-2)', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getCatDisplayName(cat)}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-2)', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getCategoryDisplayName(cat)}</span>
                   <div style={{ width: 60, height: 4, background: 'var(--surface-3)', borderRadius: 999, flexShrink: 0 }}>
                     <div style={{ height: '100%', width: `${barPct}%`, background: meta.color, borderRadius: 999 }} />
                   </div>
@@ -288,7 +283,7 @@ export default function SpendingRuleCard() {
               return (
                 <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', borderRadius: 8, background: 'var(--surface)' }}>
                   <span style={{ flexShrink: 0, color: 'var(--text-3)' }}><CategoryIcon category={cat} size={14} /></span>
-                  <span style={{ fontSize: 12, color: 'var(--text-2)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{getCatDisplayName(cat)}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-2)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{getCategoryDisplayName(cat)}</span>
                   <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: '1px solid var(--border)', flexShrink: 0 }}>
                     {(['needs', 'wants', 'savings'] as Bucket[]).map(b => {
                       const meta = BUCKET_META[b]

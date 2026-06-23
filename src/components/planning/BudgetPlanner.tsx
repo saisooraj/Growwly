@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
 import { EXPENSE_CATEGORIES, formatCurrencyFull, buildMonthlySummary, getBudgetStatus, STATUS_COLORS } from '@/lib/utils'
+import { getCategoryDisplayName } from '@/lib/categoryIcons'
 import type { Category } from '@/types'
 import toast from 'react-hot-toast'
 import { Check, Edit2 } from 'lucide-react'
@@ -72,7 +73,7 @@ export default function BudgetPlanner() {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: planned > 0 || actual > 0 ? 8 : 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                 <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {cat}
+                  {getCategoryDisplayName(cat)}
                 </span>
                 {planned > 0 && (
                   <span className={`pill ${sc.pill}`} style={{ fontSize: 10, padding: '1px 6px', flexShrink: 0 }}>

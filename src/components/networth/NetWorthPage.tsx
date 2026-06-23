@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Plus, Pencil, Trash2, TrendingUp, Home, Car, Landmark, CreditCard, Coins, BarChart2, Package, Wallet, Eye, EyeOff, ExternalLink } from 'lucide-react'
+import { Pencil, Trash2, Home, Car, Landmark, CreditCard, Package, Wallet, Eye, EyeOff, ExternalLink, Plus, TrendingUp, BarChart2, Coins } from 'lucide-react'
 import { IconLifebuoy } from '@tabler/icons-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
@@ -16,6 +16,7 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
 import AssetModal from './AssetModal'
 import LiabilityModal from './LiabilityModal'
+import MyAssetsSection from './MyAssetsSection'
 
 // ── EMI / Loan calculations ────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ const ASSET_META: Record<AssetKind, { label: string; icon: React.ElementType; co
   stocks:       { label: 'Stocks',           icon: BarChart2,  color: 'var(--brand-deep)' },
   real_estate:  { label: 'Real Estate',      icon: Home,       color: 'var(--warn)' },
   vehicle:      { label: 'Vehicle',          icon: Car,        color: 'var(--text-3)' },
+  epf_ppf:      { label: 'EPF / PPF / NPS', icon: Landmark,   color: 'var(--info)' },
   other:        { label: 'Other Asset',      icon: Package,    color: 'var(--text-3)' },
 }
 
@@ -95,7 +97,6 @@ export default function NetWorthPage() {
   const router = useRouter()
 
   const [masked, setMasked] = useState(true)
-  const [goldPrice, setGoldPrice] = useState<number | null>(null)
   const [assetModal, setAssetModal] = useState<{ open: boolean; item?: Asset }>({ open: false })
   const [liabilityModal, setLiabilityModal] = useState<{ open: boolean; item?: Liability }>({ open: false })
   const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
@@ -156,20 +157,7 @@ export default function NetWorthPage() {
     finally { setEfSaving(false) }
   }
 
-  useEffect(() => {
-    fetch('/api/market/gold')
-      .then(r => r.json())
-      .then(d => { if (d.price22kPerGram) setGoldPrice(d.price22kPerGram) })
-      .catch(() => {})
-  }, [])
-
-  function assetValue(a: Asset): number {
-    if (a.kind === 'gold_grams') return goldPrice ? a.value * goldPrice : 0
-    return a.value
-  }
-
-  // Savings vehicles (transaction-derived), excluding Emergency Fund which is
-  // tracked separately above to avoid double-counting.
+  // Savings vehicles (transaction-derived), excluding Emergency Fund
   const openingBalances = settings?.savingsOpeningBalances ?? {}
 
   const savingsVehicles = useMemo(() => {
@@ -182,12 +170,12 @@ export default function NetWorthPage() {
 
   const savingsTotal = useMemo(() => savingsVehicles.reduce((s, v) => s + v.balance, 0), [savingsVehicles])
 
+  // For net worth total we use invested/value as best estimate (MyAssetsSection shows live values)
   const totalAssets = useMemo(() => {
-    let total = assets.reduce((s, a) => s + assetValue(a), 0)
-    if (emergencyFund?.currentBalance) total += emergencyFund.currentBalance
-    total += savingsTotal
-    return total
-  }, [assets, goldPrice, emergencyFund, savingsTotal])
+    const assetsTotal = assets.reduce((s, a) => s + a.value, 0)
+    const ef = emergencyFund?.currentBalance ?? 0
+    return assetsTotal + ef + savingsTotal
+  }, [assets, emergencyFund, savingsTotal])
 
   const totalLiabilities = useMemo(() =>
     liabilities.reduce((s, l) => {
@@ -260,94 +248,14 @@ export default function NetWorthPage() {
         </div>
       </div>
 
-      {/* Assets */}
-      <div className="card">
-        <SectionHeader title="Assets" onAdd={() => setAssetModal({ open: true })} />
-
-        {(emergencyFund?.currentBalance || efEditing) ? (
-          <div style={{ marginBottom: 8, borderRadius: 10, background: 'var(--surface-2)', overflow: 'hidden' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px' }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--good-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <IconLifebuoy size={16} style={{ color: 'var(--good-ink)' }} />
-              </div>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0 }}>Emergency Fund</p>
-                {emergencyFund && !efEditing && (
-                  <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
-                    Target {fmt(emergencyFund.targetAmount)}
-                  </p>
-                )}
-              </div>
-              {!efEditing && (
-                <>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--good-ink)' }}>{fmt(emergencyFund!.currentBalance)}</p>
-                  <button onClick={openEfEdit} style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)' }}>
-                    <Pencil size={13} />
-                  </button>
-                </>
-              )}
-            </div>
-            {efEditing && (
-              <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  <div>
-                    <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Current Balance (₹)</label>
-                    <input className="input" style={{ fontSize: 13 }} type="number" min="0" value={efBalance} onChange={e => setEfBalance(e.target.value)} autoFocus />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Target Amount (₹)</label>
-                    <input className="input" style={{ fontSize: 13 }} type="number" min="0" value={efTarget} onChange={e => setEfTarget(e.target.value)} />
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={saveEf} disabled={efSaving} className="btn-primary" style={{ flex: 1, justifyContent: 'center', padding: '8px', fontSize: 13 }}>
-                    {efSaving ? 'Saving…' : 'Save'}
-                  </button>
-                  <button onClick={() => setEfEditing(false)} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 13, cursor: 'pointer' }}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        ) : (
-          <button onClick={openEfEdit} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 10, border: '1px dashed var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-3)', fontSize: 12, marginBottom: 8, width: '100%' }}>
-            <Plus size={13} /> Set up Emergency Fund
-          </button>
-        )}
-
-        {assets.length === 0 && !emergencyFund?.currentBalance ? (
-          <p style={{ fontSize: 13, color: 'var(--text-4)', textAlign: 'center', padding: '24px 0' }}>No assets yet. Add your first one.</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {assets.map(a => {
-              const meta = ASSET_META[a.kind]
-              const Icon = meta.icon
-              const val = assetValue(a)
-              return (
-                <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--surface-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Icon size={15} style={{ color: meta.color }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</p>
-                    <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
-                      {meta.label}{a.kind === 'gold_grams' ? ` · ${a.value}g${goldPrice ? ` @ ₹${goldPrice.toLocaleString('en-IN')}/g` : ''}` : ''}
-                    </p>
-                  </div>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--good-ink)', whiteSpace: 'nowrap' }}>
-                    {masked ? MASK : a.kind === 'gold_grams' && !goldPrice ? `${a.value}g` : formatCurrencyFull(val)}
-                  </p>
-                  <div style={{ display: 'flex', gap: 2 }}>
-                    <button onClick={() => setAssetModal({ open: true, item: a })} style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)' }}><Pencil size={13} /></button>
-                    <button onClick={() => handleDeleteAsset(a.id)} style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)' }}><Trash2 size={13} /></button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
+      {/* My Holdings */}
+      <MyAssetsSection
+        assets={assets}
+        masked={masked}
+        onAdd={() => setAssetModal({ open: true })}
+        onEdit={a => setAssetModal({ open: true, item: a })}
+        onDelete={handleDeleteAsset}
+      />
 
       {/* Savings & Investments (derived from savings transactions) */}
       <div className="card">

@@ -3,6 +3,7 @@
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { buildMonthlySummary, EXPENSE_CATEGORIES, formatCurrencyFull } from '@/lib/utils'
+import { getCategoryDisplayName } from '@/lib/categoryIcons'
 import { format, subMonths, parseISO } from 'date-fns'
 
 export default function CategoryInsights() {
@@ -73,7 +74,7 @@ export default function CategoryInsights() {
           >
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {cat}
+                {getCategoryDisplayName(cat)}
               </p>
               <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
                 <span className="num">{prev > 0 ? formatCurrencyFull(prev) : '—'}</span>

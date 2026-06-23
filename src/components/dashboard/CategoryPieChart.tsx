@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp, ArrowUpRight } from 'lucide-react'
 import { PieChart, Pie, Cell, Sector, ResponsiveContainer, Label } from 'recharts'
 import { useAppStore } from '@/store/appStore'
 import { buildMonthlySummary, formatCurrency, formatCurrencyFull, CATEGORY_COLORS, getLast6Months, getMonthLabel } from '@/lib/utils'
+import { getCategoryDisplayName } from '@/lib/categoryIcons'
 
 const MAX_SLICES = 6
 
@@ -242,7 +243,7 @@ export default function CategoryPieChart() {
                         background: CATEGORY_COLORS[cat] ?? '#94a3b8',
                       }} />
                       <span style={{ flex: 1, fontSize: 11.5, color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {cat}
+                        {getCategoryDisplayName(cat)}
                       </span>
                       <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--text)', flexShrink: 0 }}>
                         {formatCurrency(val)}
