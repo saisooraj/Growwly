@@ -16,6 +16,8 @@ import {
   getUserTasks,
   getUserAssets,
   getUserLiabilities,
+  getUserHealthRoutines,
+  getHealthLogs,
 } from '@/lib/firestore'
 
 export function useData() {
@@ -33,6 +35,8 @@ export function useData() {
     setTasks,
     setAssets,
     setLiabilities,
+    setHealthRoutines,
+    setHealthLogs,
     setLoading,
     setInitialized,
     initialized,
@@ -50,7 +54,10 @@ export function useData() {
       if (!user) return
       setLoading(true)
       try {
-        const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming, upcomingPmts, tasks, assets, liabilities] =
+        const from60 = new Date(); from60.setDate(from60.getDate() - 60)
+        const from60Str = from60.toISOString().slice(0, 10)
+
+        const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming, upcomingPmts, tasks, assets, liabilities, healthRoutines, healthLogs] =
           await Promise.all([
             getUserTransactions(user.uid),
             getUserBudgets(user.uid),
@@ -64,6 +71,8 @@ export function useData() {
             getUserTasks(user.uid).catch(() => []),
             getUserAssets(user.uid).catch(() => []),
             getUserLiabilities(user.uid).catch(() => []),
+            getUserHealthRoutines(user.uid).catch(() => []),
+            getHealthLogs(user.uid, from60Str).catch(() => []),
           ])
         setTransactions(txs)
         setBudgets(budgets)
@@ -77,6 +86,8 @@ export function useData() {
         setTasks(tasks)
         setAssets(assets)
         setLiabilities(liabilities)
+        setHealthRoutines(healthRoutines)
+        setHealthLogs(healthLogs)
         setInitialized(true)
       } finally {
         setLoading(false)
@@ -102,6 +113,8 @@ export function useRefreshData() {
     setTasks,
     setAssets,
     setLiabilities,
+    setHealthRoutines,
+    setHealthLogs,
     setLoading,
   } = useAppStore()
 
@@ -109,7 +122,10 @@ export function useRefreshData() {
     if (!user) return
     setLoading(true)
     try {
-      const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming, upcomingPmts, tasks, assets, liabilities] =
+      const from60 = new Date(); from60.setDate(from60.getDate() - 60)
+      const from60Str = from60.toISOString().slice(0, 10)
+
+      const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming, upcomingPmts, tasks, assets, liabilities, healthRoutines, healthLogs] =
         await Promise.all([
           getUserTransactions(user.uid),
           getUserBudgets(user.uid),
@@ -123,6 +139,8 @@ export function useRefreshData() {
           getUserTasks(user.uid).catch(() => []),
           getUserAssets(user.uid).catch(() => []),
           getUserLiabilities(user.uid).catch(() => []),
+          getUserHealthRoutines(user.uid).catch(() => []),
+          getHealthLogs(user.uid, from60Str).catch(() => []),
         ])
       setTransactions(txs)
       setBudgets(budgets)
@@ -136,6 +154,8 @@ export function useRefreshData() {
       setTasks(tasks)
       setAssets(assets)
       setLiabilities(liabilities)
+      setHealthRoutines(healthRoutines)
+      setHealthLogs(healthLogs)
     } finally {
       setLoading(false)
     }

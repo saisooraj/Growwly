@@ -15,24 +15,29 @@ import {
   Settings,
   CheckSquare,
   TrendingUp,
+  Activity,
 } from 'lucide-react'
+import { useAppStore } from '@/store/appStore'
 
-const NAV = [
-  { href: '/',             icon: LayoutDashboard, label: 'Home' },
-  { href: '/transactions', icon: ArrowLeftRight,  label: 'Txns' },
-  { href: '/planning',     icon: CalendarDays,    label: 'Plan' },
-  { href: '/networth',     icon: TrendingUp,      label: 'Net Worth' },
-  { href: '/upcoming',     icon: CalendarClock,   label: 'Upcoming' },
-  { href: '/goals',        icon: Target,          label: 'Goals' },
-  { href: '/projects',     icon: FolderKanban,    label: 'Projects' },
-  { href: '/borrowings',   icon: HandCoins,       label: 'Borrow' },
-  { href: '/tasks',        icon: CheckSquare,     label: 'Tasks' },
-  { href: '/market',       icon: LineChart,       label: 'Market' },
-  { href: '/settings',     icon: Settings,        label: 'Settings' },
+const ALL_NAV = [
+  { href: '/',             icon: LayoutDashboard, label: 'Home',      optional: false },
+  { href: '/transactions', icon: ArrowLeftRight,  label: 'Txns',      optional: false },
+  { href: '/planning',     icon: CalendarDays,    label: 'Plan',      optional: false },
+  { href: '/networth',     icon: TrendingUp,      label: 'Net Worth', optional: false },
+  { href: '/upcoming',     icon: CalendarClock,   label: 'Upcoming',  optional: false },
+  { href: '/goals',        icon: Target,          label: 'Goals',     optional: false },
+  { href: '/projects',     icon: FolderKanban,    label: 'Projects',  optional: false },
+  { href: '/borrowings',   icon: HandCoins,       label: 'Borrow',    optional: false },
+  { href: '/tasks',        icon: CheckSquare,     label: 'Tasks',     optional: true, settingKey: 'showTasksTab' as const },
+  { href: '/health',       icon: Activity,        label: 'Health',    optional: true, settingKey: 'showHealthTab' as const },
+  { href: '/market',       icon: LineChart,       label: 'Market',    optional: false },
+  { href: '/settings',     icon: Settings,        label: 'Settings',  optional: false },
 ]
 
 export default function MobileNav() {
   const pathname  = usePathname()
+  const settings  = useAppStore(s => s.settings)
+  const NAV = ALL_NAV.filter(item => !item.optional || (item.settingKey && settings?.[item.settingKey]))
   const scrollRef = useRef<HTMLDivElement>(null)
   const [fadeLeft, setFadeLeft]   = useState(false)
   const [fadeRight, setFadeRight] = useState(true)

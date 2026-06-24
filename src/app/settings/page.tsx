@@ -11,7 +11,7 @@ import { useRefreshData } from '@/hooks/useData'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { downloadJSON, getLast6Months } from '@/lib/utils'
 import { getCycleRange, getLastWorkingDay, formatCycleRange } from '@/lib/cycle'
-import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock } from 'lucide-react'
+import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare } from 'lucide-react'
 import { IconLeaf, IconFlame } from '@tabler/icons-react'
 import LinkedAccounts from '@/components/auth/LinkedAccounts'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
@@ -41,6 +41,11 @@ export default function SettingsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pendingImport, setPendingImport] = useState<any | null>(null)
 
+  // Navigation tab toggles
+  const [showHealthTab, setShowHealthTab] = useState(false)
+  const [showTasksTab, setShowTasksTab]   = useState(false)
+  const [savingTabs, setSavingTabs]       = useState(false)
+
   // Salary cycle
   const [cycleRule, setCycleRule]           = useState<SalaryCycleRule>('none')
   const [cycleFixedDay, setCycleFixedDay]   = useState('28')
@@ -60,6 +65,8 @@ export default function SettingsPage() {
       setCycleRule((settings.salaryCycleRule ?? 'none') as SalaryCycleRule)
       setCycleFixedDay(String(settings.salaryCycleFixedDay ?? 28))
       setCycleOverrides(settings.cycleOverrides ?? {})
+      setShowHealthTab(settings.showHealthTab ?? false)
+      setShowTasksTab(settings.showTasksTab ?? false)
     }
   }, [settings])
 
@@ -126,6 +133,19 @@ export default function SettingsPage() {
       toast.error('Failed to save cycle')
     } finally {
       setSavingCycle(false)
+    }
+  }
+
+  async function saveTabSettings(field: 'showHealthTab' | 'showTasksTab', value: boolean) {
+    if (!user) return
+    setSavingTabs(true)
+    try {
+      await setUserSettings(user.uid, { [field]: value })
+      await refresh()
+    } catch {
+      toast.error('Failed to save')
+    } finally {
+      setSavingTabs(false)
     }
   }
 
@@ -196,6 +216,40 @@ export default function SettingsPage() {
   return (
     <AppShell title="Settings">
       <div style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+
+        {/* About Growwly */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+              background: 'linear-gradient(135deg, var(--brand) 0%, var(--brand-deep) 100%)',
+              color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,.25), 0 4px 12px -4px var(--brand)',
+            }}>
+              <IconLeaf size={20} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0, letterSpacing: '-0.01em' }}>Growwly</h2>
+              <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, letterSpacing: '.06em', textTransform: 'uppercase' }}>Your personal Money OS</p>
+            </div>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0, lineHeight: 1.65 }}>
+            Growwly is more than a finance tracker — it&apos;s your complete money operating system. Track spending, manage savings goals, monitor net worth, stay on top of upcoming bills, and plan for financial independence, all in one place.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {[
+              { label: 'Smart budgeting', desc: 'Weekly & monthly spend control' },
+              { label: 'Net worth tracking', desc: 'Assets, loans & savings in one view' },
+              { label: 'Emergency fund', desc: 'Know your financial safety net' },
+              { label: 'FI calculator', desc: 'Track your path to freedom' },
+            ].map(({ label, desc }) => (
+              <div key={label} style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)' }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', margin: '0 0 2px' }}>{label}</p>
+                <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Account */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -550,6 +604,80 @@ export default function SettingsPage() {
             Link multiple sign-in methods. Your data stays the same regardless of which method you use.
           </p>
           <LinkedAccounts />
+        </div>
+
+        {/* Navigation */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <LayoutGrid size={14} style={{ color: 'var(--brand)' }} />
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Navigation Tabs</h2>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
+            Choose which optional tabs appear in the navigation bar. Health and Task tracking are available when you need them.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {([
+              {
+                field: 'showHealthTab' as const,
+                label: 'Health',
+                desc: 'Log workouts, sleep, water intake and daily wellness metrics',
+                icon: Activity,
+                value: showHealthTab,
+                set: setShowHealthTab,
+              },
+              {
+                field: 'showTasksTab' as const,
+                label: 'Tasks',
+                desc: 'A simple to-do list to track personal action items',
+                icon: CheckSquare,
+                value: showTasksTab,
+                set: setShowTasksTab,
+              },
+            ]).map(({ field, label, desc, icon: Icon, value, set }) => (
+              <div
+                key={field}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 14px', borderRadius: 12,
+                  background: value ? 'var(--brand-soft)' : 'var(--surface-2)',
+                  border: `1px solid ${value ? 'var(--brand)' : 'var(--border)'}`,
+                  transition: 'all .15s',
+                }}
+              >
+                <div style={{
+                  width: 32, height: 32, borderRadius: 8, flexShrink: 0,
+                  background: value ? 'var(--brand)' : 'var(--surface-3)',
+                  color: value ? '#fff' : 'var(--text-3)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'all .15s',
+                }}>
+                  <Icon size={15} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 13, fontWeight: 500, color: value ? 'var(--brand-ink)' : 'var(--text)', margin: 0 }}>{label}</p>
+                  <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, marginTop: 1 }}>{desc}</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    const next = !value
+                    set(next)
+                    await saveTabSettings(field, next)
+                  }}
+                  disabled={savingTabs}
+                  style={{
+                    padding: '6px 14px', borderRadius: 20, border: 'none',
+                    background: value ? 'var(--brand)' : 'var(--surface-3)',
+                    color: value ? '#fff' : 'var(--text-3)',
+                    fontSize: 12, fontWeight: 600, cursor: savingTabs ? 'default' : 'pointer',
+                    opacity: savingTabs ? 0.6 : 1, flexShrink: 0,
+                    transition: 'all .15s',
+                  }}
+                >
+                  {value ? 'On' : 'Off'}
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Backup & Restore */}

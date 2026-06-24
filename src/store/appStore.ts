@@ -12,6 +12,8 @@ import type {
   Task,
   Asset,
   Liability,
+  HealthRoutine,
+  HealthLog,
 } from '@/types'
 import { getCurrentMonth } from '@/lib/utils'
 
@@ -28,6 +30,8 @@ interface AppState {
   tasks: Task[]
   assets: Asset[]
   liabilities: Liability[]
+  healthRoutines: HealthRoutine[]
+  healthLogs: HealthLog[]
   selectedMonth: string
   loading: boolean
   initialized: boolean
@@ -44,6 +48,8 @@ interface AppState {
   setTasks: (t: Task[]) => void
   setAssets: (a: Asset[]) => void
   setLiabilities: (l: Liability[]) => void
+  setHealthRoutines: (r: HealthRoutine[]) => void
+  setHealthLogs: (l: HealthLog[]) => void
   setSelectedMonth: (m: string) => void
   setLoading: (l: boolean) => void
   setInitialized: (i: boolean) => void
@@ -63,6 +69,8 @@ export const useAppStore = create<AppState>((set) => ({
   tasks: [],
   assets: [],
   liabilities: [],
+  healthRoutines: [],
+  healthLogs: [],
   selectedMonth: getCurrentMonth(),
   loading: false,
   initialized: false,
@@ -79,6 +87,8 @@ export const useAppStore = create<AppState>((set) => ({
   setTasks: (tasks) => set({ tasks }),
   setAssets: (assets) => set({ assets }),
   setLiabilities: (liabilities) => set({ liabilities }),
+  setHealthRoutines: (healthRoutines) => set({ healthRoutines }),
+  setHealthLogs: (healthLogs) => set({ healthLogs }),
   setSelectedMonth: (selectedMonth) => set({ selectedMonth }),
   setLoading: (loading) => set({ loading }),
   setInitialized: (initialized) => set({ initialized }),
@@ -96,6 +106,8 @@ export const useAppStore = create<AppState>((set) => ({
       tasks: [],
       assets: [],
       liabilities: [],
+      healthRoutines: [],
+      healthLogs: [],
       selectedMonth: getCurrentMonth(),
       initialized: false,
     }),

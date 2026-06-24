@@ -257,6 +257,83 @@ export default function NetWorthPage() {
         onDelete={handleDeleteAsset}
       />
 
+      {/* Emergency Fund */}
+      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--warn-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <IconLifebuoy size={15} style={{ color: 'var(--warn-ink)' }} stroke={1.5} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Emergency Fund</h2>
+              {emergencyFund && (
+                <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
+                  Target {fmt(emergencyFund.targetAmount)} · 6 mo runway
+                </p>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={openEfEdit}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+          >
+            {emergencyFund ? <Pencil size={12} /> : <Plus size={12} />}
+            {emergencyFund ? 'Edit' : 'Set up'}
+          </button>
+        </div>
+
+        {efEditing && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Current Balance (₹)</label>
+              <input className="input" type="number" value={efBalance} onChange={e => setEfBalance(e.target.value)} autoFocus />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Target Amount (₹)</label>
+              <input className="input" type="number" value={efTarget} onChange={e => setEfTarget(e.target.value)} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={saveEf} disabled={efSaving} className="btn-primary" style={{ flex: 1, justifyContent: 'center', fontSize: 13 }}>
+                {efSaving ? 'Saving…' : 'Save'}
+              </button>
+              <button onClick={() => setEfEditing(false)} style={{ flex: 1, justifyContent: 'center', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 13, cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {emergencyFund && !efEditing && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+              <div className="display-num" style={{ fontSize: 26, color: 'var(--text)' }}>
+                {fmt(emergencyFund.currentBalance)}
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--warn-ink)' }}>
+                  {Math.round(Math.min((emergencyFund.currentBalance / (emergencyFund.targetAmount || 1)) * 100, 100))}%
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>funded</div>
+              </div>
+            </div>
+            <div style={{ height: 5, background: 'var(--surface-2)', borderRadius: 999, overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: 999,
+                width: `${Math.min((emergencyFund.currentBalance / (emergencyFund.targetAmount || 1)) * 100, 100)}%`,
+                background: 'var(--warn)',
+                transition: 'width .4s cubic-bezier(.4,0,.2,1)',
+              }} />
+            </div>
+          </>
+        )}
+
+        {!emergencyFund && !efEditing && (
+          <p style={{ fontSize: 13, color: 'var(--text-4)', textAlign: 'center', padding: '12px 0' }}>
+            Set up your emergency fund to track your financial safety net.
+          </p>
+        )}
+      </div>
+
       {/* Savings & Investments (derived from savings transactions) */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>

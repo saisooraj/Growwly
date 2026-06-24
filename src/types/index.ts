@@ -113,6 +113,8 @@ export interface UserSettings {
   customCategories?: string[]                     // user-defined categories saved for reuse
   customSavingsVehicles?: string[]                // user-defined savings vehicles saved for reuse
   savingsOpeningBalances?: Record<string, number> // prior balance per vehicle before tracking started
+  showHealthTab?: boolean                         // show Health tab in navigation (default: false)
+  showTasksTab?: boolean                          // show Tasks tab in navigation (default: false)
   dailyLivingCost?: number                        // legacy — superseded by dailyLivingSchedules
   dailyLivingItems?: { label: string; amount: number }[]  // legacy
   dailyLivingSchedules?: {                        // per-day-of-week schedules
@@ -266,6 +268,36 @@ export interface FinancialPulse {
   spendAnalysis: PulseSpendCategory[]
   goals: PulseGoal[]
   borrowingAlerts: PulseBorrowingAlert[]
+}
+
+// ── Health ────────────────────────────────────────────────────────────────────
+
+export type HealthCategory = 'legs' | 'back' | 'neck' | 'strength' | 'full-body'
+export type HealthScheduleType = 'daily' | 'hourly-window' | 'weekly'
+
+export interface HealthRoutine {
+  id: string
+  userId: string
+  name: string
+  subtitle?: string         // e.g. "1.8km · legs"
+  category: HealthCategory
+  scheduleType: HealthScheduleType
+  reminderTime?: string     // "HH:MM" — informational for now
+  daysOfWeek?: string[]     // ['mon','wed','fri'] — for weekly scheduleType
+  targetCount?: number      // for hourly-window: how many breaks per day
+  order: number
+  active: boolean
+  createdAt: string
+}
+
+export interface HealthLog {
+  id: string
+  userId: string
+  date: string              // YYYY-MM-DD
+  routineId: string
+  count: number             // 1 for daily/weekly; increments for hourly-window
+  completedAt?: string      // ISO timestamp of last tap
+  createdAt: string
 }
 
 // ── Net Worth ─────────────────────────────────────────────────────────────────

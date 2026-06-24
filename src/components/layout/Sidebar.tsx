@@ -16,29 +16,32 @@ import {
   Target,
   CheckSquare,
   TrendingUp,
+  Activity,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
 import Image from 'next/image'
 
-const NAV = [
-  { href: '/',             icon: LayoutDashboard, label: 'Overview' },
-  { href: '/transactions', icon: ArrowLeftRight,  label: 'Transactions' },
-  { href: '/planning',     icon: CalendarDays,    label: 'Planning' },
-  { href: '/networth',     icon: TrendingUp,      label: 'Net Worth' },
-  { href: '/upcoming',     icon: CalendarClock,   label: 'Upcoming' },
-  { href: '/goals',        icon: Target,          label: 'Savings' },
-  { href: '/projects',     icon: FolderKanban,    label: 'Projects' },
-  { href: '/borrowings',   icon: HandCoins,       label: 'Borrowings' },
-  { href: '/tasks',        icon: CheckSquare,     label: 'Tasks' },
-  { href: '/market',       icon: LineChart,       label: 'Market' },
-  { href: '/settings',     icon: Settings,        label: 'Settings' },
+const ALL_NAV = [
+  { href: '/',             icon: LayoutDashboard, label: 'Overview',     optional: false },
+  { href: '/transactions', icon: ArrowLeftRight,  label: 'Transactions', optional: false },
+  { href: '/planning',     icon: CalendarDays,    label: 'Planning',     optional: false },
+  { href: '/networth',     icon: TrendingUp,      label: 'Net Worth',    optional: false },
+  { href: '/upcoming',     icon: CalendarClock,   label: 'Upcoming',     optional: false },
+  { href: '/goals',        icon: Target,          label: 'Savings',      optional: false },
+  { href: '/projects',     icon: FolderKanban,    label: 'Projects',     optional: false },
+  { href: '/borrowings',   icon: HandCoins,       label: 'Borrowings',   optional: false },
+  { href: '/tasks',        icon: CheckSquare,     label: 'Tasks',        optional: true, settingKey: 'showTasksTab' as const },
+  { href: '/health',       icon: Activity,        label: 'Health',       optional: true, settingKey: 'showHealthTab' as const },
+  { href: '/market',       icon: LineChart,       label: 'Market',       optional: false },
+  { href: '/settings',     icon: Settings,        label: 'Settings',     optional: false },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const settings = useAppStore((s) => s.settings)
+  const NAV = ALL_NAV.filter(item => !item.optional || (item.settingKey && settings?.[item.settingKey]))
   const isHighExpense = settings?.financialMode === 'high-expense'
 
   return (

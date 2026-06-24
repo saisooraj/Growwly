@@ -145,7 +145,7 @@ export default function CategoryPieChart() {
                       textAnchor="middle"
                       style={{ fontSize: 10.5, fill: 'var(--text-3)', fontFamily: 'Geist, sans-serif' }}
                     >
-                      {active ? active.name : 'total spend'}
+                      {active ? getCategoryDisplayName(active.name) : 'total spend'}
                     </text>
                     {active && (
                       <text
@@ -201,7 +201,7 @@ export default function CategoryPieChart() {
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   transition: 'color .12s',
                 }}>
-                  {item.name}
+                  {item.isOther ? 'Other' : getCategoryDisplayName(item.name)}
                 </span>
                 <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', flexShrink: 0 }}>
                   {formatCurrency(item.value)}

@@ -24,6 +24,8 @@ import type {
   Task,
   Asset,
   Liability,
+  HealthRoutine,
+  HealthLog,
 } from '@/types'
 
 // ── Transactions ────────────────────────────────────────────────────────────
@@ -206,6 +208,57 @@ export async function setUserSettings(
       updatedAt: new Date().toISOString(),
     })
   }
+}
+
+// ── Health ────────────────────────────────────────────────────────────────────
+
+export async function addHealthRoutine(
+  userId: string,
+  data: Omit<HealthRoutine, 'id' | 'userId' | 'createdAt'>
+): Promise<string> {
+  const ref = await addDoc(collection(db, 'healthRoutines'), {
+    ...data, userId, createdAt: new Date().toISOString(),
+  })
+  return ref.id
+}
+
+export async function updateHealthRoutine(id: string, data: Partial<HealthRoutine>): Promise<void> {
+  await updateDoc(doc(db, 'healthRoutines', id), data)
+}
+
+export async function deleteHealthRoutine(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'healthRoutines', id))
+}
+
+export async function getUserHealthRoutines(userId: string): Promise<HealthRoutine[]> {
+  const q = query(collection(db, 'healthRoutines'), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as HealthRoutine))
+    .sort((a, b) => a.order - b.order)
+}
+
+export async function upsertHealthLog(
+  userId: string,
+  date: string,
+  routineId: string,
+  count: number,
+): Promise<void> {
+  const id = `${userId}_${date}_${routineId}`
+  await setDoc(doc(db, 'healthLogs', id), {
+    userId, date, routineId, count,
+    completedAt: count > 0 ? new Date().toISOString() : null,
+    createdAt: new Date().toISOString(),
+  }, { merge: true })
+}
+
+export async function getHealthLogs(userId: string, fromDate: string): Promise<HealthLog[]> {
+  // Single where clause (no composite index needed); filter by date in JS
+  const q = query(collection(db, 'healthLogs'), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  return snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as HealthLog))
+    .filter(l => l.date >= fromDate)
 }
 
 // ── Push Subscriptions ────────────────────────────────────────────────────────

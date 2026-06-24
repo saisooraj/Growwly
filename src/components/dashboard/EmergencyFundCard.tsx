@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
-import { ShieldCheck } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { ShieldCheck, ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react'
+import Link from 'next/link'
 import { useAppStore } from '@/store/appStore'
-import { formatCurrencyFull } from '@/lib/utils'
+import { formatCurrencyFull, EMERGENCY_FUND_VEHICLE } from '@/lib/utils'
 import { setEmergencyFund } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import toast from 'react-hot-toast'
+import { format, parseISO } from 'date-fns'
 
 function Bar({ value, tone = 'good', height = 6 }: { value: number; tone?: string; height?: number }) {
   const pct = Math.min(100, Math.max(0, value))
@@ -26,8 +28,23 @@ function Bar({ value, tone = 'good', height = 6 }: { value: number; tone?: strin
 
 export default function EmergencyFundCard() {
   const { user } = useAuth()
-  const { emergencyFund } = useAppStore()
+  const { emergencyFund, transactions } = useAppStore()
   const refresh = useRefreshData()
+
+  const efTransactions = useMemo(() => {
+    return transactions
+      .filter(t =>
+        t.type === 'transfer' && (
+          t.transferKind === 'ef_withdrawal' ||
+          (t.transferKind === 'savings_withdrawal' && t.savingsVehicle === EMERGENCY_FUND_VEHICLE) ||
+          ((t.transferKind === 'savings_contribution' || t.transferKind === 'savings_transfer') &&
+            t.savingsVehicle === EMERGENCY_FUND_VEHICLE)
+        )
+      )
+      .sort((a, b) => b.date.localeCompare(a.date))
+  }, [transactions])
+
+  const [txOpen, setTxOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [balance, setBalance] = useState('')
   const [target, setTarget] = useState('')
@@ -138,6 +155,73 @@ export default function EmergencyFundCard() {
             </div>
           </div>
           <Bar value={pct} tone={efTone} height={6} />
+
+          {efTransactions.length > 0 && (
+            <div style={{ borderTop: '1px solid var(--border)', marginTop: 4 }}>
+              <button
+                onClick={() => setTxOpen(v => !v)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  width: '100%', padding: '10px 0 4px',
+                  background: 'transparent', border: 'none', cursor: 'pointer',
+                  color: 'var(--text-3)',
+                }}
+              >
+                <span style={{ fontSize: 11.5, fontWeight: 500 }}>
+                  {efTransactions.length} transaction{efTransactions.length !== 1 ? 's' : ''}
+                </span>
+                {txOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+
+              {txOpen && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {efTransactions.map(t => {
+                    const isWithdrawal =
+                      t.transferKind === 'ef_withdrawal' ||
+                      (t.transferKind === 'savings_withdrawal' && t.savingsVehicle === EMERGENCY_FUND_VEHICLE)
+                    return (
+                      <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}>
+                        <div style={{
+                          width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+                          background: isWithdrawal ? 'var(--bad-soft)' : 'var(--good-soft)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {isWithdrawal
+                            ? <ArrowDownLeft size={13} style={{ color: 'var(--bad-ink)' }} />
+                            : <ArrowUpRight size={13} style={{ color: 'var(--good-ink)' }} />
+                          }
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: 12, fontWeight: 500, color: 'var(--text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {t.notes || (isWithdrawal ? 'Withdrawal' : 'Contribution')}
+                          </p>
+                          <p style={{ fontSize: 10.5, color: 'var(--text-4)', margin: 0 }}>
+                            {format(parseISO(t.date), 'MMM d, yyyy')}
+                          </p>
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: isWithdrawal ? 'var(--bad-ink)' : 'var(--good-ink)', flexShrink: 0 }}>
+                          {isWithdrawal ? '−' : '+'}{formatCurrencyFull(t.amount)}
+                        </span>
+                      </div>
+                    )
+                  })}
+
+                  <Link
+                    href={`/transactions?type=savings&vehicle=${encodeURIComponent(EMERGENCY_FUND_VEHICLE)}`}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                      padding: '8px 0', marginTop: 4,
+                      borderTop: '1px solid var(--border)',
+                      fontSize: 12, fontWeight: 500,
+                      color: 'var(--brand-ink)', textDecoration: 'none',
+                    }}
+                  >
+                    See all <ArrowRight size={13} />
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
         </>
       ) : (
         <p style={{ fontSize: 13, color: 'var(--text-3)' }}>
