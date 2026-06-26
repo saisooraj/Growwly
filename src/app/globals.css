@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -20,35 +20,55 @@
   --text-3: #8B8C92;
   --text-4: #B4B5BA;
 
-  --brand:      oklch(0.58 0.13 152);
-  --brand-deep: oklch(0.42 0.13 152);
-  --brand-soft: oklch(0.94 0.05 152);
+  /* Brand — green default; overridden per-user via JS */
+  --brand:      oklch(0.62 0.15 158);
+  --brand-2:    oklch(0.72 0.15 168);
+  --brand-deep: oklch(0.46 0.13 160);
+  --brand-soft: oklch(0.95 0.05 162);
   --brand-ink:  oklch(0.28 0.08 152);
 
-  --good:      oklch(0.6 0.14 152);
-  --good-soft: oklch(0.94 0.05 152);
+  --good:      oklch(0.62 0.15 158);
+  --good-2:    oklch(0.72 0.15 168);
+  --good-soft: oklch(0.95 0.05 162);
   --good-ink:  oklch(0.32 0.09 152);
 
   --warn:      oklch(0.74 0.14 75);
+  --warn-2:    oklch(0.82 0.13 78);
   --warn-soft: oklch(0.95 0.06 80);
   --warn-ink:  oklch(0.42 0.1 60);
 
   --bad:      oklch(0.6 0.18 25);
+  --bad-2:    oklch(0.7 0.18 32);
   --bad-soft: oklch(0.95 0.04 25);
   --bad-ink:  oklch(0.4 0.13 25);
 
   --info:      oklch(0.6 0.13 245);
+  --info-2:    oklch(0.7 0.12 238);
   --info-soft: oklch(0.94 0.04 245);
   --info-ink:  oklch(0.38 0.1 245);
 
+  /* Elevation & surface aliases */
+  --elev:        0 1px 2px rgba(24,20,48,.04), 0 8px 24px -10px rgba(24,20,48,.12);
+  --elev-lg:     0 1px 2px rgba(24,20,48,.04), 0 20px 48px -16px rgba(24,20,48,.18);
+  --chip:        var(--surface-2);
+  --track:       var(--surface-3);
+  --hair:        var(--border);
+  --sidebar:     var(--surface);
+
+  /* Nav */
+  --nav-bg:     rgba(255,255,255,.88);
+  --nav-border: rgba(255,255,255,.7);
+  --nav-shadow: 0 8px 32px -8px rgba(0,0,0,.18), 0 2px 8px rgba(0,0,0,.06);
+
+  /* Legacy shadow names (kept for compat) */
   --shadow-sm: 0 1px 0 rgba(20,21,26,.03), 0 1px 2px rgba(20,21,26,.04);
-  --shadow-md: 0 1px 0 rgba(20,21,26,.04), 0 6px 20px -8px rgba(20,21,26,.10);
-  --shadow-lg: 0 1px 0 rgba(20,21,26,.04), 0 20px 50px -20px rgba(20,21,26,.20);
+  --shadow-md: var(--elev);
+  --shadow-lg: var(--elev-lg);
 
   --radius-sm: 8px;
   --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 22px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
 
   --row-gap: 16px;
   --pad:     20px;
@@ -68,9 +88,9 @@
   --text-4: #50525A;
 
   --brand-soft: color-mix(in oklch, var(--brand) 18%, transparent);
-  --brand-ink:  oklch(0.85 0.12 152);
+  --brand-ink:  oklch(0.85 0.14 158);
   --good-soft:  color-mix(in oklch, var(--good) 18%, transparent);
-  --good-ink:   oklch(0.82 0.13 152);
+  --good-ink:   oklch(0.82 0.14 162);
   --warn-soft:  color-mix(in oklch, var(--warn) 22%, transparent);
   --warn-ink:   oklch(0.85 0.14 80);
   --bad-soft:   color-mix(in oklch, var(--bad) 22%, transparent);
@@ -78,16 +98,52 @@
   --info-soft:  color-mix(in oklch, var(--info) 22%, transparent);
   --info-ink:   oklch(0.82 0.12 245);
 
+  --elev:     0 1px 2px rgba(0,0,0,.4), 0 12px 32px -12px rgba(0,0,0,.56);
+  --elev-lg:  0 1px 2px rgba(0,0,0,.4), 0 24px 60px -18px rgba(0,0,0,.7);
+  --chip:     var(--surface-2);
+  --track:    var(--surface-3);
+  --hair:     var(--border);
+  --sidebar:  oklch(0.12 0.01 265);
+
+  --nav-bg:     rgba(22,24,29,.88);
+  --nav-border: rgba(255,255,255,.08);
+  --nav-shadow: 0 8px 32px -4px rgba(0,0,0,.6);
+
   --shadow-sm: 0 1px 0 rgba(0,0,0,.3), 0 1px 2px rgba(0,0,0,.4);
-  --shadow-md: 0 1px 0 rgba(0,0,0,.3), 0 8px 24px -10px rgba(0,0,0,.5);
-  --shadow-lg: 0 1px 0 rgba(0,0,0,.3), 0 24px 60px -20px rgba(0,0,0,.6);
+  --shadow-md: var(--elev);
+  --shadow-lg: var(--elev-lg);
+}
+
+/* ══════════════════════════════════════════
+   Accent theme overrides (applied via JS on
+   document.documentElement when user changes
+   their accent color in Settings)
+══════════════════════════════════════════ */
+:root[data-accent="purple"] {
+  --brand:      oklch(0.585 0.205 286);
+  --brand-2:    oklch(0.66 0.16 262);
+  --brand-deep: oklch(0.46 0.19 288);
+  --brand-soft: oklch(0.95 0.04 286);
+  --brand-ink:  oklch(0.34 0.1 286);
+}
+:root[data-accent="orange"] {
+  --brand:      oklch(0.66 0.19 42);
+  --brand-2:    oklch(0.74 0.16 60);
+  --brand-deep: oklch(0.5 0.18 38);
+  --brand-soft: oklch(0.95 0.05 50);
+  --brand-ink:  oklch(0.38 0.1 42);
+}
+:root[data-accent="pink"] {
+  --brand:      oklch(0.62 0.22 358);
+  --brand-2:    oklch(0.7 0.18 18);
+  --brand-deep: oklch(0.48 0.2 356);
+  --brand-soft: oklch(0.95 0.05 360);
+  --brand-ink:  oklch(0.38 0.12 358);
 }
 
 /* ══════════════════════════════════════════
    Dark mode — remap hardcoded Tailwind color
-   classes to design tokens so older components
-   that use text-slate-* / bg-slate-* etc. are
-   readable without touching every file.
+   classes to design tokens
 ══════════════════════════════════════════ */
 .dark .text-slate-900 { color: var(--text) !important; }
 .dark .text-slate-800 { color: var(--text) !important; }
@@ -141,7 +197,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
     font-size: 14px;
     line-height: 1.45;
     -webkit-font-smoothing: antialiased;
@@ -158,7 +214,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 ══════════════════════════════════════════ */
 .app {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 248px 1fr;
   min-height: 100vh;
   background: var(--bg);
 }
@@ -175,23 +231,25 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-xl);
     padding: var(--pad);
+    box-shadow: var(--elev);
     overflow: hidden;
     min-width: 0;
   }
   .card-sm {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     padding: var(--pad);
+    box-shadow: var(--elev);
     overflow: hidden;
     min-width: 0;
   }
   .card-flat {
     background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-xl);
     overflow: hidden;
     min-width: 0;
   }
@@ -203,22 +261,22 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
     background: var(--surface);
     color: var(--text);
     padding: 8px 14px;
-    border-radius: 10px;
-    font-weight: 500;
+    border-radius: 12px;
+    font-weight: 600;
     font-size: 13px;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    transition: background .15s ease, border-color .15s ease, transform .1s ease;
+    transition: background .15s ease, border-color .15s ease, transform .1s ease, opacity .1s ease;
     white-space: nowrap;
     line-height: 1;
   }
   .btn:hover { background: var(--surface-2); }
-  .btn:active { transform: translateY(1px); }
+  .btn:active { transform: scale(0.96); }
   .btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
-  .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 9px; }
 
   .btn-primary {
     @apply btn;
@@ -265,10 +323,10 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 3px 9px;
+    padding: 4px 10px;
     border-radius: 999px;
     font-size: 11.5px;
-    font-weight: 500;
+    font-weight: 600;
     letter-spacing: .01em;
     background: var(--surface-2);
     color: var(--text-2);
@@ -288,7 +346,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
     letter-spacing: .12em;
     text-transform: uppercase;
     color: var(--text-3);
-    font-weight: 600;
+    font-weight: 700;
     line-height: 1.3;
     white-space: nowrap;
   }
@@ -298,8 +356,8 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
     letter-spacing: -0.01em;
   }
   .display-num {
-    font-family: 'Geist', sans-serif;
-    font-weight: 500;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-weight: 700;
     letter-spacing: -0.025em;
     font-variant-numeric: tabular-nums;
     overflow-wrap: break-word;
@@ -316,11 +374,12 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
-    padding: 8px 12px;
+    padding: 10px 14px;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
     font-size: 14px;
     line-height: 1.4;
+    font-weight: 500;
     font-family: inherit;
     background: var(--surface);
     color: var(--text);
@@ -340,10 +399,10 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   .label {
     display: block;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--text-2);
-    margin-bottom: 4px;
-    letter-spacing: .01em;
+    margin-bottom: 5px;
+    letter-spacing: .02em;
   }
 
   .badge {
@@ -353,11 +412,20 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
     padding: 2px 10px;
     border-radius: 999px;
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
     background: var(--surface-2);
     color: var(--text-2);
     border: 1px solid var(--border);
   }
+
+  /* Press feedback — apply to interactive non-button elements */
+  .pressable {
+    cursor: pointer;
+    transition: transform .14s cubic-bezier(.2,.8,.2,1), opacity .14s;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  .pressable:active { transform: scale(0.96); opacity: 0.88; }
 }
 
 /* ══════════════════════════════════════════
@@ -378,7 +446,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 @media (max-width: 1024px) {
   .main-content {
     padding: 16px;
-    padding-bottom: 100px; /* clear MobileNav */
+    padding-bottom: 120px; /* clear FAB nav */
   }
 }
 
@@ -410,15 +478,10 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 /* ══════════════════════════════════════════
    Mobile number overflow safeguards
 ══════════════════════════════════════════ */
-
-/* Tighter padding in KPI cards on small phones */
 @media (max-width: 480px) {
   .card-sm { padding: 12px 14px; }
-  /* Allow eyebrow labels to wrap so they don't overflow narrow cards */
   .h-eyebrow { white-space: normal; line-height: 1.4; }
 }
-
-/* display-num already has overflow-wrap + word-break; also cap to parent */
 .display-num { max-width: 100%; }
 
 /* ══════════════════════════════════════════
@@ -436,6 +499,55 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 }
 .pulse-sheet-enter { animation: pulseSheetIn .22s ease-out both; }
 
+/* Page transitions */
+@keyframes gw-in-right {
+  from { opacity: 0; transform: translateX(22px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes gw-in-left {
+  from { opacity: 0; transform: translateX(-22px); }
+  to   { opacity: 1; transform: none; }
+}
+.gw-in-right { animation: gw-in-right .3s cubic-bezier(.22,1,.36,1) both; }
+.gw-in-left  { animation: gw-in-left  .3s cubic-bezier(.22,1,.36,1) both; }
+
+/* Bottom sheet */
+@keyframes gw-sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes gw-sheet-down {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}
+@keyframes gw-fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes gw-fade-out { from { opacity: 1; } to { opacity: 0; } }
+.gw-sheet-enter  { animation: gw-sheet-up   .38s cubic-bezier(.22,1,.36,1) both; }
+.gw-sheet-exit   { animation: gw-sheet-down .32s cubic-bezier(.4,0,1,1) both; }
+.gw-overlay-in   { animation: gw-fade-in    .25s ease both; }
+.gw-overlay-out  { animation: gw-fade-out   .28s ease both; }
+
+/* Pop (modal entrance) */
+@keyframes gw-pop {
+  0%   { transform: scale(.86); opacity: 0; }
+  60%  { transform: scale(1.03); }
+  100% { transform: scale(1); opacity: 1; }
+}
+.gw-pop { animation: gw-pop .38s cubic-bezier(.34,1.56,.5,1) both; }
+
+/* Spinner */
+@keyframes gw-spin { to { transform: rotate(360deg); } }
+.gw-spin { animation: gw-spin .7s linear infinite; }
+
+/* Stagger children */
+.gw-stagger > * { animation: fadeUp .4s cubic-bezier(.22,1,.36,1) both; }
+.gw-stagger > *:nth-child(1) { animation-delay: .04s; }
+.gw-stagger > *:nth-child(2) { animation-delay: .08s; }
+.gw-stagger > *:nth-child(3) { animation-delay: .12s; }
+.gw-stagger > *:nth-child(4) { animation-delay: .16s; }
+.gw-stagger > *:nth-child(5) { animation-delay: .20s; }
+.gw-stagger > *:nth-child(6) { animation-delay: .24s; }
+
 /* ══════════════════════════════════════════
    Scrollbar
 ══════════════════════════════════════════ */
@@ -443,5 +555,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 *::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 8px; border: 2px solid var(--bg); }
 *::-webkit-scrollbar-track { background: transparent; }
 
-/* Hide scrollbar inside mobile nav */
-.mobile-nav-scroll::-webkit-scrollbar { display: none; }
+/* Hide scrollbar in nav/sheet scroll areas */
+.gw-hscroll,
+.gw-hscroll::-webkit-scrollbar { scrollbar-width: none; }
+.gw-hscroll::-webkit-scrollbar { display: none; }

@@ -11,7 +11,7 @@ import { useRefreshData } from '@/hooks/useData'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { downloadJSON, getLast6Months } from '@/lib/utils'
 import { getCycleRange, getLastWorkingDay, formatCycleRange } from '@/lib/cycle'
-import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare } from 'lucide-react'
+import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check } from 'lucide-react'
 import { IconLeaf, IconFlame } from '@tabler/icons-react'
 import LinkedAccounts from '@/components/auth/LinkedAccounts'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
@@ -41,6 +41,9 @@ export default function SettingsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pendingImport, setPendingImport] = useState<any | null>(null)
 
+  // Accent color
+  const [accentColor, setAccentColor] = useState<'green' | 'purple' | 'orange' | 'pink'>('green')
+
   // Navigation tab toggles
   const [showHealthTab, setShowHealthTab] = useState(false)
   const [showTasksTab, setShowTasksTab]   = useState(false)
@@ -67,6 +70,7 @@ export default function SettingsPage() {
       setCycleOverrides(settings.cycleOverrides ?? {})
       setShowHealthTab(settings.showHealthTab ?? false)
       setShowTasksTab(settings.showTasksTab ?? false)
+      setAccentColor((settings.accentColor as typeof accentColor) ?? 'green')
     }
   }, [settings])
 
@@ -134,6 +138,19 @@ export default function SettingsPage() {
     } finally {
       setSavingCycle(false)
     }
+  }
+
+  async function saveAccent(color: typeof accentColor) {
+    if (!user) return
+    setAccentColor(color)
+    // Apply immediately via data-accent attribute (AppShell watches settings,
+    // but we also set it here for instant feedback before refresh)
+    if (color === 'green') document.documentElement.removeAttribute('data-accent')
+    else document.documentElement.setAttribute('data-accent', color)
+    try {
+      await setUserSettings(user.uid, { accentColor: color })
+      await refresh()
+    } catch { toast.error('Failed to save accent') }
   }
 
   async function saveTabSettings(field: 'showHealthTab' | 'showTasksTab', value: boolean) {
@@ -604,6 +621,51 @@ export default function SettingsPage() {
             Link multiple sign-in methods. Your data stays the same regardless of which method you use.
           </p>
           <LinkedAccounts />
+        </div>
+
+        {/* Accent Color */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Palette size={14} style={{ color: 'var(--brand)' }} />
+            <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Accent Color</h2>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
+            Changes the brand color across the entire app. Saved to your account and syncs across devices.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+            {([
+              { id: 'green'  as const, label: 'Forest',  swatch: 'oklch(0.62 0.15 158)', soft: 'oklch(0.95 0.05 162)' },
+              { id: 'purple' as const, label: 'Violet',  swatch: 'oklch(0.585 0.205 286)', soft: 'oklch(0.95 0.04 286)' },
+              { id: 'orange' as const, label: 'Ember',   swatch: 'oklch(0.66 0.19 42)',  soft: 'oklch(0.95 0.05 50)'  },
+              { id: 'pink'   as const, label: 'Rose',    swatch: 'oklch(0.62 0.22 358)', soft: 'oklch(0.95 0.05 360)' },
+            ]).map(({ id, label, swatch, soft }) => {
+              const on = accentColor === id
+              return (
+                <button
+                  key={id}
+                  onClick={() => saveAccent(id)}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+                    padding: '14px 8px', borderRadius: 16, border: `2px solid ${on ? swatch : 'var(--border)'}`,
+                    background: on ? soft : 'var(--surface)', cursor: 'pointer',
+                    transition: 'all .15s', fontFamily: 'inherit',
+                  }}
+                >
+                  <div style={{
+                    width: 32, height: 32, borderRadius: '50%',
+                    background: `linear-gradient(140deg, oklch(from ${swatch} calc(l + 0.1) c h), ${swatch})`,
+                    backgroundColor: swatch,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    boxShadow: on ? `0 4px 12px -3px ${swatch}` : 'none',
+                    transition: 'box-shadow .15s',
+                  }}>
+                    {on && <Check size={15} color="#fff" strokeWidth={2.8} />}
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: on ? swatch : 'var(--text-3)' }}>{label}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* Navigation */}

@@ -115,6 +115,7 @@ export interface UserSettings {
   savingsOpeningBalances?: Record<string, number> // prior balance per vehicle before tracking started
   showHealthTab?: boolean                         // show Health tab in navigation (default: false)
   showTasksTab?: boolean                          // show Tasks tab in navigation (default: false)
+  accentColor?: 'green' | 'purple' | 'orange' | 'pink'  // brand accent (default: green)
   dailyLivingCost?: number                        // legacy — superseded by dailyLivingSchedules
   dailyLivingItems?: { label: string; amount: number }[]  // legacy
   dailyLivingSchedules?: {                        // per-day-of-week schedules
