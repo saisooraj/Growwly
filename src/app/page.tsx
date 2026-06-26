@@ -19,7 +19,7 @@ import UpcomingCard from '@/components/dashboard/UpcomingCard'
 import RecurringPromptModal from '@/components/dashboard/RecurringPromptModal'
 import TransactionList from '@/components/transactions/TransactionList'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
-import { Plus, CheckCircle2 } from 'lucide-react'
+import { Plus, CheckCircle2, RefreshCw } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { formatCurrencyFull } from '@/lib/utils'
 
@@ -53,11 +53,11 @@ export default function DashboardPage() {
     <AppShell title="Overview">
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
-          {[...Array(5)].map((_, i) => (
+          {[140, 96, 72, 200, 140, 96].map((h, i) => (
             <div
               key={i}
               className="animate-pulse"
-              style={{ height: 96, borderRadius: 16, background: 'var(--surface-2)' }}
+              style={{ height: h, borderRadius: 24, background: 'var(--surface-2)', opacity: 1 - i * 0.1 }}
             />
           ))}
         </div>
@@ -111,23 +111,24 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* FAB — bottom-24 on mobile (above nav), bottom-6 on desktop */}
+      {/* Desktop-only FAB — mobile uses MobileNav FAB */}
       <button
         onClick={() => setAddOpen(true)}
-        className="fixed right-4 bottom-24 lg:right-6 lg:bottom-6 z-40 flex items-center justify-center"
+        className="hidden lg:flex fixed right-6 bottom-6 z-40 items-center gap-2"
         style={{
-          width: 56, height: 56, borderRadius: '50%',
-          background: 'var(--text)', color: 'var(--bg)',
-          border: 'none', cursor: 'pointer',
-          boxShadow: 'var(--shadow-lg), 0 0 0 6px color-mix(in oklch, var(--text) 8%, transparent)',
-          transition: 'transform .12s ease',
+          padding: '12px 20px', borderRadius: 16,
+          background: 'linear-gradient(150deg, var(--brand-2), var(--brand))',
+          color: '#fff', border: 'none', cursor: 'pointer',
+          fontSize: 14, fontWeight: 700,
+          boxShadow: '0 8px 24px -6px var(--brand)',
+          transition: 'transform .12s ease, box-shadow .12s ease',
         }}
-        onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.05)')}
-        onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-        onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.95)')}
-        onMouseUp={e => (e.currentTarget.style.transform = 'scale(1.05)')}
+        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.03)'; e.currentTarget.style.boxShadow = '0 12px 30px -6px var(--brand)' }}
+        onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 8px 24px -6px var(--brand)' }}
+        onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.97)')}
+        onMouseUp={e => (e.currentTarget.style.transform = 'scale(1.03)')}
       >
-        <Plus size={24} />
+        <Plus size={18} strokeWidth={2.6} /> Add transaction
       </button>
 
       <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />

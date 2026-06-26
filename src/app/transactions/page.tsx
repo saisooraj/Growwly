@@ -17,6 +17,7 @@ import {
   EXPENSE_CATEGORIES,
   INCOME_CATEGORIES,
   getTransactionsForMonth,
+  CATEGORY_COLORS,
 } from '@/lib/utils'
 import type { TransactionType } from '@/types'
 import { getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
@@ -102,211 +103,275 @@ function TransactionsInner() {
     URL.revokeObjectURL(url)
   }
 
-  return (
-    <AppShell title="Transactions">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+  // Top expense categories for sidebar
+  const topCats = useMemo(() =>
+    Object.entries(summary.byCategory)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5),
+    [summary.byCategory]
+  )
+  const topCatsTotal = topCats.reduce((s, [, v]) => s + v, 0) || 1
 
-        {/* Summary KPIs */}
-        <div className="grid grid-cols-1 sm:grid-cols-3" style={{ gap: 'var(--row-gap)' }}>
-          {/* Income */}
-          <div className="card-sm" style={{ position: 'relative' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="h-eyebrow">Income</span>
-              <button onClick={() => setShowIncome(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}>
-                {showIncome ? <EyeOff size={13} /> : <Eye size={13} />}
-              </button>
-            </div>
-            <div className="display-num" style={{ fontSize: 22, color: 'var(--good-ink)' }}>
-              {showIncome ? formatCurrencyFull(summary.totalIncome + summary.totalBorrowed) : '₹ •••'}
-            </div>
-            {showIncome && summary.totalBorrowed > 0 && (
-              <div style={{ fontSize: 11, color: 'var(--info-ink)', marginTop: 4, fontStyle: 'italic' }}>
-                incl. {formatCurrencyFull(summary.totalBorrowed)} borrowed
-              </div>
-            )}
-          </div>
-
-          {/* Expenses */}
-          <div className="card-sm" style={{ position: 'relative' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="h-eyebrow">Expenses</span>
-              <button onClick={() => setShowExpenses(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}>
-                {showExpenses ? <EyeOff size={13} /> : <Eye size={13} />}
-              </button>
-            </div>
-            <div className="display-num" style={{ fontSize: 22, color: 'var(--bad-ink)' }}>
-              {showExpenses ? formatCurrencyFull(summary.totalExpenses) : '₹ •••'}
-            </div>
-          </div>
-
-          {/* Net (true cashflow) */}
-          <div className="card-sm" style={{ position: 'relative' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span className="h-eyebrow">Net cashflow</span>
-              <button onClick={() => setShowNet(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}>
-                {showNet ? <EyeOff size={13} /> : <Eye size={13} />}
-              </button>
-            </div>
-            <div className="display-num" style={{ fontSize: 22, color: summary.cashNet >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
-              {showNet ? `${summary.cashNet >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(summary.cashNet))}` : '₹ •••'}
-            </div>
-            {showNet && (summary.lentOutstanding > 0 || summary.borrowedOutstanding > 0) && (
-              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 5, display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {summary.lentOutstanding > 0 && (
-                  <span>−{formatCurrencyFull(summary.lentOutstanding)} <span style={{ color: 'var(--warn-ink)' }}>lent</span></span>
-                )}
-                {summary.borrowedOutstanding > 0 && (
-                  <span>+{formatCurrencyFull(summary.borrowedOutstanding)} <span style={{ color: 'var(--info-ink)' }}>borrowed</span></span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="card-sm" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-          <SlidersHorizontal size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-
-          {/* Type filter pills */}
-          <div style={{ display: 'flex', gap: 4 }}>
-            {TYPE_OPTS.map(opt => (
-              <button
-                key={opt.id}
-                onClick={() => setTypeFilter(opt.id)}
-                style={{
-                  padding: '4px 12px', borderRadius: 999,
-                  fontSize: 12, fontWeight: 500,
-                  border: typeFilter === opt.id ? 'none' : '1px solid var(--border)',
-                  background: typeFilter === opt.id ? 'var(--text)' : 'transparent',
-                  color: typeFilter === opt.id ? 'var(--bg)' : 'var(--text-2)',
-                  cursor: 'pointer', transition: 'all .15s',
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Category filter (income / expense / all) */}
-          {typeFilter !== 'transfer' && typeFilter !== 'savings' && (
-            <select
-              value={catFilter}
-              onChange={e => setCatFilter(e.target.value)}
-              style={{
-                fontSize: 12, padding: '5px 10px',
-                background: 'var(--surface-2)',
-                border: '1px solid var(--border)',
-                borderRadius: 8, color: 'var(--text-2)',
-                outline: 'none', cursor: 'pointer',
-              }}
-            >
-              <option value="all">All Categories</option>
-              {allCats.map(c => (
-                <option key={c} value={c}>{getCategoryDisplayName(c)}</option>
-              ))}
-            </select>
-          )}
-
-          {/* Vehicle filter (savings) */}
-          {typeFilter === 'savings' && usedVehicles.length > 0 && (
-            <select
-              value={vehicleFilter}
-              onChange={e => setVehicleFilter(e.target.value)}
-              style={{
-                fontSize: 12, padding: '5px 10px',
-                background: 'var(--surface-2)',
-                border: '1px solid var(--border)',
-                borderRadius: 8, color: 'var(--text-2)',
-                outline: 'none', cursor: 'pointer',
-              }}
-            >
-              <option value="all">All Vehicles</option>
-              {usedVehicles.map(v => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </select>
-          )}
-
-          <button
-            onClick={exportCSV}
-            className="btn btn-sm btn-ghost"
-            style={{ marginLeft: 'auto', gap: 6 }}
-          >
-            <Download size={13} /> Export CSV
+  // Reusable KPI stat block
+  function StatBlock({
+    label, value, color, masked, onToggle, shown, sub,
+  }: { label: string; value: string | null; color: string; masked: boolean; onToggle: () => void; shown: boolean; sub?: React.ReactNode }) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span className="h-eyebrow">{label}</span>
+          <button onClick={onToggle} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}>
+            {shown ? <EyeOff size={13} /> : <Eye size={13} />}
           </button>
         </div>
+        <div className="display-num" style={{ fontSize: 22, color }}>{shown && value ? value : '₹ •••'}</div>
+        {sub}
+      </div>
+    )
+  }
 
-        {/* Savings summary (only on the Savings filter) */}
-        {typeFilter === 'savings' && (
-          <div className="card-sm" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-            {(() => {
-              const meta = vehicleFilter !== 'all' ? getSavingsVehicleMeta(vehicleFilter) : null
-              return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 160 }}>
-                  <div style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: (meta?.color ?? 'var(--brand)') + '20' }}>
-                    {meta ? <meta.Icon size={18} color={meta.color} stroke={1.5} /> : <span style={{ color: 'var(--brand)' }}>₹</span>}
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{vehicleFilter === 'all' ? 'Total saved (all-time)' : `${vehicleFilter} · balance`}</div>
-                    <div className="display-num" style={{ fontSize: 20, color: 'var(--text)' }}>{formatCurrencyFull(savingsView.balance)}</div>
-                  </div>
+  return (
+    <AppShell title="Transactions">
+      {/* ── Desktop 2-col / mobile single-col layout ── */}
+      <div className="txn-layout" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+
+        {/* Mobile summary strip — hidden on desktop */}
+        <div className="grid grid-cols-3 lg:hidden" style={{ gap: 10 }}>
+          {[
+            { label: 'Income',   value: formatCurrencyFull(summary.totalIncome), color: 'var(--good-ink)' },
+            { label: 'Expenses', value: formatCurrencyFull(summary.totalExpenses), color: 'var(--bad-ink)' },
+            { label: 'Net',      value: `${summary.cashNet >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(summary.cashNet))}`, color: summary.cashNet >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' },
+          ].map(s => (
+            <div key={s.label} className="card-sm" style={{ padding: '12px 14px' }}>
+              <div className="h-eyebrow" style={{ marginBottom: 6 }}>{s.label}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: s.color, letterSpacing: '-0.015em' }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--row-gap)' }}
+             className="lg:txn-grid">
+          {/* ── Left: filters + list ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)', minWidth: 0 }}>
+
+            {/* Filter bar */}
+            <div className="card-sm" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Type pills */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <SlidersHorizontal size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} />
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flex: 1 }}>
+                  {TYPE_OPTS.map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => setTypeFilter(opt.id)}
+                      style={{
+                        padding: '6px 14px', borderRadius: 999,
+                        fontSize: 12.5, fontWeight: 600,
+                        border: 'none',
+                        background: typeFilter === opt.id ? 'var(--text)' : 'var(--surface-2)',
+                        color: typeFilter === opt.id ? 'var(--bg)' : 'var(--text-2)',
+                        cursor: 'pointer', transition: 'background .15s, color .15s',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
-              )
-            })()}
-            <div style={{ display: 'flex', gap: 18 }}>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>In this month</div>
-                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--good-ink)' }}>+{formatCurrencyFull(savingsView.contributed)}</div>
+                <button onClick={exportCSV} className="btn btn-sm btn-ghost" style={{ gap: 5, flexShrink: 0 }}>
+                  <Download size={13} /> Export
+                </button>
               </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Out this month</div>
-                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--bad-ink)' }}>−{formatCurrencyFull(savingsView.withdrawn)}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Net</div>
-                <div style={{ fontSize: 16, fontWeight: 600, color: savingsView.net >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
-                  {savingsView.net >= 0 ? '+' : '−'}{formatCurrencyFull(Math.abs(savingsView.net))}
+
+              {/* Sub-filters row */}
+              {(typeFilter !== 'transfer' && typeFilter !== 'savings') && (
+                <select
+                  value={catFilter}
+                  onChange={e => setCatFilter(e.target.value)}
+                  style={{
+                    fontSize: 13, padding: '8px 12px',
+                    background: 'var(--surface-2)', border: '1px solid var(--border)',
+                    borderRadius: 10, color: 'var(--text-2)', outline: 'none', cursor: 'pointer',
+                    fontFamily: 'inherit', maxWidth: 280,
+                  }}
+                >
+                  <option value="all">All Categories</option>
+                  {allCats.map(c => (
+                    <option key={c} value={c}>{getCategoryDisplayName(c)}</option>
+                  ))}
+                </select>
+              )}
+              {typeFilter === 'savings' && usedVehicles.length > 0 && (
+                <select
+                  value={vehicleFilter}
+                  onChange={e => setVehicleFilter(e.target.value)}
+                  style={{
+                    fontSize: 13, padding: '8px 12px',
+                    background: 'var(--surface-2)', border: '1px solid var(--border)',
+                    borderRadius: 10, color: 'var(--text-2)', outline: 'none', cursor: 'pointer',
+                    fontFamily: 'inherit', maxWidth: 280,
+                  }}
+                >
+                  <option value="all">All Vehicles</option>
+                  {usedVehicles.map(v => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* Savings summary */}
+            {typeFilter === 'savings' && (
+              <div className="card-sm" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                {(() => {
+                  const meta = vehicleFilter !== 'all' ? getSavingsVehicleMeta(vehicleFilter) : null
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 160 }}>
+                      <div style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: (meta?.color ?? 'var(--brand)') + '20' }}>
+                        {meta ? <meta.Icon size={18} color={meta.color} stroke={1.5} /> : <span style={{ color: 'var(--brand)' }}>₹</span>}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{vehicleFilter === 'all' ? 'Total saved (all-time)' : `${vehicleFilter} · balance`}</div>
+                        <div className="display-num" style={{ fontSize: 20 }}>{formatCurrencyFull(savingsView.balance)}</div>
+                      </div>
+                    </div>
+                  )
+                })()}
+                <div style={{ display: 'flex', gap: 18 }}>
+                  {[
+                    { label: 'In', value: `+${formatCurrencyFull(savingsView.contributed)}`, color: 'var(--good-ink)' },
+                    { label: 'Out', value: `−${formatCurrencyFull(savingsView.withdrawn)}`, color: 'var(--bad-ink)' },
+                    { label: 'Net', value: `${savingsView.net >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(savingsView.net))}`, color: savingsView.net >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' },
+                  ].map(s => (
+                    <div key={s.label}>
+                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.label}</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: s.color }}>{s.value}</div>
+                    </div>
+                  ))}
                 </div>
+              </div>
+            )}
+
+            {/* Transaction list */}
+            <div className="card" style={{ padding: 0 }}>
+              <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                  {filtered.length} transaction{filtered.length !== 1 ? 's' : ''}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Tap any row to edit</span>
+              </div>
+              <div style={{ padding: '8px 8px' }}>
+                <TransactionList
+                  transactions={filtered}
+                  groupByDay
+                  defaultExpandAll={catFilter !== 'all' || vehicleFilter !== 'all'}
+                  showBorrowings={catFilter === 'all' && typeFilter === 'all'}
+                />
               </div>
             </div>
           </div>
-        )}
 
-        {/* Transaction list */}
-        <div className="card" style={{ padding: 0 }}>
-          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
-              {filtered.length} transaction{filtered.length !== 1 ? 's' : ''}
-            </span>
-            <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Click any row to view or edit</span>
-          </div>
-          <div style={{ padding: '8px 8px' }}>
-            <TransactionList
-            transactions={filtered}
-            groupByDay
-            defaultExpandAll={catFilter !== 'all' || vehicleFilter !== 'all'}
-            showBorrowings={catFilter === 'all' && typeFilter === 'all'}
-          />
+          {/* ── Right: sticky summary sidebar (desktop only) ── */}
+          <div className="hidden lg:flex" style={{ flexDirection: 'column', gap: 'var(--row-gap)', position: 'sticky', top: 96, alignSelf: 'start' }}>
+            {/* KPI card */}
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <span className="h-eyebrow">This month</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <div style={{ width: 22, height: 22, borderRadius: 7, background: 'var(--good-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Plus size={13} style={{ color: 'var(--good-ink)', transform: 'rotate(0deg)' }} />
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)' }}>Money in</span>
+                    <button onClick={() => setShowIncome(v => !v)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', display: 'flex' }}>
+                      {showIncome ? <EyeOff size={12} /> : <Eye size={12} />}
+                    </button>
+                  </div>
+                  <div className="display-num" style={{ fontSize: 26, color: 'var(--good-ink)' }}>
+                    {showIncome ? formatCurrencyFull(summary.totalIncome + summary.totalBorrowed) : '₹ •••'}
+                  </div>
+                  {showIncome && summary.totalBorrowed > 0 && (
+                    <div style={{ fontSize: 11, color: 'var(--info-ink)', marginTop: 3 }}>incl. {formatCurrencyFull(summary.totalBorrowed)} borrowed</div>
+                  )}
+                </div>
+
+                <div style={{ height: 1, background: 'var(--hair)' }} />
+
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <div style={{ width: 22, height: 22, borderRadius: 7, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Plus size={13} style={{ color: 'var(--text-3)', transform: 'rotate(45deg)' }} />
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)' }}>Money out</span>
+                    <button onClick={() => setShowExpenses(v => !v)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', display: 'flex' }}>
+                      {showExpenses ? <EyeOff size={12} /> : <Eye size={12} />}
+                    </button>
+                  </div>
+                  <div className="display-num" style={{ fontSize: 26, color: 'var(--text)' }}>
+                    {showExpenses ? formatCurrencyFull(summary.totalExpenses) : '₹ •••'}
+                  </div>
+                </div>
+
+                <div style={{ height: 1, background: 'var(--hair)' }} />
+
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', marginBottom: 6 }}>Net cashflow</div>
+                  <div className="display-num" style={{ fontSize: 26, color: summary.cashNet >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
+                    {showNet ? `${summary.cashNet >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(summary.cashNet))}` : '₹ •••'}
+                  </div>
+                  <button onClick={() => setShowNet(v => !v)} style={{ marginTop: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: 0 }}>
+                    {showNet ? <><EyeOff size={11} /> Hide</> : <><Eye size={11} /> Show</>}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Top categories */}
+            {topCats.length > 0 && typeFilter !== 'income' && typeFilter !== 'savings' && (
+              <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <span className="h-eyebrow">Top categories</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {topCats.map(([cat, amt]) => {
+                    const barPct = (amt / topCatsTotal) * 100
+                    const color = CATEGORY_COLORS[cat] ?? '#94a3b8'
+                    return (
+                      <div key={cat}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>{getCategoryDisplayName(cat)}</span>
+                          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{formatCurrencyFull(amt)}</span>
+                        </div>
+                        <div style={{ height: 4, background: 'var(--surface-2)', borderRadius: 999, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${barPct}%`, background: color, borderRadius: 999 }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-
       </div>
 
-      {/* FAB */}
+      {/* Desktop-only FAB */}
       <button
         onClick={() => setAddOpen(true)}
-        className="fixed right-4 bottom-24 lg:right-6 lg:bottom-6 z-40 flex items-center justify-center"
+        className="hidden lg:flex fixed right-6 bottom-6 z-40 items-center gap-2"
         style={{
-          width: 56, height: 56, borderRadius: '50%',
-          background: 'var(--text)', color: 'var(--bg)',
-          border: 'none', cursor: 'pointer',
-          boxShadow: 'var(--shadow-lg), 0 0 0 6px color-mix(in oklch, var(--text) 8%, transparent)',
+          padding: '12px 20px', borderRadius: 16,
+          background: 'linear-gradient(150deg, var(--brand-2), var(--brand))',
+          color: '#fff', border: 'none', cursor: 'pointer',
+          fontSize: 14, fontWeight: 700,
+          boxShadow: '0 8px 24px -6px var(--brand)',
           transition: 'transform .12s ease',
+          fontFamily: 'inherit',
         }}
-        onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.05)')}
+        onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.03)')}
         onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+        onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.97)')}
+        onMouseUp={e => (e.currentTarget.style.transform = 'scale(1.03)')}
       >
-        <Plus size={24} />
+        <Plus size={18} strokeWidth={2.6} /> Add transaction
       </button>
 
       <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />

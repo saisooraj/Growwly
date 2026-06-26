@@ -223,27 +223,66 @@ export default function NetWorthPage() {
     <div style={{ maxWidth: 600, display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
       {/* Net Worth Hero */}
-      <div className="card" style={{ textAlign: 'center', padding: '28px 24px', position: 'relative' }}>
-        <button
-          onClick={() => setMasked(v => !v)}
-          style={{ position: 'absolute', top: 16, right: 16, padding: 6, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}
-        >
-          {masked ? <Eye size={16} /> : <EyeOff size={16} />}
-        </button>
-        <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 8 }}>
-          Net Worth
-        </p>
-        <p style={{ fontSize: 36, fontWeight: 700, color: masked ? 'var(--text-3)' : nwColor, letterSpacing: '-0.02em', marginBottom: 16 }}>
-          {masked ? MASK : `${netWorth >= 0 ? '' : '−'}${formatCurrencyFull(Math.abs(netWorth))}`}
-        </p>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <div style={{ background: 'var(--good-soft)', borderRadius: 10, padding: '12px 16px' }}>
-            <p style={{ fontSize: 11, color: 'var(--good-ink)', fontWeight: 500, marginBottom: 4 }}>Total Assets</p>
-            <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--good-ink)' }}>{fmt(totalAssets)}</p>
+      <div style={{
+        borderRadius: 'var(--radius-xl)',
+        padding: '28px 24px',
+        position: 'relative',
+        overflow: 'hidden',
+        background: 'linear-gradient(155deg, var(--brand-deep) 0%, var(--brand) 55%, var(--brand-2) 100%)',
+        boxShadow: '0 16px 40px -16px var(--brand)',
+      }}>
+        {/* Glow orb */}
+        <div style={{
+          position: 'absolute', top: -60, right: -40, width: 200, height: 200,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(255,255,255,.22), transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+
+        <div style={{ position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,.72)', letterSpacing: '.1em', textTransform: 'uppercase', margin: 0 }}>
+              Net Worth
+            </p>
+            <button
+              onClick={() => setMasked(v => !v)}
+              style={{
+                width: 32, height: 32, borderRadius: 10, border: 'none', cursor: 'pointer',
+                background: 'rgba(255,255,255,.2)', backdropFilter: 'blur(6px)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff',
+              }}
+            >
+              {masked ? <Eye size={15} /> : <EyeOff size={15} />}
+            </button>
           </div>
-          <div style={{ background: 'var(--bad-soft)', borderRadius: 10, padding: '12px 16px' }}>
-            <p style={{ fontSize: 11, color: 'var(--bad-ink)', fontWeight: 500, marginBottom: 4 }}>Total Liabilities</p>
-            <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--bad-ink)' }}>{fmt(totalLiabilities)}</p>
+
+          <p style={{
+            fontSize: 40, fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 6px',
+            color: '#fff', lineHeight: 1,
+          }}>
+            {masked ? '₹ •••••' : `${netWorth >= 0 ? '' : '−'}${formatCurrencyFull(Math.abs(netWorth))}`}
+          </p>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '4px 12px', borderRadius: 999,
+              background: 'rgba(255,255,255,.22)', color: '#fff',
+              fontSize: 12.5, fontWeight: 700,
+            }}>
+              {netWorth >= 0 ? '↑' : '↓'} {formatCurrencyFull(Math.abs(netWorth - totalLiabilities))} assets
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div style={{ background: 'rgba(255,255,255,.18)', borderRadius: 14, padding: '14px 16px', backdropFilter: 'blur(6px)' }}>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,.72)', fontWeight: 600, margin: '0 0 6px' }}>Total Assets</p>
+              <p style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>{fmt(totalAssets)}</p>
+            </div>
+            <div style={{ background: 'rgba(255,255,255,.18)', borderRadius: 14, padding: '14px 16px', backdropFilter: 'blur(6px)' }}>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,.72)', fontWeight: 600, margin: '0 0 6px' }}>Liabilities</p>
+              <p style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>{fmt(totalLiabilities)}</p>
+            </div>
           </div>
         </div>
       </div>

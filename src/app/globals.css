@@ -450,6 +450,13 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   }
 }
 
+/* Transactions 2-col desktop grid */
+@media (min-width: 1024px) {
+  .lg\:txn-grid {
+    grid-template-columns: 1fr 300px !important;
+  }
+}
+
 /* Dashboard responsive grids */
 .dash-hero {
   display: grid;

@@ -53,44 +53,73 @@ function BucketRow({
   const statusColor = status === 'on-track' ? 'var(--good-ink)' : status === 'over' ? 'var(--bad-ink)' : 'var(--warn-ink)'
   const statusLabel = status === 'on-track' ? 'On track' : status === 'over' ? `+${diff.toFixed(0)}% over` : `${Math.abs(diff).toFixed(0)}% under`
 
+  const BUCKET_EMOJI: Record<Bucket, string> = { needs: '🏠', wants: '✨', savings: '🌱' }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {/* Header row — clickable to expand */}
+    <div style={{
+      borderRadius: 16, background: 'var(--surface-2)',
+      overflow: 'hidden', border: '1px solid var(--border)',
+    }}>
+      {/* Header row */}
       <button
         onClick={onToggle}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', padding: '6px 0', textAlign: 'left', width: '100%' }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          background: 'none', border: 'none', cursor: 'pointer',
+          padding: '14px 16px', textAlign: 'left', width: '100%',
+          fontFamily: 'inherit',
+        }}
       >
-        <div style={{ width: 8, height: 8, borderRadius: 2, background: meta.color, flexShrink: 0 }} />
-        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', flex: 1 }}>{meta.label}</span>
-        <span style={{ fontSize: 11, color: 'var(--text-4)' }}>target {target}%</span>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', marginLeft: 8 }}>{pct.toFixed(1)}%</span>
-        <span style={{ fontSize: 11, color: statusColor, fontWeight: 500, marginLeft: 6, minWidth: 70, textAlign: 'right' }}>{statusLabel}</span>
-        <ChevronDown size={13} style={{ color: 'var(--text-4)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .2s', flexShrink: 0, marginLeft: 4 }} />
+        <div style={{
+          width: 42, height: 42, borderRadius: 13, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: `color-mix(in oklch, ${meta.color} 16%, var(--surface))`,
+          fontSize: 20,
+        }}>
+          {BUCKET_EMOJI[bucket]}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+            <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)' }}>{meta.label}</span>
+            <span style={{
+              fontSize: 11.5, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+              background: status === 'on-track' ? 'var(--good-soft)' : status === 'over' ? 'var(--bad-soft)' : 'var(--warn-soft)',
+              color: statusColor,
+            }}>{statusLabel}</span>
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontWeight: 600 }}>
+            {formatCurrencyFull(amount)} <span style={{ color: 'var(--text-4)' }}>of {formatCurrencyFull(Math.round(target / 100 * totalIncome))} target</span>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>{pct.toFixed(0)}%</div>
+          <div style={{ fontSize: 10.5, color: 'var(--text-4)', fontWeight: 600 }}>of income</div>
+        </div>
+        <ChevronDown size={16} style={{ color: 'var(--text-4)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .2s', flexShrink: 0 }} />
       </button>
 
       {/* Progress bar */}
-      <div style={{ position: 'relative', height: 6, background: 'var(--surface-2)', borderRadius: 999, overflow: 'visible', marginBottom: 2 }}>
-        <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: meta.color, borderRadius: 999, transition: 'width .4s ease' }} />
-        <div style={{ position: 'absolute', top: -3, bottom: -3, width: 2, left: `${Math.min(target, 99)}%`, background: 'var(--text-3)', borderRadius: 999, transform: 'translateX(-50%)' }} />
+      <div style={{ height: 5, background: 'var(--surface-3)', position: 'relative' }}>
+        <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: meta.color, transition: 'width .5s cubic-bezier(.22,1,.36,1)' }} />
+        <div style={{ position: 'absolute', top: 0, bottom: 0, width: 2, left: `${Math.min(target, 99)}%`, background: 'var(--border-strong)', transform: 'translateX(-50%)' }} />
       </div>
-      <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '2px 0 0' }}>{formatCurrencyFull(amount)}</p>
 
       {/* Expanded category breakdown */}
       {expanded && (
-        <div style={{ marginTop: 10, borderRadius: 10, background: 'var(--surface-2)', overflow: 'hidden' }}>
+        <div style={{ borderTop: '1px solid var(--border)' }}>
           {items.length === 0 ? (
-            <p style={{ fontSize: 12, color: 'var(--text-4)', padding: '10px 14px', margin: 0 }}>No spending in this bucket this month.</p>
+            <p style={{ fontSize: 12.5, color: 'var(--text-4)', padding: '14px 16px', margin: 0 }}>No spending in this bucket this month.</p>
           ) : (
-            items.sort((a, b) => b.amt - a.amt).map(({ cat, amt }) => {
+            items.sort((a, b) => b.amt - a.amt).map(({ cat, amt }, idx) => {
               const barPct = totalIncome > 0 ? Math.min((amt / totalIncome) * 100, 100) : 0
               return (
-                <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderBottom: '1px solid var(--border)' }}>
+                <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderBottom: idx < items.length - 1 ? '1px solid var(--border)' : 'none' }}>
                   <span style={{ flexShrink: 0, color: 'var(--text-3)' }}><CategoryIcon category={cat} size={14} /></span>
-                  <span style={{ fontSize: 12, color: 'var(--text-2)', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getCategoryDisplayName(cat)}</span>
-                  <div style={{ width: 60, height: 4, background: 'var(--surface-3)', borderRadius: 999, flexShrink: 0 }}>
+                  <span style={{ fontSize: 13, color: 'var(--text-2)', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>{getCategoryDisplayName(cat)}</span>
+                  <div style={{ width: 56, height: 4, background: 'var(--surface-3)', borderRadius: 999, flexShrink: 0 }}>
                     <div style={{ height: '100%', width: `${barPct}%`, background: meta.color, borderRadius: 999 }} />
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', minWidth: 60, textAlign: 'right' }}>{formatCurrencyFull(amt)}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', minWidth: 70, textAlign: 'right' }}>{formatCurrencyFull(amt)}</span>
                 </div>
               )
             })
@@ -217,29 +246,86 @@ export default function SpendingRuleCard() {
     setEditingCats(true)
   }
 
-  return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+  const unallocatedPct = Math.max(0, 100 - needsPct - wantsPct - savingsPct)
+  const isOver = needsPct + wantsPct + savingsPct > 100
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: '0 0 4px' }}>
-            {rule.needs}/{rule.wants}/{rule.savings} Rule
-          </h2>
-          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>
-            Needs ≤ {rule.needs}% · Wants ≤ {rule.wants}% · Savings ≥ {rule.savings}%
-          </p>
-        </div>
-        {!editingRule && !editingCats && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button onClick={openCatEdit} style={{ padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
-              <Tags size={12} /> Categories
-            </button>
-            <button onClick={() => { setRuleDraft(rule); setEditingRule(true) }} style={{ padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
-              <Pencil size={12} /> Targets
-            </button>
+  return (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* ── Income Hero ── */}
+      <div style={{
+        borderRadius: 16, padding: '20px',
+        background: 'linear-gradient(135deg, var(--surface-2) 0%, var(--surface) 100%)',
+        border: '1px solid var(--border)',
+        position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{
+          position: 'absolute', top: -30, right: -20, width: 120, height: 120, borderRadius: '50%',
+          background: 'radial-gradient(circle, color-mix(in oklch, var(--brand) 12%, transparent), transparent 70%)',
+          pointerEvents: 'none',
+        }} />
+        <div style={{ position: 'relative' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div>
+              <div className="h-eyebrow" style={{ marginBottom: 6 }}>Monthly income</div>
+              <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em', color: 'var(--text)', lineHeight: 1 }}>
+                {formatCurrencyFull(totalIncome === 1 ? 0 : totalIncome)}
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {!editingRule && !editingCats && (
+                <>
+                  <button onClick={openCatEdit} style={{ padding: '6px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>
+                    <Tags size={12} /> Categories
+                  </button>
+                  <button onClick={() => { setRuleDraft(rule); setEditingRule(true) }} style={{ padding: '6px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>
+                    <Pencil size={12} /> Targets
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-        )}
+
+          {/* Unallocated pill */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '4px 12px', borderRadius: 999, fontSize: 12.5, fontWeight: 700,
+              background: isOver ? 'var(--bad-soft)' : 'var(--good-soft)',
+              color: isOver ? 'var(--bad-ink)' : 'var(--good-ink)',
+            }}>
+              {isOver
+                ? `${(needsPct + wantsPct + savingsPct - 100).toFixed(0)}% over budget`
+                : `${unallocatedPct.toFixed(0)}% unallocated`}
+            </span>
+            <span style={{ fontSize: 12, color: 'var(--text-4)', fontWeight: 500 }}>
+              {rule.needs}/{rule.wants}/{rule.savings} rule
+            </span>
+          </div>
+
+          {/* Prominent stacked bar */}
+          <div style={{ display: 'flex', height: 18, borderRadius: 10, overflow: 'hidden', gap: 2 }}>
+            <div style={{ flex: needsPct,   background: 'var(--info)',    minWidth: needsPct   > 0 ? 6 : 0, borderRadius: '10px 0 0 10px', transition: 'flex .6s cubic-bezier(.22,1,.36,1)' }} />
+            <div style={{ flex: wantsPct,   background: 'var(--warn)',    minWidth: wantsPct   > 0 ? 6 : 0, transition: 'flex .6s cubic-bezier(.22,1,.36,1)' }} />
+            <div style={{ flex: savingsPct, background: 'var(--good)',    minWidth: savingsPct > 0 ? 6 : 0, transition: 'flex .6s cubic-bezier(.22,1,.36,1)' }} />
+            <div style={{ flex: unallocatedPct, background: 'var(--surface-3)', minWidth: unallocatedPct > 0 ? 6 : 0, borderRadius: '0 10px 10px 0', transition: 'flex .6s cubic-bezier(.22,1,.36,1)' }} />
+          </div>
+
+          {/* Legend */}
+          <div style={{ display: 'flex', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
+            {([
+              { label: 'Needs',   pct: needsPct,   amt: byBucket.needs,   color: 'var(--info)' },
+              { label: 'Wants',   pct: wantsPct,   amt: byBucket.wants,   color: 'var(--warn)' },
+              { label: 'Savings', pct: savingsPct, amt: byBucket.savings, color: 'var(--good)' },
+            ]).map(({ label, pct, amt, color }) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 3, background: color, flexShrink: 0 }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-2)' }}>{pct.toFixed(0)}%</span>
+                <span style={{ fontSize: 11, color: 'var(--text-4)', fontWeight: 500 }}>{label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Targets edit */}
@@ -312,16 +398,8 @@ export default function SpendingRuleCard() {
         </div>
       )}
 
-      {/* Stacked bar */}
-      <div style={{ display: 'flex', height: 10, borderRadius: 999, overflow: 'hidden', gap: 2 }}>
-        <div style={{ flex: needsPct,   background: 'var(--info)',      minWidth: needsPct   > 0 ? 4 : 0 }} />
-        <div style={{ flex: wantsPct,   background: 'var(--warn)',      minWidth: wantsPct   > 0 ? 4 : 0 }} />
-        <div style={{ flex: savingsPct, background: 'var(--good)',      minWidth: savingsPct > 0 ? 4 : 0 }} />
-        <div style={{ flex: Math.max(0, 100 - needsPct - wantsPct - savingsPct), background: 'var(--surface-2)' }} />
-      </div>
-
-      {/* Bucket rows with expand */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* Bucket rows */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {(['needs', 'wants', 'savings'] as Bucket[]).map(b => (
           <BucketRow
             key={b}
