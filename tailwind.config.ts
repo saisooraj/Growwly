@@ -24,9 +24,9 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans:  ['Geist', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
-        mono:  ['Geist Mono', 'ui-monospace', 'Menlo', 'monospace'],
-        serif: ['Instrument Serif', 'Georgia', 'serif'],
+        sans:  ['"Plus Jakarta Sans"', 'ui-sans-serif', 'system-ui', '-apple-system', 'sans-serif'],
+        mono:  ['"Geist Mono"', 'ui-monospace', 'Menlo', 'monospace'],
+        serif: ['"Instrument Serif"', 'Georgia', 'serif'],
       },
       backgroundColor: {
         'app':      'var(--bg)',

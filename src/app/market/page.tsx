@@ -11,23 +11,22 @@ import NewsWidget from '@/components/market/NewsWidget'
 export default function MarketPage() {
   return (
     <AppShell title="Market Watch">
-      <div className="space-y-5">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
-        <div className="flex items-center gap-3">
-          <p className="text-sm text-slate-500">Live market data — stocks, mutual funds, gold & news.</p>
-          <span className="text-xs bg-green-100 text-green-700 px-2.5 py-0.5 rounded-full font-medium">Live</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>Live market data — stocks, mutual funds, gold & news.</p>
+          <span style={{
+            fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999,
+            background: 'var(--good-soft)', color: 'var(--good-ink)',
+          }}>Live</span>
         </div>
 
-        {/* Top row: Stocks + Gold */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'var(--row-gap)' }}>
           <StockWidget />
           <GoldWidget />
         </div>
 
-        {/* Middle: Mutual Funds */}
         <MutualFundWidget />
-
-        {/* Bottom: News */}
         <NewsWidget />
 
       </div>

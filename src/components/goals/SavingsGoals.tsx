@@ -34,21 +34,11 @@ export default function SavingsGoals() {
   const [saving, setSaving] = useState(false)
   const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
 
-  function openAdd() {
-    setEditing(null)
-    setForm(EMPTY)
-    setOpen(true)
-  }
+  function openAdd() { setEditing(null); setForm(EMPTY); setOpen(true) }
 
   function openEdit(g: SavingsGoal) {
     setEditing(g)
-    setForm({
-      name: g.name,
-      emoji: g.emoji,
-      targetAmount: String(g.targetAmount),
-      currentAmount: String(g.currentAmount),
-      targetDate: g.targetDate ?? '',
-    })
+    setForm({ name: g.name, emoji: g.emoji, targetAmount: String(g.targetAmount), currentAmount: String(g.currentAmount), targetDate: g.targetDate ?? '' })
     setOpen(true)
   }
 
@@ -57,61 +47,57 @@ export default function SavingsGoals() {
     setSaving(true)
     try {
       const payload = {
-        name: form.name,
-        emoji: form.emoji,
+        name: form.name, emoji: form.emoji,
         targetAmount: Number(form.targetAmount),
         currentAmount: Number(form.currentAmount) || 0,
         ...(form.targetDate ? { targetDate: form.targetDate } : {}),
       }
-      if (editing) {
-        await updateSavingsGoal(editing.id, payload)
-        toast.success('Goal updated')
-      } else {
-        await addSavingsGoal(user.uid, payload)
-        toast.success('Goal created!')
-      }
+      if (editing) { await updateSavingsGoal(editing.id, payload); toast.success('Goal updated') }
+      else         { await addSavingsGoal(user.uid, payload);       toast.success('Goal created!') }
       await refresh()
       setOpen(false)
-    } catch {
-      toast.error('Something went wrong')
-    } finally {
-      setSaving(false)
-    }
+    } catch { toast.error('Something went wrong') }
+    finally { setSaving(false) }
   }
 
   function handleDelete(g: SavingsGoal) {
     setConfirm({
       message: `Delete goal "${g.name}"?`,
       onConfirm: async () => {
-        try {
-          await deleteSavingsGoal(g.id)
-          await refresh()
-          toast.success('Goal deleted')
-        } catch { toast.error('Failed to delete') }
+        try { await deleteSavingsGoal(g.id); await refresh(); toast.success('Goal deleted') }
+        catch { toast.error('Failed to delete') }
       },
     })
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+
+      {/* Page header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Savings Goals</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Track what you're saving towards</p>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Savings Goals</h2>
+          <p style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 2 }}>Track what you're saving towards</p>
         </div>
-        <button onClick={openAdd} className="btn-primary flex items-center gap-1.5 text-sm px-3 py-2">
-          <Plus size={15} /> New Goal
+        <button onClick={openAdd} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Plus size={14} /> New Goal
         </button>
       </div>
 
+      {/* Empty state */}
       {savingsGoals.length === 0 ? (
-        <div className="card flex flex-col items-center py-10 text-center">
-          <Target size={32} className="text-slate-300 mb-3" />
-          <p className="text-sm font-medium text-slate-500">No savings goals yet</p>
-          <p className="text-xs text-slate-400 mt-1">Add a goal — trip, phone, home, anything</p>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
+          <div style={{ width: 52, height: 52, borderRadius: 16, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+            <Target size={26} style={{ color: 'var(--text-4)' }} />
+          </div>
+          <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-2)', marginBottom: 4 }}>No savings goals yet</p>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 20 }}>Add a goal — trip, phone, home, anything</p>
+          <button onClick={openAdd} className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Plus size={14} /> Create your first goal
+          </button>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div style={{ display: 'grid', gap: 'var(--row-gap)', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
           {savingsGoals.map((g) => {
             const pct = Math.min((g.currentAmount / g.targetAmount) * 100, 100)
             const remaining = g.targetAmount - g.currentAmount
@@ -119,19 +105,26 @@ export default function SavingsGoals() {
               ? Math.max(differenceInMonths(parseISO(g.targetDate), new Date()), 0)
               : null
             const monthlyNeeded = monthsLeft && monthsLeft > 0 && remaining > 0
-              ? Math.ceil(remaining / monthsLeft)
-              : null
+              ? Math.ceil(remaining / monthsLeft) : null
             const done = g.currentAmount >= g.targetAmount
 
             return (
-              <div key={g.id} className="card">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-slate-500 dark:text-slate-400"><GoalIcon emoji={g.emoji} size={24} /></span>
+              <div key={g.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{
+                      width: 42, height: 42, borderRadius: 13, flexShrink: 0,
+                      background: done ? 'var(--good-soft)' : 'var(--brand-soft)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: done ? 'var(--good-ink)' : 'var(--brand-ink)',
+                    }}>
+                      <GoalIcon emoji={g.emoji} size={22} />
+                    </div>
                     <div>
-                      <p className="font-semibold text-slate-800 dark:text-slate-100">{g.name}</p>
+                      <p style={{ fontWeight: 700, color: 'var(--text)', fontSize: 14.5, margin: 0 }}>{g.name}</p>
                       {g.targetDate && (
-                        <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                        <p style={{ fontSize: 11.5, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4, marginTop: 3 }}>
                           <CalendarDays size={11} />
                           {format(parseISO(g.targetDate), 'MMM yyyy')}
                           {monthsLeft !== null && ` · ${monthsLeft}mo left`}
@@ -139,40 +132,51 @@ export default function SavingsGoals() {
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => openEdit(g)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
+                  <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                    <button
+                      onClick={() => openEdit(g)}
+                      style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
                       <Pencil size={13} />
                     </button>
-                    <button onClick={() => handleDelete(g)} className="p-1.5 rounded-lg hover:bg-red-100 text-slate-400 hover:text-red-500">
+                    <button
+                      onClick={() => handleDelete(g)}
+                      style={{ width: 30, height: 30, borderRadius: 8, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = 'var(--bad-soft)'; e.currentTarget.style.color = 'var(--bad-ink)' }}
+                      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-3)' }}
+                    >
                       <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
 
-                <div className="mb-2">
-                  <div className="flex justify-between text-xs text-slate-500 mb-1.5">
+                {/* Progress */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
                     <span>{formatCurrencyFull(g.currentAmount)} saved</span>
-                    <span className="font-medium">{formatCurrencyFull(g.targetAmount)}</span>
+                    <span style={{ fontWeight: 600, color: 'var(--text-2)' }}>{formatCurrencyFull(g.targetAmount)}</span>
                   </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5">
-                    <div
-                      className={`h-2.5 rounded-full transition-all duration-700 ${
-                        done ? 'bg-green-500' : 'bg-gradient-to-r from-brand-500 to-fuchsia-500'
-                      }`}
-                      style={{ width: `${pct}%` }}
-                    />
+                  <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 999, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', width: `${pct}%`, borderRadius: 999,
+                      background: done ? 'var(--good)' : 'linear-gradient(90deg, var(--brand-2), var(--brand))',
+                      transition: 'width .7s cubic-bezier(.22,1,.36,1)',
+                    }} />
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs">
-                  <span className={`font-semibold ${done ? 'text-green-600' : 'text-brand-600'}`}>
-                    {done ? 'Goal reached!' : `${pct.toFixed(0)}% done`}
+                {/* Footer */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: done ? 'var(--good-ink)' : 'var(--brand-ink)' }}>
+                    {done ? '🎉 Goal reached!' : `${pct.toFixed(0)}% done`}
                   </span>
                   {!done && monthlyNeeded && (
-                    <span className="text-slate-400">{formatCurrencyFull(monthlyNeeded)}/mo needed</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-4)' }}>{formatCurrencyFull(monthlyNeeded)}/mo needed</span>
                   )}
                   {!done && !monthlyNeeded && remaining > 0 && (
-                    <span className="text-slate-400">{formatCurrencyFull(remaining)} to go</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-4)' }}>{formatCurrencyFull(remaining)} to go</span>
                   )}
                 </div>
               </div>
@@ -183,37 +187,46 @@ export default function SavingsGoals() {
 
       {/* Add / Edit Modal */}
       <Transition appear show={open} as={Fragment}>
-        <Dialog as="div" className="relative z-50" onClose={() => setOpen(false)}>
+        <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={() => setOpen(false)}>
           <Transition.Child as={Fragment}
             enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
             leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
           >
-            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,20,.46)', backdropFilter: 'blur(4px)' }} />
           </Transition.Child>
 
-          <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-end sm:items-center justify-center p-4">
+          <div style={{ position: 'fixed', inset: 0, overflowY: 'auto' }}>
+            <div style={{ display: 'flex', minHeight: '100%', alignItems: 'flex-end', justifyContent: 'center', padding: 16 }}
+                 className="sm:items-center">
               <Transition.Child as={Fragment}
-                enter="ease-out duration-200" enterFrom="opacity-0 translate-y-4 sm:scale-95"
-                enterTo="opacity-100 translate-y-0 sm:scale-100"
-                leave="ease-in duration-150" leaveFrom="opacity-100 translate-y-0 sm:scale-100"
-                leaveTo="opacity-0 translate-y-4 sm:scale-95"
+                enter="ease-out duration-200" enterFrom="opacity-0 translate-y-4"
+                enterTo="opacity-100 translate-y-0"
+                leave="ease-in duration-150" leaveFrom="opacity-100 translate-y-0"
+                leaveTo="opacity-0 translate-y-4"
               >
-                <Dialog.Panel className="w-full max-w-md bg-white dark:bg-[#0F1120] border border-transparent dark:border-[#1E2140] rounded-2xl shadow-xl overflow-hidden">
-                  <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-[#1E2140]">
-                    <Dialog.Title className="text-base font-semibold text-slate-800 dark:text-slate-100">
+                <Dialog.Panel style={{
+                  width: '100%', maxWidth: 440,
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: 24, boxShadow: 'var(--elev-lg)', overflow: 'hidden',
+                }}>
+                  {/* Modal header */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 16px', borderBottom: '1px solid var(--border)' }}>
+                    <Dialog.Title style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
                       {editing ? 'Edit Goal' : 'New Savings Goal'}
                     </Dialog.Title>
-                    <button onClick={() => setOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400">
-                      <X size={18} />
+                    <button
+                      onClick={() => setOpen(false)}
+                      style={{ width: 32, height: 32, borderRadius: 10, border: 'none', background: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    >
+                      <X size={16} />
                     </button>
                   </div>
 
-                  <div className="p-5 space-y-4">
+                  <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
                     {/* Icon picker */}
                     <div>
                       <label className="label">Icon</label>
-                      <div className="flex flex-wrap gap-2">
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                         {GOAL_ICONS.map((p) => {
                           const active = form.emoji === p.name
                           const Icon = ICON_COMPONENT_MAP[p.name]
@@ -223,11 +236,15 @@ export default function SavingsGoals() {
                               type="button"
                               title={p.label}
                               onClick={() => setForm(f => ({ ...f, emoji: p.name }))}
-                              className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all ${
-                                active
-                                  ? 'bg-brand-100 dark:bg-brand-900/40 ring-2 ring-brand-500 text-brand-600'
-                                  : 'bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400'
-                              }`}
+                              style={{
+                                width: 36, height: 36, borderRadius: 10, border: 'none',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                cursor: 'pointer', transition: 'all .12s',
+                                background: active ? 'var(--brand-soft)' : 'var(--surface-2)',
+                                color: active ? 'var(--brand-ink)' : 'var(--text-3)',
+                                outline: active ? '2px solid var(--brand)' : '2px solid transparent',
+                                outlineOffset: 1,
+                              }}
                             >
                               {Icon && <Icon size={18} stroke={1.5} />}
                             </button>
@@ -238,53 +255,34 @@ export default function SavingsGoals() {
 
                     <div>
                       <label className="label">Goal Name</label>
-                      <input
-                        className="input"
-                        placeholder="e.g. Trip to Bali"
-                        value={form.name}
-                        onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                      />
+                      <input className="input" placeholder="e.g. Trip to Bali" value={form.name}
+                        onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div>
                         <label className="label">Target Amount (₹)</label>
-                        <input
-                          className="input"
-                          type="number"
-                          min="1"
-                          placeholder="50000"
-                          value={form.targetAmount}
-                          onChange={e => setForm(f => ({ ...f, targetAmount: e.target.value }))}
-                        />
+                        <input className="input" type="number" min="1" placeholder="50000" value={form.targetAmount}
+                          onChange={e => setForm(f => ({ ...f, targetAmount: e.target.value }))} />
                       </div>
                       <div>
                         <label className="label">Saved So Far (₹)</label>
-                        <input
-                          className="input"
-                          type="number"
-                          min="0"
-                          placeholder="0"
-                          value={form.currentAmount}
-                          onChange={e => setForm(f => ({ ...f, currentAmount: e.target.value }))}
-                        />
+                        <input className="input" type="number" min="0" placeholder="0" value={form.currentAmount}
+                          onChange={e => setForm(f => ({ ...f, currentAmount: e.target.value }))} />
                       </div>
                     </div>
 
                     <div>
                       <label className="label">Target Date (optional)</label>
-                      <input
-                        className="input"
-                        type="date"
-                        value={form.targetDate}
-                        onChange={e => setForm(f => ({ ...f, targetDate: e.target.value }))}
-                      />
+                      <input className="input" type="date" value={form.targetDate}
+                        onChange={e => setForm(f => ({ ...f, targetDate: e.target.value }))} />
                     </div>
 
                     <button
                       onClick={handleSave}
                       disabled={saving || !form.name || !form.targetAmount}
-                      className="btn-primary w-full justify-center py-3 text-base disabled:opacity-60"
+                      className="btn-primary"
+                      style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: 15, opacity: (saving || !form.name || !form.targetAmount) ? 0.6 : 1 }}
                     >
                       {saving ? 'Saving...' : editing ? 'Update Goal' : 'Create Goal'}
                     </button>
@@ -297,12 +295,7 @@ export default function SavingsGoals() {
       </Transition>
 
       {confirm && (
-        <ConfirmDialog
-          open={true}
-          message={confirm.message}
-          onConfirm={confirm.onConfirm}
-          onClose={() => setConfirm(null)}
-        />
+        <ConfirmDialog open message={confirm.message} onConfirm={confirm.onConfirm} onClose={() => setConfirm(null)} />
       )}
     </div>
   )
