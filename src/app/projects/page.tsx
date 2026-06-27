@@ -20,7 +20,7 @@ export default function ProjectsPage() {
 
   return (
     <AppShell title="Projects">
-      <div className="space-y-5">
+      <div className="anim-page space-y-5">
         <div className="flex items-center justify-between">
           <p className="text-sm text-slate-500">Track budgets for construction, events, and other projects.</p>
           <button onClick={() => setAddOpen(true)} className="btn-primary">

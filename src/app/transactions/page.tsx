@@ -133,7 +133,7 @@ function TransactionsInner() {
   return (
     <AppShell title="Transactions">
       {/* ── Desktop 2-col / mobile single-col layout ── */}
-      <div className="txn-layout" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+      <div className="txn-layout anim-page" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
         {/* Mobile summary strip — hidden on desktop */}
         <div className="grid grid-cols-3 lg:hidden" style={{ gap: 10 }}>

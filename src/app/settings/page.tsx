@@ -232,7 +232,7 @@ export default function SettingsPage() {
 
   return (
     <AppShell title="Settings">
-      <div style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+      <div className="anim-page" style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
         {/* About Growwly */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

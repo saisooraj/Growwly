@@ -55,6 +55,9 @@
   --hair:        var(--border);
   --sidebar:     var(--surface);
 
+  /* Chip variants */
+  --chip-strong: #D0CEC3;
+
   /* Nav */
   --nav-bg:     rgba(255,255,255,.88);
   --nav-border: rgba(255,255,255,.7);
@@ -98,12 +101,13 @@
   --info-soft:  color-mix(in oklch, var(--info) 22%, transparent);
   --info-ink:   oklch(0.82 0.12 245);
 
-  --elev:     0 1px 2px rgba(0,0,0,.4), 0 12px 32px -12px rgba(0,0,0,.56);
-  --elev-lg:  0 1px 2px rgba(0,0,0,.4), 0 24px 60px -18px rgba(0,0,0,.7);
-  --chip:     var(--surface-2);
-  --track:    var(--surface-3);
-  --hair:     var(--border);
-  --sidebar:  oklch(0.12 0.01 265);
+  --elev:       0 1px 2px rgba(0,0,0,.4), 0 12px 32px -12px rgba(0,0,0,.56);
+  --elev-lg:    0 1px 2px rgba(0,0,0,.4), 0 24px 60px -18px rgba(0,0,0,.7);
+  --chip:       var(--surface-2);
+  --chip-strong: var(--border-strong);
+  --track:      var(--surface-3);
+  --hair:       var(--border);
+  --sidebar:    oklch(0.12 0.01 265);
 
   --nav-bg:     rgba(22,24,29,.88);
   --nav-border: rgba(255,255,255,.08);
@@ -546,6 +550,9 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 @keyframes gw-spin { to { transform: rotate(360deg); } }
 .gw-spin { animation: gw-spin .7s linear infinite; }
 
+/* Sparkline draw */
+@keyframes gw-spark-draw { to { stroke-dashoffset: 0; } }
+
 /* Stagger children */
 .gw-stagger > * { animation: fadeUp .4s cubic-bezier(.22,1,.36,1) both; }
 .gw-stagger > *:nth-child(1) { animation-delay: .04s; }
@@ -554,6 +561,31 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 .gw-stagger > *:nth-child(4) { animation-delay: .16s; }
 .gw-stagger > *:nth-child(5) { animation-delay: .20s; }
 .gw-stagger > *:nth-child(6) { animation-delay: .24s; }
+
+/* ══════════════════════════════════════════
+   Global tap / press feedback
+══════════════════════════════════════════ */
+/* Remove native highlight on mobile for all interactive elements */
+button, a, [role="button"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Cards with press prop get tactile scale */
+.card-press {
+  cursor: pointer;
+  transition: transform .14s cubic-bezier(.2,.8,.2,1), box-shadow .14s;
+}
+.card-press:hover  { box-shadow: var(--elev-lg); }
+.card-press:active { transform: scale(0.985); }
+
+/* Page entrance */
+@keyframes anim-page {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+.anim-page {
+  animation: anim-page .38s cubic-bezier(.22,1,.36,1) both;
+}
 
 /* ══════════════════════════════════════════
    Scrollbar

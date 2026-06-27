@@ -81,7 +81,7 @@ export default function AddProjectModal({ open, onClose, editProject }: Props) {
           enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
           leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,20,.44)', backdropFilter: 'blur(4px)' }} />
         </Transition.Child>
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-end sm:items-center justify-center p-4">
@@ -91,17 +91,21 @@ export default function AddProjectModal({ open, onClose, editProject }: Props) {
               enterTo="opacity-100 translate-y-0"
               leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
             >
-              <Dialog.Panel className="w-full max-w-md bg-white dark:bg-[#0F1120] border border-transparent dark:border-[#1E2140] rounded-2xl shadow-xl overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-                  <Dialog.Title className="text-base font-semibold text-slate-800">
+              <Dialog.Panel style={{
+                width: '100%', maxWidth: 440,
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 24, boxShadow: 'var(--elev-lg)', overflow: 'hidden',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 16px', borderBottom: '1px solid var(--border)' }}>
+                  <Dialog.Title style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
                     {editProject ? 'Edit Project' : 'New Project'}
                   </Dialog.Title>
-                  <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
-                    <X size={18} />
+                  <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 10, border: 'none', background: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <X size={16} />
                   </button>
                 </div>
 
-                <form onSubmit={handleSubmit(onSubmit)} className="p-5 space-y-4">
+                <form onSubmit={handleSubmit(onSubmit)} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
                   <div>
                     <label className="label">Project Name</label>
                     <input className="input" placeholder="e.g., House Construction" {...register('name', { required: true })} />
@@ -110,7 +114,7 @@ export default function AddProjectModal({ open, onClose, editProject }: Props) {
                     <label className="label">Description</label>
                     <input className="input" placeholder="Optional details..." {...register('description')} />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
                       <label className="label">Total Budget (₹)</label>
                       <input type="number" className="input" {...register('totalBudget', { required: true })} />
@@ -120,7 +124,7 @@ export default function AddProjectModal({ open, onClose, editProject }: Props) {
                       <input type="number" className="input" {...register('paid')} />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
                       <label className="label">Start Date</label>
                       <input type="date" className="input" {...register('startDate')} />

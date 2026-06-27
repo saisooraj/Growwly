@@ -116,7 +116,7 @@ export default function MutualFundWidget() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BarChart3 size={16} className="text-purple-500" />
-          <h3 className="font-semibold text-slate-800">Mutual Funds</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Mutual Funds</h3>
           <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">NAV Daily</span>
         </div>
         <div className="flex items-center gap-2">

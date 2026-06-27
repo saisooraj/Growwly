@@ -81,7 +81,7 @@ export default function UpcomingPage() {
 
   return (
     <AppShell title="Upcoming">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+      <div className="anim-page" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
         {/* Header KPIs */}
         {upcomingExpenses.length > 0 && (

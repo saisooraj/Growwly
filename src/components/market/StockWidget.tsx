@@ -85,7 +85,7 @@ export default function StockWidget() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <TrendingUp size={16} className="text-brand-500" />
-          <h3 className="font-semibold text-slate-800">Stocks</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Stocks</h3>
           <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">NSE Live</span>
         </div>
         <div className="flex items-center gap-2">

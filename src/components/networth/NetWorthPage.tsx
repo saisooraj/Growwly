@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
 import { useRefreshData } from '@/hooks/useData'
 import { addAsset, updateAsset, deleteAsset, addLiability, updateLiability, deleteLiability, setEmergencyFund, setUserSettings } from '@/lib/firestore'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
-import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE } from '@/lib/utils'
+import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE, getLast6Months } from '@/lib/utils'
 import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import type { Asset, AssetKind, Liability, LiabilityKind } from '@/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
@@ -85,6 +85,26 @@ function SectionHeader({ title, onAdd }: { title: string; onAdd: () => void }) {
         <Plus size={13} /> Add
       </button>
     </div>
+  )
+}
+
+// ── Inline SVG sparkline ─────────────────────────────────────────────────────
+
+function Sparkline({ data, width = 280, height = 44, color = 'rgba(255,255,255,.88)', strokeW = 2.5 }: {
+  data: number[]; width?: number; height?: number; color?: string; strokeW?: number
+}) {
+  if (data.length < 2) return null
+  const min = Math.min(...data), max = Math.max(...data), range = max - min || 1
+  const pts = data.map((v, i) => [
+    (i / (data.length - 1)) * width,
+    height - ((v - min) / range) * (height - 8) - 4,
+  ])
+  const d = 'M' + pts.map(p => p.map((n: number) => n.toFixed(1)).join(',')).join(' L')
+  return (
+    <svg width={width} height={height} style={{ display: 'block', overflow: 'visible', marginLeft: -4 }}>
+      <path d={d} fill="none" stroke={color} strokeWidth={strokeW} strokeLinecap="round" strokeLinejoin="round"
+        style={{ strokeDasharray: 800, strokeDashoffset: 800, animation: 'gw-spark-draw 1.2s ease forwards' }} />
+    </svg>
   )
 }
 
@@ -170,6 +190,14 @@ export default function NetWorthPage() {
 
   const savingsTotal = useMemo(() => savingsVehicles.reduce((s, v) => s + v.balance, 0), [savingsVehicles])
 
+  // Spark data: monthly net income over last 6 months as a proxy trend
+  const sparkData = useMemo(() => {
+    return getLast6Months().map(m => {
+      const s = buildMonthlySummary(transactions, m, settings)
+      return Math.max(0, s.totalIncome - s.totalExpenses)
+    })
+  }, [transactions, settings])
+
   // For net worth total we use invested/value as best estimate (MyAssetsSection shows live values)
   const totalAssets = useMemo(() => {
     const assetsTotal = assets.reduce((s, a) => s + a.value, 0)
@@ -220,7 +248,7 @@ export default function NetWorthPage() {
   }
 
   return (
-    <div style={{ maxWidth: 600, display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+    <div className="anim-page" style={{ maxWidth: 600, display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
       {/* Net Worth Hero */}
       <div style={{
@@ -273,6 +301,13 @@ export default function NetWorthPage() {
               {netWorth >= 0 ? '↑' : '↓'} {formatCurrencyFull(Math.abs(netWorth - totalLiabilities))} assets
             </span>
           </div>
+
+          {/* Sparkline */}
+          {sparkData.some(v => v > 0) && (
+            <div style={{ marginBottom: 16, marginLeft: -4 }}>
+              <Sparkline data={sparkData} width={320} height={44} />
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div style={{ background: 'rgba(255,255,255,.18)', borderRadius: 14, padding: '14px 16px', backdropFilter: 'blur(6px)' }}>

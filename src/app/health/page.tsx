@@ -298,7 +298,7 @@ export default function HealthPage() {
 
   return (
     <AppShell title="Health">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)', maxWidth: 600 }}>
+      <div className="anim-page" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)', maxWidth: 600 }}>
 
         {/* Header card */}
         <div className="card" style={{ padding: '20px 20px 16px' }}>

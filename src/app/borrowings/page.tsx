@@ -15,7 +15,7 @@ export default function BorrowingsPage() {
 
   return (
     <AppShell title="Borrowings">
-      <div className="space-y-4">
+      <div className="anim-page space-y-4">
         <div className="flex items-center justify-between">
           <p className="text-sm text-slate-500">Track borrowed and lent amounts.</p>
           <button onClick={() => setAddOpen(true)} className="btn-primary">

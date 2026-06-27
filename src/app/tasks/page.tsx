@@ -224,7 +224,7 @@ export default function TasksPage() {
 
   return (
     <AppShell title="Tasks">
-      <div style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+      <div className="anim-page" style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
         {/* Top bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

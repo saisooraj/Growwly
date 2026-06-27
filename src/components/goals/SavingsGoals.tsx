@@ -109,7 +109,7 @@ export default function SavingsGoals() {
             const done = g.currentAmount >= g.targetAmount
 
             return (
-              <div key={g.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div key={g.id} className="card card-press" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

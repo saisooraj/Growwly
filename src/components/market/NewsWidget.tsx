@@ -74,7 +74,7 @@ export default function NewsWidget() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Newspaper size={16} className="text-blue-500" />
-          <h3 className="font-semibold text-slate-800">Market News</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Market News</h3>
           <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">India</span>
         </div>
         <div className="flex items-center gap-2">
@@ -113,7 +113,7 @@ export default function NewsWidget() {
               >
                 <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-2 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-800 leading-snug group-hover:text-brand-600 transition-colors line-clamp-2">
+                  <p className="text-sm font-medium text-slate-800 leading-snug group-hover:text-[var(--brand)] transition-colors line-clamp-2">
                     {article.title}
                   </p>
                   {article.description && (

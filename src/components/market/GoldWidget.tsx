@@ -53,7 +53,7 @@ export default function GoldWidget() {
       <div className="card space-y-3">
         <div className="flex items-center gap-2">
           <IconCoin size={18} className="text-amber-500" stroke={1.5} />
-          <h3 className="font-semibold text-slate-800">Gold — 22K</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Gold — 22K</h3>
         </div>
         <div className="space-y-2">
           {[...Array(4)].map((_, i) => <div key={i} className="h-10 bg-slate-100 rounded-xl animate-pulse" />)}
@@ -84,7 +84,7 @@ export default function GoldWidget() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <IconCoin size={18} className="text-amber-500" stroke={1.5} />
-          <h3 className="font-semibold text-slate-800">Gold — 22K (IBJA)</h3>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Gold — 22K (IBJA)</h3>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400">

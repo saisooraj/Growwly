@@ -11,7 +11,7 @@ import NewsWidget from '@/components/market/NewsWidget'
 export default function MarketPage() {
   return (
     <AppShell title="Market Watch">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+      <div className="anim-page" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>Live market data — stocks, mutual funds, gold & news.</p>

@@ -62,7 +62,7 @@ export default function DashboardPage() {
           ))}
         </div>
       ) : (
-        <div className="anim-in" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+        <div className="anim-page gw-stagger" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
           {/* Row 1: Health hero + Safe-to-spend + Emergency */}
           <div className="dash-hero">

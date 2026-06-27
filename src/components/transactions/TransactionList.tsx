@@ -60,8 +60,8 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
     const isLent = tx._borrowDir === 'lent'
     color       = isLent ? 'var(--warn)' : 'var(--info)'
     icon        = isLent
-      ? <UserMinus size={15} style={{ color }} />
-      : <UserPlus  size={15} style={{ color }} />
+      ? <UserMinus size={17} style={{ color }} />
+      : <UserPlus  size={17} style={{ color }} />
     label       = tx._person ?? (isLent ? 'Lent' : 'Borrowed')
     amountColor = isLent ? 'var(--warn-ink)' : 'var(--info-ink)'
     prefix      = isLent ? '−' : '+'
@@ -71,18 +71,18 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
       const vehicle = tx.savingsVehicle || disp.label
       const meta = getSavingsVehicleMeta(vehicle)
       color     = meta.color
-      icon      = <meta.Icon size={15} style={{ color }} stroke={1.5} />
+      icon      = <meta.Icon size={17} style={{ color }} stroke={1.5} />
       label     = disp.label
     } else {
       color     = 'var(--info)'
-      icon      = <ArrowLeftRight size={15} style={{ color }} />
+      icon      = <ArrowLeftRight size={17} style={{ color }} />
       label     = disp.label
     }
     amountColor = disp.dir === 'in' ? 'var(--good-ink)' : 'var(--text-2)'
     prefix      = disp.dir === 'in' ? '+' : '−'
   } else {
-    color       = CATEGORY_COLORS[tx.category] ?? '#94a3b8'
-    icon        = <CategoryIcon category={tx.category} size={15} color={color} />
+    color       = CATEGORY_COLORS[tx.category] ?? 'var(--text-3)'
+    icon        = <CategoryIcon category={tx.category} size={17} color={color} />
     label       = getCategoryDisplayName(tx.category)
     amountColor = isIncome ? 'var(--good-ink)' : 'var(--text)'
     prefix      = isIncome ? '+' : '−'
@@ -92,18 +92,24 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
     <button
       onClick={() => onSelect(tx)}
       style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        padding: '10px 12px', borderRadius: 12,
+        display: 'flex', alignItems: 'center', gap: 13,
+        padding: '11px 12px', borderRadius: 14,
         background: 'transparent', border: 'none',
         cursor: 'pointer', textAlign: 'left', width: '100%',
-        transition: 'background .12s',
+        transition: 'background .12s, transform .14s cubic-bezier(.2,.8,.2,1)',
+        WebkitTapHighlightColor: 'transparent',
+        fontFamily: 'inherit',
       }}
       onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+      onPointerDown={e => (e.currentTarget.style.transform = 'scale(0.985)')}
+      onPointerUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+      onPointerLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
     >
+      {/* Category avatar — 44px matching design */}
       <div style={{
-        width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-        background: color + '20',
+        width: 44, height: 44, borderRadius: 14, flexShrink: 0,
+        background: `color-mix(in oklch, ${color} 18%, var(--surface))`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {icon}
@@ -111,7 +117,7 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {label}
           </span>
           {isBorrowing && (
@@ -142,9 +148,11 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
         )}
       </div>
 
-      <span className="num" style={{ fontSize: 13, fontWeight: 600, color: amountColor, flexShrink: 0 }}>
-        {prefix}{formatCurrencyFull(tx.amount)}
-      </span>
+      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: amountColor, letterSpacing: '-0.01em', fontFamily: "'Geist Mono', monospace" }}>
+          {prefix}{formatCurrencyFull(tx.amount)}
+        </div>
+      </div>
     </button>
   )
 }
@@ -180,19 +188,19 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
       <button
         onClick={() => setOpen(v => !v)}
         style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-          padding: '8px 12px', borderRadius: 10,
+          width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 12px 6px', borderRadius: 12,
           background: 'transparent', border: 'none', cursor: 'pointer',
-          transition: 'background .12s',
+          transition: 'background .12s', fontFamily: 'inherit',
         }}
         onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
         onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
       >
         {open
-          ? <ChevronDown  size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-          : <ChevronRight size={13} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+          ? <ChevronDown  size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} />
+          : <ChevronRight size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} />
         }
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', flex: 1, textAlign: 'left' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-2)', flex: 1, textAlign: 'left' }}>
           {dayLabel(date)}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
