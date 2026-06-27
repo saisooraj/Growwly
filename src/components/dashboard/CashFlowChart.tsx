@@ -1,17 +1,14 @@
 'use client'
 
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useAppStore } from '@/store/appStore'
 import { getLast6Months, buildMonthlySummary, formatCurrency } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
+
+const GRID    = 'var(--border)'
+const TICK    = 'var(--text-3)'
+const INFLOW  = 'var(--good)'
+const OUTFLOW = 'var(--bad)'
 
 export default function CashFlowChart() {
   const transactions = useAppStore((s) => s.transactions)
@@ -28,28 +25,34 @@ export default function CashFlowChart() {
 
   return (
     <div className="card">
-      <h3 className="text-sm font-semibold text-slate-700 mb-4">Cash Flow (Inflow vs Outflow)</h3>
+      <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-2)', margin: '0 0 16px' }}>
+        Cash Flow (Inflow vs Outflow)
+      </h3>
       <ResponsiveContainer width="100%" height={220}>
         <AreaChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <defs>
             <linearGradient id="inflowGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#22c55e" stopOpacity={0.02} />
+              <stop offset="5%"  stopColor={INFLOW}  stopOpacity={0.28} />
+              <stop offset="95%" stopColor={INFLOW}  stopOpacity={0.02} />
             </linearGradient>
             <linearGradient id="outflowGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.02} />
+              <stop offset="5%"  stopColor={OUTFLOW} stopOpacity={0.28} />
+              <stop offset="95%" stopColor={OUTFLOW} stopOpacity={0.02} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-          <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-          <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatCurrency(v)} />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+          <XAxis dataKey="name" tick={{ fontSize: 12, fill: TICK }} axisLine={false} tickLine={false} />
+          <YAxis tick={{ fontSize: 11, fill: TICK }} axisLine={false} tickLine={false} tickFormatter={(v: number) => formatCurrency(v)} />
           <Tooltip
             formatter={(v: number) => formatCurrency(v)}
-            contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: 13 }}
+            contentStyle={{
+              borderRadius: 14, border: '1px solid var(--border)',
+              background: 'var(--surface)', fontSize: 13, color: 'var(--text)',
+              boxShadow: 'var(--elev)',
+            }}
           />
-          <Area type="monotone" dataKey="Inflow" stroke="#22c55e" strokeWidth={2} fill="url(#inflowGrad)" />
-          <Area type="monotone" dataKey="Outflow" stroke="#f43f5e" strokeWidth={2} fill="url(#outflowGrad)" />
+          <Area type="monotone" dataKey="Inflow"  stroke={INFLOW}  strokeWidth={2} fill="url(#inflowGrad)"  />
+          <Area type="monotone" dataKey="Outflow" stroke={OUTFLOW} strokeWidth={2} fill="url(#outflowGrad)" />
         </AreaChart>
       </ResponsiveContainer>
     </div>
