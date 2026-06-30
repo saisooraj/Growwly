@@ -29,7 +29,7 @@ export default function PulseCard() {
         tabIndex={0}
         onClick={() => setOpen(true)}
         onKeyDown={e => e.key === 'Enter' && setOpen(true)}
-        style={{ display: 'flex', flexDirection: 'column', gap: 14, cursor: 'pointer', borderLeft: `3px solid ${c.bar}` }}
+        style={{ display: 'flex', flexDirection: 'column', gap: 14, cursor: 'pointer' }}
       >
         {/* Header row */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

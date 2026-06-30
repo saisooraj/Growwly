@@ -464,7 +464,13 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 /* Dashboard responsive grids */
 .dash-hero {
   display: grid;
-  grid-template-columns: minmax(360px, 1.4fr) minmax(240px, 1fr) minmax(240px, 1fr);
+  grid-template-columns: minmax(360px, 1.6fr) minmax(220px, 1fr) minmax(200px, 1fr);
+  gap: var(--row-gap);
+}
+/* 3-equal-col row: pie | bar chart | smart insight */
+.dash-mid {
+  display: grid;
+  grid-template-columns: 1.2fr 1.2fr 1fr;
   gap: var(--row-gap);
 }
 .dash-charts {
@@ -477,10 +483,18 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   grid-template-columns: 1fr 1fr 1fr;
   gap: var(--row-gap);
 }
+/* 2-col row: net worth | existing cards */
+.dash-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--row-gap);
+}
 @media (max-width: 1024px) {
   .dash-hero    { grid-template-columns: 1fr; }
+  .dash-mid     { grid-template-columns: 1fr; }
   .dash-charts  { grid-template-columns: 1fr; }
   .dash-bottom  { grid-template-columns: 1fr 1fr; }
+  .dash-pair    { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
   .dash-bottom  { grid-template-columns: 1fr; }

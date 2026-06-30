@@ -25,6 +25,26 @@ export function getCurrentMonth(): string {
   return format(new Date(), 'yyyy-MM')
 }
 
+// Returns the budget-month label that today actually falls in, respecting the
+// salary cycle. e.g. on June 30 with a fixed-day-30 cycle, returns "2026-07".
+export function getCycleMonth(settings?: UserSettings | null): string {
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const calendarMonth = format(new Date(), 'yyyy-MM')
+
+  if (!settings?.salaryCycleRule || settings.salaryCycleRule === 'none') {
+    return calendarMonth
+  }
+
+  // Check whether today has already entered the NEXT calendar month's cycle
+  const [year, month] = calendarMonth.split('-').map(Number)
+  const nextYear  = month === 12 ? year + 1 : year
+  const nextMonth = month === 12 ? 1 : month + 1
+  const nextBM    = `${nextYear}-${String(nextMonth).padStart(2, '0')}`
+  const { start: nextStart } = getCycleRange(nextBM, settings)
+
+  return today >= nextStart ? nextBM : calendarMonth
+}
+
 export function getMonthLabel(month: string): string {
   return format(parseISO(`${month}-01`), 'MMMM yyyy')
 }
@@ -127,7 +147,8 @@ export function buildMonthlySummary(
 export function getLast6Months(): string[] {
   const months: string[] = []
   const now = new Date()
-  for (let i = 5; i >= 0; i--) {
+  // 5 past months + current + next = always allows navigating into the upcoming cycle
+  for (let i = 5; i >= -1; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
     months.push(format(d, 'yyyy-MM'))
   }

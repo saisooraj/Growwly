@@ -5,7 +5,7 @@ import { Dialog, Transition } from '@headlessui/react'
 import { X, RefreshCw, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Split, UserPlus, Trash2, PiggyBank } from 'lucide-react'
 import { IconMedal, IconCrane } from '@tabler/icons-react'
 import { format } from 'date-fns'
-import { addTransaction, updateTransaction, updateProject, addBorrowing, setUserSettings, setEmergencyFund } from '@/lib/firestore'
+import { addTransaction, updateTransaction, updateProject, addBorrowing, updateBorrowing, setUserSettings, setEmergencyFund } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTransfer, buildMonthlySummary, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/utils'
@@ -86,6 +86,8 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
   const [projectId, setProjectId]       = useState(editTx?.projectId ?? '')
   const [isRecurring, setIsRecurring]   = useState(editTx?.isRecurring ?? false)
   const [saving, setSaving]             = useState(false)
+  // Person name for loan transfers (auto-synced to borrowings)
+  const [loanPerson, setLoanPerson]     = useState('')
 
   // Split state
   const [splitEnabled, setSplitEnabled]   = useState(false)
@@ -93,7 +95,7 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
   const [participants, setParticipants]   = useState<SplitParticipant[]>([])
   const [newName, setNewName]             = useState('')
 
-  // Unique known people from all borrowings
+  // Unique known people from all borrowings (for suggestions)
   const knownPeople = Array.from(new Set(borrowings.map(b => b.person))).sort()
 
   // Reset on open/close
@@ -113,6 +115,7 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
       setSplitMode('equal')
       setParticipants([])
       setNewName('')
+      setLoanPerson('')
     }
   }, [open, editTx])
 
@@ -208,18 +211,44 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!user || !amount || Number(amount) <= 0) return
-    if (splitEnabled && participants.length > 0 && myShare <= 0) {
+    const pendingParticipant = splitEnabled && newName.trim()
+      ? [{ id: 'tmp', name: newName.trim(), value: 0, kind: 'lent' as SplitKind }]
+      : []
+    const hasParticipants = splitEnabled && (participants.length + pendingParticipant.length) > 0
+    if (hasParticipants && myShare <= 0) {
       toast.error('Your share must be greater than 0')
-      return
-    }
-    if (splitEnabled && participants.length > 0 && !isBalanced) {
-      toast.error("Split amounts don't add up to the total")
       return
     }
 
     setSaving(true)
     try {
-      const effectiveAmount = splitEnabled && participants.length > 0 ? myShare : Number(amount)
+      // Auto-add any participant whose name was typed but not yet confirmed via the Add button
+      const finalParticipants: SplitParticipant[] = splitEnabled && newName.trim()
+        ? [...participants, {
+            id: Math.random().toString(36).slice(2),
+            name: newName.trim(),
+            value: splitMode === 'percentage'
+              ? Math.floor(100 / (participants.length + 2))
+              : splitMode === 'manual'
+                ? Math.floor(totalAmount / (participants.length + 2))
+                : 0,
+            kind: 'lent' as SplitKind,
+          }]
+        : participants
+
+      const effectiveAmount = splitEnabled && finalParticipants.length > 0
+        ? (() => {
+            if (splitMode === 'equal') {
+              const n = finalParticipants.length
+              return totalAmount - n * Math.floor(totalAmount / (n + 1))
+            }
+            if (splitMode === 'percentage') {
+              const sumPct = finalParticipants.reduce((s, p) => s + p.value, 0)
+              return Math.round(totalAmount * Math.max(0, 100 - sumPct) / 100)
+            }
+            return Math.max(0, totalAmount - finalParticipants.reduce((s, p) => s + p.value, 0))
+          })()
+        : Number(amount)
 
       const payload: Partial<Transaction> = {
         type: txType,
@@ -299,10 +328,58 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
           }
         }
 
+        // ── Auto-sync loan transfers → borrowings ──────────────────────────────
+        if (txType === 'transfer' && loanPerson.trim()) {
+          const person = loanPerson.trim()
+          if (transferKind === 'loan_given') {
+            // Create a new "lent" borrowing record
+            await addBorrowing(user.uid, {
+              type: 'lent',
+              amount: effectiveAmount,
+              person,
+              description: notes || `Loan given`,
+              date,
+              repaidAmount: 0,
+              status: 'pending',
+            })
+          } else if (transferKind === 'loan_repayment_received') {
+            // Mark repayment on the oldest pending "lent" borrowing for this person
+            const match = borrowings
+              .filter(b => b.type === 'lent' && b.status !== 'repaid' &&
+                           b.person.toLowerCase() === person.toLowerCase())
+              .sort((a, b) => a.date.localeCompare(b.date))[0]
+            if (match) {
+              const newRepaid = Math.min(match.repaidAmount + effectiveAmount, match.amount)
+              await updateBorrowing(match.id, {
+                repaidAmount: newRepaid,
+                status: newRepaid >= match.amount ? 'repaid' : newRepaid > 0 ? 'partial' : 'pending',
+              })
+            }
+          } else if (transferKind === 'loan_repayment_paid') {
+            // Mark repayment on the oldest pending "borrowed" borrowing for this person
+            const match = borrowings
+              .filter(b => b.type === 'borrowed' && b.status !== 'repaid' &&
+                           b.person.toLowerCase() === person.toLowerCase())
+              .sort((a, b) => a.date.localeCompare(b.date))[0]
+            if (match) {
+              const newRepaid = Math.min(match.repaidAmount + effectiveAmount, match.amount)
+              await updateBorrowing(match.id, {
+                repaidAmount: newRepaid,
+                status: newRepaid >= match.amount ? 'repaid' : newRepaid > 0 ? 'partial' : 'pending',
+              })
+            }
+          }
+        }
+
         // Split: create borrowings + absorbed transactions
-        if (splitEnabled && participants.length > 0) {
-          for (const p of participants) {
-            const pAmt = getParticipantAmount(p)
+        if (splitEnabled && finalParticipants.length > 0) {
+          const n = finalParticipants.length
+          for (const p of finalParticipants) {
+            const pAmt = splitMode === 'equal'
+              ? Math.floor(totalAmount / (n + 1))
+              : splitMode === 'percentage'
+                ? Math.round(totalAmount * p.value / 100)
+                : p.value
             if (pAmt <= 0) continue
             if (p.kind === 'lent') {
               await addBorrowing(user.uid, {
@@ -325,8 +402,8 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
               } as Omit<Transaction, 'id' | 'userId' | 'createdAt'>)
             }
           }
-          const lentCount  = participants.filter(p => p.kind === 'lent').length
-          const absorbCount = participants.filter(p => p.kind === 'absorbed').length
+          const lentCount   = finalParticipants.filter(p => p.kind === 'lent').length
+          const absorbCount = finalParticipants.filter(p => p.kind === 'absorbed').length
           const parts = []
           if (lentCount)   parts.push(`${lentCount} borrowing${lentCount > 1 ? 's' : ''} created`)
           if (absorbCount) parts.push(`${absorbCount} absorbed`)
@@ -392,26 +469,46 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
         </Transition.Child>
 
+        {/* ── Sheet wrapper ── */}
         <div style={{ position: 'fixed', inset: 0, overflowY: 'auto' }}>
-          <div style={{ display: 'flex', minHeight: '100%', alignItems: 'flex-end', justifyContent: 'center', padding: 16 }}
-               className="sm:items-center">
+          {/*
+            Mobile  : flex-end  → sheet anchors to bottom, no side padding, flush edge
+            Desktop : center    → centred modal with padding
+          */}
+          <div
+            style={{ display: 'flex', minHeight: '100%', alignItems: 'flex-end', justifyContent: 'center' }}
+            className="sm:items-center sm:p-4"
+          >
             <Transition.Child
               as={Fragment}
-              enter="ease-out duration-200" enterFrom="opacity-0 translate-y-4" enterTo="opacity-100 translate-y-0"
-              leave="ease-in duration-150" leaveFrom="opacity-100 translate-y-0" leaveTo="opacity-0 translate-y-4"
+              enter="ease-out duration-300"
+              enterFrom="opacity-0 translate-y-full sm:translate-y-4 sm:opacity-0"
+              enterTo="opacity-100 translate-y-0"
+              leave="ease-in duration-200"
+              leaveFrom="opacity-100 translate-y-0"
+              leaveTo="opacity-0 translate-y-full sm:translate-y-4 sm:opacity-0"
             >
-              <Dialog.Panel style={{
-                width: '100%', maxWidth: 440,
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-xl)',
-                boxShadow: 'var(--shadow-lg)',
-                overflow: 'hidden',
-              }}>
+              <Dialog.Panel
+                className="rounded-t-3xl sm:rounded-3xl"
+                style={{
+                  width: '100%', maxWidth: 440,
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
+                  boxShadow: 'var(--shadow-lg)',
+                  overflow: 'hidden',
+                  display: 'flex', flexDirection: 'column',
+                  maxHeight: '92dvh',
+                }}
+              >
+                {/* Drag handle — mobile only */}
+                <div className="sm:hidden" style={{ display: 'flex', justifyContent: 'center', paddingTop: 10, paddingBottom: 4, flexShrink: 0 }}>
+                  <div style={{ width: 36, height: 4, borderRadius: 999, background: 'var(--border-strong)', opacity: 0.6 }} />
+                </div>
+
                 {/* Header */}
                 <div style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '16px 20px', borderBottom: '1px solid var(--border)',
+                  padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0,
                 }}>
                   <Dialog.Title style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
                     {editTx ? 'Edit Transaction' : 'Add Transaction'}
@@ -423,7 +520,7 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                   </button>
                 </div>
 
-                <form onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <form onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', flex: 1 }}>
 
                   {/* Type tabs */}
                   <div style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 12, background: 'var(--surface-2)' }}>
@@ -474,6 +571,40 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                           </button>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Person name — shown for all loan transfer types, with suggestions */}
+                  {activeTab === 'transfer' && ['loan_given', 'loan_repayment_received', 'loan_repayment_paid'].includes(transferKind) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label className="label">
+                        {transferKind === 'loan_given' ? 'Who are you lending to?' :
+                         transferKind === 'loan_repayment_received' ? 'Who paid you back?' :
+                         'Who are you repaying?'}
+                      </label>
+                      <input
+                        type="text"
+                        list="loan-people-suggestions"
+                        className="input"
+                        placeholder="e.g. Priya, Rahul…"
+                        value={loanPerson}
+                        onChange={e => setLoanPerson(e.target.value)}
+                        autoComplete="off"
+                        style={{ fontSize: 14 }}
+                      />
+                      <datalist id="loan-people-suggestions">
+                        {knownPeople.map(p => <option key={p} value={p} />)}
+                      </datalist>
+                      {loanPerson.trim() && knownPeople.some(p => p.toLowerCase() === loanPerson.trim().toLowerCase()) && (
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          fontSize: 11.5, color: 'var(--brand-ink)',
+                          padding: '4px 8px', borderRadius: 7, background: 'var(--brand-soft)',
+                          alignSelf: 'flex-start',
+                        }}>
+                          ✓ Linked to existing borrowing record
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -538,7 +669,26 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
 
                   {/* Amount */}
                   <div>
-                    <label className="label">Amount (₹)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <label className="label" style={{ margin: 0 }}>Amount (₹)</label>
+                      {canSplit && (
+                        <button
+                          type="button"
+                          onClick={() => setSplitEnabled(v => !v)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                            padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600,
+                            background: splitEnabled ? 'var(--brand)' : 'var(--surface-2)',
+                            color: splitEnabled ? '#fff' : 'var(--text-3)',
+                            border: `1px solid ${splitEnabled ? 'var(--brand)' : 'var(--border)'}`,
+                            cursor: 'pointer', transition: 'all .15s',
+                          }}
+                        >
+                          <Split size={11} />
+                          {splitEnabled ? 'Splitting' : 'Split'}
+                        </button>
+                      )}
+                    </div>
                     <input
                       type="number" step="0.01" min="0" placeholder="0"
                       className="input" style={{ fontSize: 18, fontWeight: 600 }}
@@ -546,34 +696,33 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                     />
                   </div>
 
-                  {/* ── Split Panel ─────────────────────────────────────── */}
-                  {canSplit && (
+                  {/* ── Split Panel — shown when Split button in amount row is active ── */}
+                  {canSplit && splitEnabled && (
                     <div style={{
                       borderRadius: 12,
-                      border: `1px solid ${splitEnabled ? 'var(--brand)' : 'var(--border)'}`,
-                      overflow: 'hidden',
-                      transition: 'border-color .2s',
+                      border: '1px solid var(--brand)',
+                      display: 'flex',
+                      flexDirection: 'column',
                     }}>
-                      {/* Split toggle header */}
-                      <button
-                        type="button"
-                        onClick={() => setSplitEnabled(v => !v)}
-                        style={{
-                          width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                          padding: '10px 14px', background: splitEnabled ? 'var(--brand-soft)' : 'var(--surface-2)',
-                          border: 'none', cursor: 'pointer', transition: 'background .2s',
-                        }}
-                      >
-                        <Split size={14} style={{ color: splitEnabled ? 'var(--brand)' : 'var(--text-3)', flexShrink: 0 }} />
-                        <span style={{ flex: 1, fontSize: 13, fontWeight: 500, color: splitEnabled ? 'var(--brand-ink)' : 'var(--text-2)', textAlign: 'left' }}>
-                          Split this expense
+                      {/* Panel header */}
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '10px 14px',
+                        background: 'var(--brand-soft)',
+                        borderRadius: '12px 12px 0 0',
+                      }}>
+                        <Split size={13} style={{ color: 'var(--brand)', flexShrink: 0 }} />
+                        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--brand-ink)' }}>
+                          Split expense
                         </span>
-                        <Toggle on={splitEnabled} onChange={setSplitEnabled} />
-                      </button>
+                        <button type="button" onClick={() => { setSplitEnabled(false); setParticipants([]) }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--brand-ink)', display: 'flex', padding: 2, opacity: 0.7 }}>
+                          <X size={13} />
+                        </button>
+                      </div>
 
                       {/* Split content */}
-                      {splitEnabled && (
-                        <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
                           {/* Mode selector */}
                           <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 9, background: 'var(--surface-3)' }}>
@@ -739,7 +888,6 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                           )}
 
                         </div>
-                      )}
                     </div>
                   )}
                   {/* ── End Split Panel ──────────────────────────────────── */}
@@ -814,18 +962,26 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                     </div>
                   )}
 
-                  <button
-                    type="submit"
-                    disabled={saving || !amount || Number(amount) <= 0}
-                    className="btn-primary"
-                    style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: 14, opacity: saving ? 0.6 : 1 }}
-                  >
-                    {saving ? 'Saving...' : editTx ? 'Update'
-                      : splitEnabled && participants.length > 0
-                        ? `Save & Split (${participants.length + 1} records)`
-                        : activeTab === 'savings' ? (savingsKind === 'savings_withdrawal' ? 'Withdraw from Savings' : 'Add to Savings')
-                        : txType === 'transfer' ? 'Log Transfer' : 'Add Transaction'}
-                  </button>
+                  {/* Sticky save — stays visible at bottom even on long forms */}
+                  <div style={{
+                    position: 'sticky', bottom: 0,
+                    background: 'linear-gradient(to bottom, transparent 0%, var(--surface) 28%)',
+                    marginLeft: -20, marginRight: -20, marginBottom: -20,
+                    padding: '20px 20px 20px',
+                  }}>
+                    <button
+                      type="submit"
+                      disabled={saving || !amount || Number(amount) <= 0}
+                      className="btn-primary"
+                      style={{ width: '100%', justifyContent: 'center', padding: '13px', fontSize: 14, opacity: saving ? 0.6 : 1 }}
+                    >
+                      {saving ? 'Saving...' : editTx ? 'Update'
+                        : splitEnabled && participants.length > 0
+                          ? `Save & Split (${participants.length + 1} records)`
+                          : activeTab === 'savings' ? (savingsKind === 'savings_withdrawal' ? 'Withdraw from Savings' : 'Add to Savings')
+                          : txType === 'transfer' ? 'Log Transfer' : 'Add Transaction'}
+                    </button>
+                  </div>
 
                 </form>
               </Dialog.Panel>

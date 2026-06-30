@@ -62,6 +62,20 @@ export default function UpcomingPage() {
   const totalLogged = Array.from(paidByItem.values()).reduce((s, v) => s + v, 0)
   const netPosition = totalIn - totalOut
 
+  // Expenses that are OVERDUE or due within the next 7 days (unpaid)
+  const { next7Total, overdueCount, next7Items } = useMemo(() => {
+    const now = new Date(); now.setHours(0, 0, 0, 0)
+    const cutoff = new Date(now); cutoff.setDate(cutoff.getDate() + 7)
+    const items = pending.filter(i => {
+      if ((i.flowType ?? 'expense') !== 'expense') return false
+      const d = parseISO(i.dueDate)
+      return d <= cutoff   // includes overdue (d < now) AND upcoming ≤ 7 days
+    })
+    const total    = items.reduce((s, i) => s + i.amount - (paidByItem.get(i.id) ?? 0), 0)
+    const overdue  = items.filter(i => parseISO(i.dueDate) < now).length
+    return { next7Total: total, overdueCount: overdue, next7Items: items }
+  }, [pending, paidByItem])
+
   function handleDelete(item: UpcomingExpense) {
     setConfirm({
       message: `Delete "${item.label}"?`,
@@ -83,23 +97,63 @@ export default function UpcomingPage() {
     <AppShell title="Upcoming">
       <div className="anim-page" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
-        {/* Header KPIs */}
+        {/* ── Hero summary card ── */}
         {upcomingExpenses.length > 0 && (
-          <div className="grid grid-cols-3" style={{ gap: 'var(--row-gap)' }}>
-            <div className="card-sm">
-              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Going out</div>
-              <div className="display-num" style={{ fontSize: 'clamp(13px, 3.8vw, 20px)', color: 'var(--bad-ink)' }}>{formatCurrencyFull(totalOut)}</div>
-              {totalLogged > 0 && <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>{formatCurrencyFull(totalLogged)} logged</div>}
-            </div>
-            <div className="card-sm">
-              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Coming in</div>
-              <div className="display-num" style={{ fontSize: 'clamp(13px, 3.8vw, 20px)', color: 'var(--good-ink)' }}>{formatCurrencyFull(totalIn)}</div>
-            </div>
-            <div className="card-sm">
-              <div className="h-eyebrow" style={{ marginBottom: 8 }}>Net</div>
-              <div className="display-num" style={{ fontSize: 'clamp(13px, 3.8vw, 20px)', color: netPosition >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
-                {netPosition >= 0 ? '+' : ''}{formatCurrencyFull(netPosition)}
+          <div style={{
+            background: 'linear-gradient(150deg, var(--brand-deep) 0%, var(--brand) 55%, var(--brand-2) 100%)',
+            borderRadius: 'var(--radius-xl)',
+            padding: 'var(--pad)',
+            boxShadow: '0 8px 32px -8px var(--brand)',
+            position: 'relative', overflow: 'hidden',
+          }}>
+            {/* Glow overlay */}
+            <div style={{
+              position: 'absolute', inset: 0, pointerEvents: 'none',
+              background: 'radial-gradient(ellipse 70% 60% at 100% 0%, rgba(255,255,255,0.14) 0%, transparent 60%)',
+            }} />
+
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)' }}>
+                    Due in next 7 days
+                  </span>
+                  {overdueCount > 0 && (
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                      background: 'rgba(255,255,255,0.22)', color: '#fff',
+                      border: '1px solid rgba(255,255,255,0.35)',
+                    }}>
+                      {overdueCount} overdue
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 'clamp(30px, 6vw, 46px)', fontWeight: 800, color: '#fff', letterSpacing: '-0.04em', lineHeight: 1 }}>
+                  {formatCurrencyFull(next7Total)}
+                </div>
+                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', marginTop: 8 }}>
+                  Full cycle outflow {formatCurrencyFull(totalOut)}
+                  {totalLogged > 0 && ` · ${formatCurrencyFull(totalLogged)} logged`}
+                </div>
               </div>
+
+              {/* Coming in pill */}
+              {totalIn > 0 && (
+                <div style={{
+                  background: 'rgba(255,255,255,0.18)',
+                  border: '1px solid rgba(255,255,255,0.28)',
+                  borderRadius: 14, padding: '10px 14px',
+                  backdropFilter: 'blur(8px)',
+                  flexShrink: 0,
+                }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
+                    Incoming
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>
+                    +{formatCurrencyFull(totalIn)}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -274,8 +328,7 @@ function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: Note
     <>
     <div className="card" style={{
       display: 'flex', flexDirection: 'column', gap: 10,
-      borderLeft: `3px solid ${fulfilled ? 'var(--good)' : color}`,
-      opacity: fulfilled ? 0.75 : 1,
+      opacity: fulfilled ? 0.72 : 1,
     }}>
       {/* Top row */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>

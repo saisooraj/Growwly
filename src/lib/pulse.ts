@@ -20,6 +20,7 @@ export interface PulseSnapshot {
   borrowings: Borrowing[]
   upcomingExpenses: UpcomingExpense[]
   upcomingPayments: UpcomingPayment[]
+  selectedMonth?: string  // if provided, compute pulse for this cycle instead of current
 }
 
 // ── Health Score ─────────────────────────────────────────────────────────────
@@ -232,8 +233,9 @@ export function computePulse(
 ): FinancialPulse {
   const { transactions, emergencyFund, savingsGoals, projects, borrowings, upcomingExpenses, upcomingPayments } = snapshot
   const now = new Date()
-  const month = format(now, 'yyyy-MM')
-  const prevMonth = format(new Date(now.getFullYear(), now.getMonth() - 1, 1), 'yyyy-MM')
+  const month = snapshot.selectedMonth ?? format(now, 'yyyy-MM')
+  const [y, m] = month.split('-').map(Number)
+  const prevMonth = format(new Date(y, m - 2, 1), 'yyyy-MM')
 
   const curSummary  = buildMonthlySummary(transactions, month,     snapshot.settings, borrowings)
   const prevSummary = buildMonthlySummary(transactions, prevMonth, snapshot.settings, borrowings)

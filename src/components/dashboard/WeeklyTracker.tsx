@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { addDays, format, startOfWeek } from 'date-fns'
+import { addDays, format, startOfWeek, parseISO } from 'date-fns'
 import { useAppStore } from '@/store/appStore'
 import { getTransactionsForWeek, formatCurrencyFull } from '@/lib/utils'
+import { getCycleRange } from '@/lib/cycle'
 import Link from 'next/link'
 
 const DAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
@@ -63,15 +64,18 @@ function WeekBars({
 }
 
 export default function WeeklyTracker() {
-  const { transactions, settings } = useAppStore()
+  const { transactions, settings, selectedMonth } = useAppStore()
   const weeklyBudget = settings?.weeklyBudget ?? 0
 
   const now = new Date()
-  const todayMondayIdx = getMondayFirstIdx(now.getDay())
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 })
+  const { start: cycleStart, end: cycleEnd } = getCycleRange(selectedMonth, settings)
+  const weekRef = parseISO(cycleEnd) < now ? parseISO(cycleEnd) : now
+  const todayMondayIdx = getMondayFirstIdx(weekRef.getDay())
+  const weekStart = startOfWeek(weekRef, { weekStartsOn: 1 })
   const weekEnd = addDays(weekStart, 6)
 
-  const weekTxs = getTransactionsForWeek(transactions).filter(t => t.type === 'expense')
+  const weekTxs = getTransactionsForWeek(transactions, weekRef)
+    .filter(t => t.type === 'expense' && t.date >= cycleStart && t.date <= cycleEnd)
   const totalSpent = weekTxs.reduce((s, t) => s + t.amount, 0)
 
   // Build per-day spend array (Mon–Sun)

@@ -113,6 +113,7 @@ export interface UserSettings {
   customCategories?: string[]                     // user-defined categories saved for reuse
   customSavingsVehicles?: string[]                // user-defined savings vehicles saved for reuse
   savingsOpeningBalances?: Record<string, number> // prior balance per vehicle before tracking started
+  noSpendDays?: string[]                           // YYYY-MM-DD dates user marked as no-spend (counts for streak)
   showHealthTab?: boolean                         // show Health tab in navigation (default: false)
   showTasksTab?: boolean                          // show Tasks tab in navigation (default: false)
   accentColor?: 'green' | 'purple' | 'orange' | 'pink'  // brand accent (default: green)

@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
+import { getCurrentMonth, getCycleMonth } from '@/lib/utils'
 import {
   getUserTransactions,
   getUserBudgets,
@@ -39,6 +40,8 @@ export function useData() {
     setHealthLogs,
     setLoading,
     setInitialized,
+    setSelectedMonth,
+    selectedMonth,
     initialized,
     reset,
   } = useAppStore()
@@ -80,6 +83,10 @@ export function useData() {
         setBorrowings(borrowings)
         setEmergencyFund(ef)
         setSettings(settings)
+        // Auto-advance to the correct cycle month if still on the default calendar month
+        if (selectedMonth === getCurrentMonth()) {
+          setSelectedMonth(getCycleMonth(settings))
+        }
         setSavingsGoals(goals)
         setUpcomingExpenses(upcoming)
         setUpcomingPayments(upcomingPmts)

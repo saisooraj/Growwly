@@ -4,10 +4,9 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Download, Plus, SlidersHorizontal, Eye, EyeOff } from 'lucide-react'
+import { Download, Plus, SlidersHorizontal, Eye, EyeOff, Search, X } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
 import TransactionList from '@/components/transactions/TransactionList'
-import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import { useAppStore } from '@/store/appStore'
 import {
   buildMonthlySummary,
@@ -18,6 +17,8 @@ import {
   INCOME_CATEGORIES,
   getTransactionsForMonth,
   CATEGORY_COLORS,
+  getLast6Months,
+  getMonthLabel,
 } from '@/lib/utils'
 import type { TransactionType } from '@/types'
 import { getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
@@ -34,10 +35,10 @@ const TYPE_OPTS: { id: FilterType; label: string }[] = [
 
 function TransactionsInner() {
   const searchParams = useSearchParams()
-  const [addOpen, setAddOpen]       = useState(false)
   const [typeFilter, setTypeFilter] = useState<FilterType>((searchParams.get('type') as FilterType) ?? 'all')
   const [catFilter, setCatFilter]   = useState<string>(searchParams.get('cat') ?? 'all')
   const [vehicleFilter, setVehicleFilter] = useState<string>(searchParams.get('vehicle') ?? 'all')
+  const [searchQuery, setSearchQuery]   = useState<string>(searchParams.get('search') ?? '')
   const [showIncome,   setShowIncome]   = useState(false)
   const [showExpenses, setShowExpenses] = useState(false)
   const [showNet,      setShowNet]      = useState(false)
@@ -46,20 +47,49 @@ function TransactionsInner() {
   const summary  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
   const monthTxs = getTransactionsForMonth(transactions, selectedMonth, settings)
 
+  const { carryForward, prevMonthLabel } = useMemo(() => {
+    const months  = getLast6Months()
+    const curIdx  = months.indexOf(selectedMonth)
+    const prev    = curIdx > 0 ? months[curIdx - 1] : null
+    const prevSum = prev ? buildMonthlySummary(transactions, prev, settings, borrowings) : null
+    return {
+      carryForward:   prevSum ? Math.max(0, prevSum.cashNet) : 0,
+      prevMonthLabel: prev ? getMonthLabel(prev) : '',
+    }
+  }, [transactions, selectedMonth, settings, borrowings])
+
   const filtered = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
     return monthTxs.filter(t => {
       const savings = isSavingsTransfer(t)
       if (typeFilter === 'savings') {
         if (!savings) return false
         if (vehicleFilter !== 'all' && (t.savingsVehicle ?? '') !== vehicleFilter) return false
-        return true
+      } else {
+        if (typeFilter === 'transfer' && !(t.type === 'transfer' && !savings)) return false
+        if (typeFilter !== 'all' && typeFilter !== 'transfer' && t.type !== typeFilter) return false
+        if (catFilter !== 'all' && t.category !== catFilter) return false
       }
-      if (typeFilter === 'transfer') return t.type === 'transfer' && !savings  // loans only
-      if (typeFilter !== 'all' && t.type !== typeFilter) return false
-      if (catFilter  !== 'all' && t.category !== catFilter) return false
+      // ── Full-text search across description, category, amount, transfer kind ──
+      if (q) {
+        const catDisplay = getCategoryDisplayName(t.category ?? '').toLowerCase()
+        const notes      = (t.notes ?? '').toLowerCase()
+        const category   = (t.category ?? '').toLowerCase()
+        const amount     = String(t.amount)
+        const kind       = (t.transferKind ?? '').replace(/_/g, ' ').toLowerCase()
+        const vehicle    = (t.savingsVehicle ?? '').toLowerCase()
+        if (
+          !notes.includes(q) &&
+          !category.includes(q) &&
+          !catDisplay.includes(q) &&
+          !amount.includes(q) &&
+          !kind.includes(q) &&
+          !vehicle.includes(q)
+        ) return false
+      }
       return true
     })
-  }, [monthTxs, typeFilter, catFilter, vehicleFilter])
+  }, [monthTxs, typeFilter, catFilter, vehicleFilter, searchQuery])
 
   // Savings aggregates (selected month, respecting the vehicle sub-filter)
   const savingsView = useMemo(() => {
@@ -156,6 +186,36 @@ function TransactionsInner() {
 
             {/* Filter bar */}
             <div className="card-sm" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+              {/* ── Search input (all screen sizes) ── */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '9px 12px', borderRadius: 11,
+                border: `1px solid ${searchQuery ? 'var(--brand)' : 'var(--border)'}`,
+                background: searchQuery ? 'var(--brand-soft)' : 'var(--surface-2)',
+                transition: 'border-color .15s, background .15s',
+              }}>
+                <Search size={14} style={{ color: searchQuery ? 'var(--brand-ink)' : 'var(--text-4)', flexShrink: 0 }} />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search by name, category, amount…"
+                  style={{
+                    border: 'none', background: 'transparent', outline: 'none', flex: 1,
+                    fontSize: 13.5, color: 'var(--text)', fontFamily: 'inherit',
+                  }}
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0, color: 'var(--text-3)', flexShrink: 0 }}
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
               {/* Type pills */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <SlidersHorizontal size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} />
@@ -272,7 +332,7 @@ function TransactionsInner() {
           </div>
 
           {/* ── Right: sticky summary sidebar (desktop only) ── */}
-          <div className="hidden lg:flex" style={{ flexDirection: 'column', gap: 'var(--row-gap)', position: 'sticky', top: 96, alignSelf: 'start' }}>
+          <div className="hidden lg:flex" style={{ flexDirection: 'column', gap: 'var(--row-gap)', position: 'sticky', top: 0, alignSelf: 'start' }}>
             {/* KPI card */}
             <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               <span className="h-eyebrow">This month</span>
@@ -288,10 +348,21 @@ function TransactionsInner() {
                     </button>
                   </div>
                   <div className="display-num" style={{ fontSize: 26, color: 'var(--good-ink)' }}>
-                    {showIncome ? formatCurrencyFull(summary.totalIncome + summary.totalBorrowed) : '₹ •••'}
+                    {showIncome ? formatCurrencyFull(summary.totalIncome + summary.totalBorrowed + carryForward) : '₹ •••'}
                   </div>
                   {showIncome && summary.totalBorrowed > 0 && (
                     <div style={{ fontSize: 11, color: 'var(--info-ink)', marginTop: 3 }}>incl. {formatCurrencyFull(summary.totalBorrowed)} borrowed</div>
+                  )}
+                  {showIncome && carryForward > 0 && (
+                    <div style={{
+                      marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
+                      fontSize: 11, fontWeight: 600, color: 'var(--brand-ink)',
+                      background: 'var(--brand-soft)',
+                      border: '1px solid color-mix(in oklch, var(--brand) 20%, transparent)',
+                      borderRadius: 6, padding: '2px 8px',
+                    }}>
+                      ↩ {formatCurrencyFull(carryForward)} from {prevMonthLabel}
+                    </div>
                   )}
                 </div>
 
@@ -353,28 +424,6 @@ function TransactionsInner() {
         </div>
       </div>
 
-      {/* Desktop-only FAB */}
-      <button
-        onClick={() => setAddOpen(true)}
-        className="hidden lg:flex fixed right-6 bottom-6 z-40 items-center gap-2"
-        style={{
-          padding: '12px 20px', borderRadius: 16,
-          background: 'linear-gradient(150deg, var(--brand-2), var(--brand))',
-          color: '#fff', border: 'none', cursor: 'pointer',
-          fontSize: 14, fontWeight: 700,
-          boxShadow: '0 8px 24px -6px var(--brand)',
-          transition: 'transform .12s ease',
-          fontFamily: 'inherit',
-        }}
-        onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.03)')}
-        onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-        onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.97)')}
-        onMouseUp={e => (e.currentTarget.style.transform = 'scale(1.03)')}
-      >
-        <Plus size={18} strokeWidth={2.6} /> Add transaction
-      </button>
-
-      <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />
     </AppShell>
   )
 }

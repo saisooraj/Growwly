@@ -15,13 +15,26 @@ export default function BorrowingsPage() {
 
   return (
     <AppShell title="Borrowings">
-      <div className="anim-page space-y-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-slate-500">Track borrowed and lent amounts.</p>
-          <button onClick={() => setAddOpen(true)} className="btn-primary">
-            <Plus size={15} /> Add Record
+      <div className="anim-page" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
+            Who owes whom — settled cleanly.
+          </p>
+          <button
+            onClick={() => setAddOpen(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '8px 14px', borderRadius: 11,
+              background: 'var(--brand-soft)', color: 'var(--brand-ink)',
+              border: '1px solid color-mix(in oklch, var(--brand) 25%, transparent)',
+              cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit',
+            }}
+          >
+            <Plus size={14} strokeWidth={2.5} /> Add Record
           </button>
         </div>
+
         <BorrowingsList onEdit={(b) => setEditBorrowing(b)} />
       </div>
 
