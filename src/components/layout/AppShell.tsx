@@ -19,6 +19,29 @@ const ACCENT_ATTRS: Record<string, string> = {
   green: 'green', purple: 'purple', orange: 'orange', pink: 'pink',
 }
 
+// Approximate hex values for each accent (used for favicon SVG + theme-color meta)
+const BRAND_HEX: Record<string, { brand: string; deep: string }> = {
+  green:  { brand: '#22c55e', deep: '#16a34a' },
+  purple: { brand: '#9333ea', deep: '#7c3aed' },
+  orange: { brand: '#f97316', deep: '#ea580c' },
+  pink:   { brand: '#ec4899', deep: '#db2777' },
+}
+
+function makeFaviconSvg(brand: string, deep: string): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+    <defs>
+      <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="${brand}"/>
+        <stop offset="100%" stop-color="${deep}"/>
+      </linearGradient>
+    </defs>
+    <rect width="32" height="32" rx="7" fill="url(#g)"/>
+    <rect x="15" y="16" width="2" height="10" rx="1" fill="rgba(255,255,255,0.9)"/>
+    <ellipse cx="12" cy="14.5" rx="4.5" ry="3.5" fill="rgba(255,255,255,0.95)" transform="rotate(-35 12 14.5)"/>
+    <ellipse cx="20" cy="12" rx="4.5" ry="3.5" fill="rgba(255,255,255,0.95)" transform="rotate(35 20 12)"/>
+  </svg>`
+}
+
 const PULL_THRESHOLD = 58
 const PULL_MAX = 96
 
@@ -74,12 +97,35 @@ export default function AppShell({ title, children }: Props) {
   const drag = useRef({ active: false, y0: 0 })
   const [addOpen, setAddOpen] = useState(false)
 
-  // ── Accent color ────────────────────────────────────────────────────────────
+  // ── Accent color + dynamic favicon + theme-color ────────────────────────────
   useEffect(() => {
     const accent = settings?.accentColor ?? 'green'
-    const attr = ACCENT_ATTRS[accent] ?? 'green'
+    const attr   = ACCENT_ATTRS[accent] ?? 'green'
+
+    // 1. CSS design token
     if (attr === 'green') document.documentElement.removeAttribute('data-accent')
     else document.documentElement.setAttribute('data-accent', attr)
+
+    // 2. Favicon — swap to an SVG data URL matching the brand gradient
+    const { brand, deep } = BRAND_HEX[accent] ?? BRAND_HEX.green
+    const svgUrl = `data:image/svg+xml,${encodeURIComponent(makeFaviconSvg(brand, deep))}`
+    let iconLink = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+    if (!iconLink) {
+      iconLink = document.createElement('link')
+      iconLink.rel = 'icon'
+      document.head.appendChild(iconLink)
+    }
+    iconLink.type = 'image/svg+xml'
+    iconLink.href = svgUrl
+
+    // 3. theme-color meta — controls browser chrome / PWA title bar colour
+    let themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+    if (!themeMeta) {
+      themeMeta = document.createElement('meta')
+      themeMeta.name = 'theme-color'
+      document.head.appendChild(themeMeta)
+    }
+    themeMeta.content = brand
   }, [settings?.accentColor])
 
   // ── Scroll tracking ─────────────────────────────────────────────────────────
