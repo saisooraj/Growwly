@@ -92,7 +92,7 @@ export default function MoneyStreakCard() {
     try {
       const existing = settings?.noSpendDays ?? []
       await setUserSettings(user.uid, {
-        noSpendDays: [...new Set([...existing, ...selected])],
+        noSpendDays: Array.from(new Set([...existing, ...Array.from(selected)])),
       })
       await refresh()
       setRestoring(false)
