@@ -42,7 +42,7 @@ export default function SettingsPage() {
   const [pendingImport, setPendingImport] = useState<any | null>(null)
 
   // Accent color
-  const [accentColor, setAccentColor] = useState<'green' | 'purple' | 'orange' | 'pink'>('green')
+  const [accentColor, setAccentColor] = useState<'green' | 'purple' | 'orange' | 'pink' | 'blue'>('green')
 
   // Navigation tab toggles
   const [showHealthTab, setShowHealthTab] = useState(false)
@@ -634,10 +634,11 @@ export default function SettingsPage() {
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
             {([
-              { id: 'green'  as const, label: 'Forest',  swatch: 'oklch(0.62 0.15 158)', soft: 'oklch(0.95 0.05 162)' },
+              { id: 'green'  as const, label: 'Forest',  swatch: 'oklch(0.62 0.15 158)',   soft: 'oklch(0.95 0.05 162)' },
               { id: 'purple' as const, label: 'Violet',  swatch: 'oklch(0.585 0.205 286)', soft: 'oklch(0.95 0.04 286)' },
-              { id: 'orange' as const, label: 'Ember',   swatch: 'oklch(0.66 0.19 42)',  soft: 'oklch(0.95 0.05 50)'  },
-              { id: 'pink'   as const, label: 'Rose',    swatch: 'oklch(0.62 0.22 358)', soft: 'oklch(0.95 0.05 360)' },
+              { id: 'orange' as const, label: 'Ember',   swatch: 'oklch(0.66 0.19 42)',    soft: 'oklch(0.95 0.05 50)'  },
+              { id: 'pink'   as const, label: 'Rose',    swatch: 'oklch(0.62 0.22 358)',   soft: 'oklch(0.95 0.05 360)' },
+              { id: 'blue'   as const, label: 'Ocean',   swatch: 'oklch(0.54 0.22 261)',   soft: 'oklch(0.95 0.04 261)' },
             ]).map(({ id, label, swatch, soft }) => {
               const on = accentColor === id
               return (

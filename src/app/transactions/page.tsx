@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useMemo, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Download, Plus, SlidersHorizontal, Eye, EyeOff, Search, X } from 'lucide-react'
+import { Download, Plus, SlidersHorizontal, Eye, EyeOff, Search, X, PiggyBank } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
 import TransactionList from '@/components/transactions/TransactionList'
 import { useAppStore } from '@/store/appStore'
@@ -381,14 +381,26 @@ function TransactionsInner() {
                   <div className="display-num" style={{ fontSize: 26, color: 'var(--text)' }}>
                     {showExpenses ? formatCurrencyFull(summary.totalExpenses) : '₹ •••'}
                   </div>
+                  {showExpenses && summary.savingsContributed > 0 && (
+                    <div style={{
+                      marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
+                      fontSize: 11, fontWeight: 600, color: 'var(--brand-ink)',
+                      background: 'var(--brand-soft)',
+                      border: '1px solid color-mix(in oklch, var(--brand) 20%, transparent)',
+                      borderRadius: 6, padding: '2px 8px',
+                    }}>
+                      <PiggyBank size={10} />
+                      {formatCurrencyFull(summary.savingsContributed)} → savings
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ height: 1, background: 'var(--hair)' }} />
 
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', marginBottom: 6 }}>Net cashflow</div>
-                  <div className="display-num" style={{ fontSize: 26, color: summary.cashNet >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
-                    {showNet ? `${summary.cashNet >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(summary.cashNet))}` : '₹ •••'}
+                  <div className="display-num" style={{ fontSize: 26, color: (summary.cashNet + carryForward) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
+                    {showNet ? `${(summary.cashNet + carryForward) >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(summary.cashNet + carryForward))}` : '₹ •••'}
                   </div>
                   <button onClick={() => setShowNet(v => !v)} style={{ marginTop: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: 0 }}>
                     {showNet ? <><EyeOff size={11} /> Hide</> : <><Eye size={11} /> Show</>}

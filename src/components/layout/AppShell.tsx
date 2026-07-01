@@ -16,7 +16,7 @@ interface Props {
 }
 
 const ACCENT_ATTRS: Record<string, string> = {
-  green: 'green', purple: 'purple', orange: 'orange', pink: 'pink',
+  green: 'green', purple: 'purple', orange: 'orange', pink: 'pink', blue: 'blue',
 }
 
 // Approximate hex values for each accent (used for favicon SVG + theme-color meta)
@@ -25,6 +25,7 @@ const BRAND_HEX: Record<string, { brand: string; deep: string }> = {
   purple: { brand: '#9333ea', deep: '#7c3aed' },
   orange: { brand: '#f97316', deep: '#ea580c' },
   pink:   { brand: '#ec4899', deep: '#db2777' },
+  blue:   { brand: '#0073e5', deep: '#005ab8' },
 }
 
 function makeFaviconSvg(brand: string, deep: string): string {

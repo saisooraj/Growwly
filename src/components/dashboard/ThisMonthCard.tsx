@@ -58,7 +58,8 @@ export default function ThisMonthCard() {
   }, [transactions, selectedMonth, settings, borrowings])
 
   const totalIn     = summary.totalIncome + carryForward
-  const netSaved    = totalIn - summary.totalExpenses
+  const netSaved    = summary.cashNet + carryForward
+  const totalOut    = totalIn - netSaved
   const isPositive  = netSaved >= 0
   const savingsRate = totalIn > 0
     ? Math.max(0, Math.min(100, (netSaved / totalIn) * 100))
@@ -67,7 +68,7 @@ export default function ThisMonthCard() {
   const animatedNet  = useCountUp(Math.abs(netSaved), 950)
   const animatedRate = useCountUp(Math.round(savingsRate), 800)
   const animatedIn   = useCountUp(totalIn, 950)
-  const animatedOut  = useCountUp(summary.totalExpenses, 950)
+  const animatedOut  = useCountUp(Math.abs(totalOut), 950)
 
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -95,7 +96,7 @@ export default function ThisMonthCard() {
           }}>
             {shown ? `${isPositive ? '+' : '−'}${formatCurrencyFull(animatedNet)}` : MASK}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 5 }}>net saved</div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 5 }}>surplus</div>
         </div>
 
         {/* Donut ring */}
@@ -140,6 +141,16 @@ export default function ThisMonthCard() {
             {shown ? formatCurrencyFull(animatedOut) : MASK}
           </span>
         </div>
+        {shown && summary.savingsContributed > 0 && (<>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, paddingLeft: 14 }}>
+            <span style={{ color: 'var(--text-4)' }}>spent</span>
+            <span style={{ fontWeight: 600, color: 'var(--text-3)' }}>{formatCurrencyFull(summary.totalExpenses)}</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, paddingLeft: 14 }}>
+            <span style={{ color: 'var(--text-4)' }}>→ savings</span>
+            <span style={{ fontWeight: 600, color: 'var(--brand-ink)' }}>{formatCurrencyFull(summary.savingsContributed)}</span>
+          </div>
+        </>)}
       </div>
     </div>
   )

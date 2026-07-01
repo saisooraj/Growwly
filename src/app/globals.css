@@ -144,6 +144,13 @@
   --brand-soft: oklch(0.95 0.05 360);
   --brand-ink:  oklch(0.38 0.12 358);
 }
+:root[data-accent="blue"] {
+  --brand:      oklch(0.54 0.22 261);
+  --brand-2:    oklch(0.64 0.18 261);
+  --brand-deep: oklch(0.42 0.20 261);
+  --brand-soft: oklch(0.95 0.04 261);
+  --brand-ink:  oklch(0.32 0.10 261);
+}
 
 /* ══════════════════════════════════════════
    Dark mode — remap hardcoded Tailwind color
