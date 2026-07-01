@@ -36,9 +36,10 @@ function makeFaviconSvg(brand: string, deep: string): string {
       </linearGradient>
     </defs>
     <rect width="32" height="32" rx="7" fill="url(#g)"/>
-    <rect x="15" y="16" width="2" height="10" rx="1" fill="rgba(255,255,255,0.9)"/>
-    <ellipse cx="12" cy="14.5" rx="4.5" ry="3.5" fill="rgba(255,255,255,0.95)" transform="rotate(-35 12 14.5)"/>
-    <ellipse cx="20" cy="12" rx="4.5" ry="3.5" fill="rgba(255,255,255,0.95)" transform="rotate(35 20 12)"/>
+    <g transform="translate(6 6) scale(0.833)" fill="none" stroke="white" stroke-opacity="0.95" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/>
+      <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+    </g>
   </svg>`
 }
 
