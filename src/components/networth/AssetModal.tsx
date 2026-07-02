@@ -4,16 +4,16 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Search, Loader2 } from 'lucide-react'
 import type { Asset, AssetKind } from '@/types'
 
-const KINDS: { value: AssetKind; label: string; icon: string }[] = [
-  { value: 'mutual_fund', label: 'Mutual Fund',   icon: '📈' },
-  { value: 'stocks',      label: 'Stocks / ETF',  icon: '📊' },
-  { value: 'gold_grams',  label: 'Gold',           icon: '🪙' },
-  { value: 'epf_ppf',    label: 'EPF / PPF / NPS', icon: '🏛️' },
-  { value: 'fd_rd',       label: 'FD / RD',        icon: '🏦' },
-  { value: 'cash',        label: 'Cash & Savings', icon: '💵' },
-  { value: 'real_estate', label: 'Real Estate',    icon: '🏠' },
-  { value: 'vehicle',     label: 'Vehicle',        icon: '🚗' },
-  { value: 'other',       label: 'Other',          icon: '📦' },
+const KINDS: { value: AssetKind; label: string }[] = [
+  { value: 'mutual_fund', label: 'Mutual Fund'    },
+  { value: 'stocks',      label: 'Stocks / ETF'   },
+  { value: 'gold_grams',  label: 'Gold'            },
+  { value: 'epf_ppf',    label: 'EPF / PPF / NPS' },
+  { value: 'fd_rd',       label: 'FD / RD'         },
+  { value: 'cash',        label: 'Cash & Savings'  },
+  { value: 'real_estate', label: 'Real Estate'     },
+  { value: 'vehicle',     label: 'Vehicle'         },
+  { value: 'other',       label: 'Other'           },
 ]
 
 interface MFResult   { schemeCode: string; schemeName: string }

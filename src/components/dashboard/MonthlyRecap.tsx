@@ -81,7 +81,7 @@ export default function MonthlyRecap() {
           {prevSummary.net >= 0 ? '+' : ''}{formatCurrencyFull(prevSummary.net)}
         </p>
         <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>
-          {prevSummary.net >= 0 ? 'You saved money last month 🎉' : 'Spending exceeded income'}
+          {prevSummary.net >= 0 ? 'You saved money last month' : 'Spending exceeded income'}
         </p>
       </div>
     </div>,

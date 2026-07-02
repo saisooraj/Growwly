@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Pencil, X, Check, ChevronDown, Tags } from 'lucide-react'
+import { Pencil, X, Check, ChevronDown, Tags, Home, Sparkles, Leaf } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
@@ -53,7 +53,7 @@ function BucketRow({
   const statusColor = status === 'on-track' ? 'var(--good-ink)' : status === 'over' ? 'var(--bad-ink)' : 'var(--warn-ink)'
   const statusLabel = status === 'on-track' ? 'On track' : status === 'over' ? `+${diff.toFixed(0)}% over` : `${Math.abs(diff).toFixed(0)}% under`
 
-  const BUCKET_EMOJI: Record<Bucket, string> = { needs: '🏠', wants: '✨', savings: '🌱' }
+  const BucketIcon = bucket === 'needs' ? Home : bucket === 'wants' ? Sparkles : Leaf
 
   return (
     <div style={{
@@ -74,9 +74,8 @@ function BucketRow({
           width: 42, height: 42, borderRadius: 13, flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           background: `color-mix(in oklch, ${meta.color} 16%, var(--surface))`,
-          fontSize: 20,
         }}>
-          {BUCKET_EMOJI[bucket]}
+          <BucketIcon size={20} style={{ color: meta.color }} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { format, subDays } from 'date-fns'
-import { Plus, Settings2, Pencil, Trash2, Flame, Check } from 'lucide-react'
+import { Plus, Settings2, Pencil, Trash2, Flame, Check, Leaf, Diamond, Trophy } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
 import RoutineModal from '@/components/health/RoutineModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
@@ -44,6 +44,29 @@ function isScheduledToday(r: HealthRoutine): boolean {
 
 function getLog(logs: HealthLog[], routineId: string): HealthLog | undefined {
   return logs.find(l => l.routineId === routineId && l.date === TODAY)
+}
+
+function computeLongestStreak(routines: HealthRoutine[], logs: HealthLog[]): number {
+  const dailyIds = routines.filter(r => r.active && r.scheduleType === 'daily').map(r => r.id)
+  if (dailyIds.length === 0 || logs.length === 0) return 0
+  const dates = [...new Set(logs.map(l => l.date))].sort()
+  let longest = 0, current = 0, prev: string | null = null
+  for (const dateStr of dates) {
+    const allDone = dailyIds.every(id => logs.some(l => l.routineId === id && l.date === dateStr && l.count > 0))
+    if (allDone) {
+      if (prev) {
+        const diff = Math.round((new Date(dateStr).getTime() - new Date(prev).getTime()) / 86400000)
+        current = diff === 1 ? current + 1 : 1
+      } else {
+        current = 1
+      }
+      longest = Math.max(longest, current)
+    } else {
+      current = 0
+    }
+    prev = dateStr
+  }
+  return longest
 }
 
 function computeStreak(routines: HealthRoutine[], logs: HealthLog[]): number {
@@ -255,7 +278,8 @@ export default function HealthPage() {
   }).length
   const totalCount = dailyRoutines.length
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
-  const streak = useMemo(() => computeStreak(healthRoutines, healthLogs), [healthRoutines, healthLogs])
+  const streak        = useMemo(() => computeStreak(healthRoutines, healthLogs),        [healthRoutines, healthLogs])
+  const longestStreak = useMemo(() => computeLongestStreak(healthRoutines, healthLogs), [healthRoutines, healthLogs])
 
   async function handleTap(routine: HealthRoutine, delta = 1) {
     if (!user) return
@@ -312,6 +336,11 @@ export default function HealthPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20, background: '#f97316' + '22', color: '#f97316', fontWeight: 700, fontSize: 14 }}>
                   <Flame size={16} />
                   {streak}
+                </div>
+              )}
+              {longestStreak > 0 && (
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)' }}>
+                  Best&nbsp;<span style={{ color: 'var(--text)', fontWeight: 700 }}>{longestStreak}d</span>
                 </div>
               )}
               <button
@@ -380,6 +409,48 @@ export default function HealthPage() {
             <Plus size={15} /> Add block
           </button>
         )}
+
+        {/* Badges */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <span className="h-eyebrow">Badges</span>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {([
+              { name: 'First Week',       Icon: Leaf,    threshold: 7,  hint: '7-day streak'  },
+              { name: 'On Fire',          Icon: Flame,   threshold: 12, hint: '12-day streak' },
+              { name: 'Frugal Fortnight', Icon: Diamond, threshold: 14, hint: '14-day streak' },
+              { name: '30-Day Legend',    Icon: Trophy,  threshold: 30, hint: '30-day streak' },
+            ] as const).map(({ name, Icon, threshold, hint }) => {
+              const earned = longestStreak >= threshold
+              const daysAway = threshold - longestStreak
+              return (
+                <div
+                  key={name}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 11, padding: '12px 13px',
+                    borderRadius: 14,
+                    background: earned ? 'var(--surface-2)' : 'transparent',
+                    border: earned ? '1px solid var(--border)' : '1.5px dashed var(--border)',
+                    opacity: earned ? 1 : 0.65,
+                  }}
+                >
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: earned ? 'var(--brand-soft)' : 'var(--surface-3)',
+                  }}>
+                    <Icon size={18} style={{ color: earned ? 'var(--brand-ink)' : 'var(--text-4)' }} />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, marginTop: 2, color: earned ? 'var(--good-ink)' : 'var(--text-4)' }}>
+                      {earned ? 'Earned' : daysAway === 1 ? '1 day away' : `${daysAway} days away`}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
 
       </div>
 

@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
         await webpush.sendNotification(
           subscription,
           JSON.stringify({
-            title: 'Growwly 🌱',
+            title: 'Growwly',
             body: "Don't forget to log today's transactions!",
             icon: '/icon.svg',
             url: '/transactions',

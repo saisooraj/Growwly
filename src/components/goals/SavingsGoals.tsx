@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { Plus, X, Target, Pencil, Trash2, CalendarDays } from 'lucide-react'
+import { Plus, X, Target, Pencil, Trash2, CalendarDays, Trophy } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
@@ -170,7 +170,7 @@ export default function SavingsGoals() {
                 {/* Footer */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: 12.5, fontWeight: 700, color: done ? 'var(--good-ink)' : 'var(--brand-ink)' }}>
-                    {done ? '🎉 Goal reached!' : `${pct.toFixed(0)}% done`}
+                    {done ? <><Trophy size={12} style={{ display: 'inline', marginRight: 4 }} /> Goal reached!</> : `${pct.toFixed(0)}% done`}
                   </span>
                   {!done && monthlyNeeded && (
                     <span style={{ fontSize: 12, color: 'var(--text-4)' }}>{formatCurrencyFull(monthlyNeeded)}/mo needed</span>

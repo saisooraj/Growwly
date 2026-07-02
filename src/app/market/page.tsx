@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import AppShell from '@/components/layout/AppShell'
+import IndexWidget from '@/components/market/IndexWidget'
 import StockWidget from '@/components/market/StockWidget'
 import MutualFundWidget from '@/components/market/MutualFundWidget'
 import GoldWidget from '@/components/market/GoldWidget'
@@ -20,6 +21,8 @@ export default function MarketPage() {
             background: 'var(--good-soft)', color: 'var(--good-ink)',
           }}>Live</span>
         </div>
+
+        <IndexWidget />
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'var(--row-gap)' }}>
           <StockWidget />
