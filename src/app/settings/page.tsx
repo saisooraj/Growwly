@@ -9,9 +9,9 @@ import { useAppStore } from '@/store/appStore'
 import { setUserSettings, exportAllUserData, importAllUserData } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
-import { downloadJSON, getLast6Months } from '@/lib/utils'
+import { downloadJSON, getLast6Months, computeLongestMoneyStreak } from '@/lib/utils'
 import { getCycleRange, getLastWorkingDay, formatCycleRange } from '@/lib/cycle'
-import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check } from 'lucide-react'
+import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, Leaf, Diamond, Trophy } from 'lucide-react'
 import { IconLeaf, IconFlame } from '@tabler/icons-react'
 import LinkedAccounts from '@/components/auth/LinkedAccounts'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
@@ -24,7 +24,8 @@ type SalaryCycleRule = 'none' | 'last-working-day' | 'fixed-day'
 
 export default function SettingsPage() {
   const { user, logout } = useAuth()
-  const { settings } = useAppStore()
+  const { settings, transactions } = useAppStore()
+  const longestMoneyStreak = computeLongestMoneyStreak(transactions, settings?.noSpendDays ?? [])
   const refresh = useRefreshData()
   const fileRef = useRef<HTMLInputElement>(null)
   const { state: pushState, subscribe, unsubscribe } = usePushNotifications()
@@ -740,6 +741,48 @@ export default function SettingsPage() {
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Streak Badges */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Flame size={14} style={{ color: '#f97316' }} />
+            <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Streak Badges</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {([
+              { name: 'First Week',        Icon: Leaf,    threshold: 7  },
+              { name: 'On Fire',           Icon: Flame,   threshold: 12 },
+              { name: 'Frugal Fortnight',  Icon: Diamond, threshold: 14 },
+              { name: '30-Day Legend',     Icon: Trophy,  threshold: 30 },
+            ] as const).map(({ name, Icon, threshold }) => {
+              const earned   = longestMoneyStreak >= threshold
+              const daysAway = threshold - longestMoneyStreak
+              return (
+                <div key={name} style={{
+                  display: 'flex', alignItems: 'center', gap: 11, padding: '12px 13px',
+                  borderRadius: 14,
+                  background: earned ? 'var(--surface-2)' : 'transparent',
+                  border: earned ? '1px solid var(--border)' : '1.5px dashed var(--border)',
+                  opacity: earned ? 1 : 0.65,
+                }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: earned ? 'var(--brand-soft)' : 'var(--surface-3)',
+                  }}>
+                    <Icon size={18} style={{ color: earned ? 'var(--brand-ink)' : 'var(--text-4)' }} />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, marginTop: 2, color: earned ? 'var(--good-ink)' : 'var(--text-4)' }}>
+                      {earned ? 'Earned' : daysAway === 1 ? '1 day away' : `${daysAway} days away`}
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
 

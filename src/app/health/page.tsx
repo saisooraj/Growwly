@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
-import { format, subDays, parseISO } from 'date-fns'
-import { Plus, Settings2, Pencil, Trash2, Flame, Check, Leaf, Diamond, Trophy } from 'lucide-react'
+import { useState, useMemo } from 'react'
+import { format } from 'date-fns'
+import { Plus, Settings2, Pencil, Trash2, Check } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
 import RoutineModal from '@/components/health/RoutineModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
@@ -46,68 +46,6 @@ function getLog(logs: HealthLog[], routineId: string): HealthLog | undefined {
   return logs.find(l => l.routineId === routineId && l.date === TODAY)
 }
 
-function computeMoneyStreak(txDates: Set<string>, noSpendSet: Set<string>): number {
-  let streak = 0
-  for (let i = 1; i <= 365; i++) {
-    const d = format(subDays(new Date(), i), 'yyyy-MM-dd')
-    if (txDates.has(d) || noSpendSet.has(d)) streak++
-    else break
-  }
-  return streak
-}
-
-function computeLongestMoneyStreak(txDates: Set<string>, noSpendSet: Set<string>): number {
-  const allDates = [...new Set([...txDates, ...noSpendSet])].sort()
-  let longest = 0, current = 0
-  for (let i = 0; i < allDates.length; i++) {
-    if (i === 0) { current = 1; longest = 1; continue }
-    const prev = parseISO(allDates[i - 1])
-    const cur  = parseISO(allDates[i])
-    const diff = Math.round((cur.getTime() - prev.getTime()) / 86400000)
-    current = diff === 1 ? current + 1 : 1
-    longest = Math.max(longest, current)
-  }
-  return longest
-}
-
-function computeLongestStreak(routines: HealthRoutine[], logs: HealthLog[]): number {
-  const dailyIds = routines.filter(r => r.active && r.scheduleType === 'daily').map(r => r.id)
-  if (dailyIds.length === 0 || logs.length === 0) return 0
-  const dates = [...new Set(logs.map(l => l.date))].sort()
-  let longest = 0, current = 0, prev: string | null = null
-  for (const dateStr of dates) {
-    const allDone = dailyIds.every(id => logs.some(l => l.routineId === id && l.date === dateStr && l.count > 0))
-    if (allDone) {
-      if (prev) {
-        const diff = Math.round((new Date(dateStr).getTime() - new Date(prev).getTime()) / 86400000)
-        current = diff === 1 ? current + 1 : 1
-      } else {
-        current = 1
-      }
-      longest = Math.max(longest, current)
-    } else {
-      current = 0
-    }
-    prev = dateStr
-  }
-  return longest
-}
-
-function computeStreak(routines: HealthRoutine[], logs: HealthLog[]): number {
-  const dailyIds = routines.filter(r => r.active && r.scheduleType === 'daily').map(r => r.id)
-  if (dailyIds.length === 0) return 0
-  let streak = 0
-  for (let i = 1; i <= 60; i++) {
-    const date = format(subDays(new Date(), i), 'yyyy-MM-dd')
-    const allDone = dailyIds.every(id => {
-      const log = logs.find(l => l.routineId === id && l.date === date)
-      return log && log.count > 0
-    })
-    if (allDone) streak++
-    else break
-  }
-  return streak
-}
 
 // ── Category colours ──────────────────────────────────────────────────────────
 
@@ -259,7 +197,7 @@ function WeeklyStrengthRow({ routines, logs }: { routines: HealthRoutine[]; logs
 
 export default function HealthPage() {
   const { user } = useAuth()
-  const { healthRoutines, healthLogs, transactions, settings } = useAppStore()
+  const { healthRoutines, healthLogs } = useAppStore()
   const refresh = useRefreshData()
 
   const [editing, setEditing]   = useState(false)
@@ -302,13 +240,6 @@ export default function HealthPage() {
   }).length
   const totalCount = dailyRoutines.length
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
-  const streak        = useMemo(() => computeStreak(healthRoutines, healthLogs),        [healthRoutines, healthLogs])
-  const longestStreak = useMemo(() => computeLongestStreak(healthRoutines, healthLogs), [healthRoutines, healthLogs])
-
-  const txDates     = useMemo(() => new Set(transactions.map(t => t.date)), [transactions])
-  const noSpendSet  = useMemo(() => new Set(settings?.noSpendDays ?? []),   [settings])
-  const moneyStreak        = useMemo(() => computeMoneyStreak(txDates, noSpendSet),        [txDates, noSpendSet])
-  const longestMoneyStreak = useMemo(() => computeLongestMoneyStreak(txDates, noSpendSet), [txDates, noSpendSet])
 
   async function handleTap(routine: HealthRoutine, delta = 1) {
     if (!user) return
@@ -361,19 +292,6 @@ export default function HealthPage() {
               <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', margin: '2px 0 0' }}>Today&apos;s plan</h1>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20, fontSize: 14, fontWeight: 700,
-                background: moneyStreak > 0 ? '#f9731622' : 'var(--surface-2)',
-                color:      moneyStreak > 0 ? '#f97316'   : 'var(--text-4)',
-              }}>
-                <Flame size={16} />
-                {moneyStreak}
-              </div>
-              {longestMoneyStreak > moneyStreak && (
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)' }}>
-                  Best&nbsp;<span style={{ color: 'var(--text)', fontWeight: 700 }}>{longestMoneyStreak}d</span>
-                </div>
-              )}
               <button
                 onClick={() => setEditing(v => !v)}
                 style={{ padding: 8, borderRadius: 10, border: `1px solid ${editing ? 'var(--brand)' : 'var(--border)'}`, background: editing ? 'var(--brand-soft)' : 'var(--surface-2)', cursor: 'pointer', display: 'flex', color: editing ? 'var(--brand-ink)' : 'var(--text-3)' }}
@@ -441,47 +359,6 @@ export default function HealthPage() {
           </button>
         )}
 
-        {/* Badges */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <span className="h-eyebrow">Badges</span>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {([
-              { name: 'First Week',       Icon: Leaf,    threshold: 7  },
-              { name: 'On Fire',          Icon: Flame,   threshold: 12 },
-              { name: 'Frugal Fortnight', Icon: Diamond, threshold: 14 },
-              { name: '30-Day Legend',    Icon: Trophy,  threshold: 30 },
-            ] as const).map(({ name, Icon, threshold }) => {
-              const earned = longestMoneyStreak >= threshold
-              const daysAway = threshold - longestMoneyStreak
-              return (
-                <div
-                  key={name}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 11, padding: '12px 13px',
-                    borderRadius: 14,
-                    background: earned ? 'var(--surface-2)' : 'transparent',
-                    border: earned ? '1px solid var(--border)' : '1.5px dashed var(--border)',
-                    opacity: earned ? 1 : 0.65,
-                  }}
-                >
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: earned ? 'var(--brand-soft)' : 'var(--surface-3)',
-                  }}>
-                    <Icon size={18} style={{ color: earned ? 'var(--brand-ink)' : 'var(--text-4)' }} />
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
-                    <div style={{ fontSize: 11, fontWeight: 600, marginTop: 2, color: earned ? 'var(--good-ink)' : 'var(--text-4)' }}>
-                      {earned ? 'Earned' : daysAway === 1 ? '1 day away' : `${daysAway} days away`}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
 
       </div>
 

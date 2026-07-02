@@ -1,5 +1,5 @@
 import { type ClassValue, clsx } from 'clsx'
-import { format, startOfWeek, endOfWeek, parseISO, isWithinInterval } from 'date-fns'
+import { format, subDays, startOfWeek, endOfWeek, parseISO, isWithinInterval } from 'date-fns'
 import type { Transaction, MonthlySummary, Category, UserSettings, Borrowing } from '@/types'
 import { getCycleRange } from './cycle'
 
@@ -353,6 +353,30 @@ export const CATEGORY_COLORS: Record<string, string> = {
   'Dividends / Interest': '#84cc16',
   'Bonus / Gift': '#f97316',
   'Other Income': '#84cc16',
+}
+
+export function computeMoneyStreak(transactions: Transaction[], noSpendDays: string[]): number {
+  const txDates    = new Set(transactions.map(t => t.date))
+  const noSpendSet = new Set(noSpendDays)
+  let streak = 0
+  for (let i = 1; i <= 365; i++) {
+    const d = format(subDays(new Date(), i), 'yyyy-MM-dd')
+    if (txDates.has(d) || noSpendSet.has(d)) streak++
+    else break
+  }
+  return streak
+}
+
+export function computeLongestMoneyStreak(transactions: Transaction[], noSpendDays: string[]): number {
+  const all = [...new Set([...transactions.map(t => t.date), ...noSpendDays])].sort()
+  let longest = 0, current = 0
+  for (let i = 0; i < all.length; i++) {
+    if (i === 0) { current = 1; longest = 1; continue }
+    const diff = Math.round((parseISO(all[i]).getTime() - parseISO(all[i - 1]).getTime()) / 86400000)
+    current = diff === 1 ? current + 1 : 1
+    longest = Math.max(longest, current)
+  }
+  return longest
 }
 
 export function downloadJSON(data: unknown, filename: string) {

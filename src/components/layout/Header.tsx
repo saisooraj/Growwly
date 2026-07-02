@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ChevronLeft, ChevronRight, Sun, Moon, Bell, Plus, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Sun, Moon, Bell, Plus, Search, Flame } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
-import { getLast6Months, getMonthLabel } from '@/lib/utils'
+import { getLast6Months, getMonthLabel, computeMoneyStreak } from '@/lib/utils'
 import { getCycleRange, formatCycleRange } from '@/lib/cycle'
 import { usePathname, useRouter } from 'next/navigation'
 
@@ -132,9 +132,11 @@ function SearchBar() {
 export default function Header({ title, scrolled = false, onAdd }: { title?: string; scrolled?: boolean; onAdd?: () => void }) {
   const pathname = usePathname()
   const { user } = useAuth()
-  const { selectedMonth, setSelectedMonth, settings } = useAppStore()
+  const { selectedMonth, setSelectedMonth, settings, transactions } = useAppStore()
   const tasks      = useAppStore(s => (s as any).tasks ?? [])
   const borrowings = useAppStore(s => s.borrowings)
+
+  const moneyStreak = computeMoneyStreak(transactions, settings?.noSpendDays ?? [])
 
   const months     = getLast6Months()
   const currentIdx = months.indexOf(selectedMonth)
@@ -273,6 +275,18 @@ export default function Header({ title, scrolled = false, onAdd }: { title?: str
       </div>
 
       <ThemeToggle />
+
+      {/* ── Money streak ── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 5,
+        padding: '6px 11px', borderRadius: 20, flexShrink: 0,
+        background: moneyStreak > 0 ? '#f9731622' : 'var(--surface-2)',
+        color:      moneyStreak > 0 ? '#f97316'   : 'var(--text-4)',
+        fontWeight: 700, fontSize: 13.5,
+      }}>
+        <Flame size={14} />
+        {moneyStreak}
+      </div>
 
       {/* ── Bell with notification badge ── */}
       <div style={{ position: 'relative', flexShrink: 0 }}>
