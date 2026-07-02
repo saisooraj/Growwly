@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { format, subDays } from 'date-fns'
+import { format, subDays, parseISO } from 'date-fns'
 import { Plus, Settings2, Pencil, Trash2, Flame, Check, Leaf, Diamond, Trophy } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
 import RoutineModal from '@/components/health/RoutineModal'
@@ -44,6 +44,30 @@ function isScheduledToday(r: HealthRoutine): boolean {
 
 function getLog(logs: HealthLog[], routineId: string): HealthLog | undefined {
   return logs.find(l => l.routineId === routineId && l.date === TODAY)
+}
+
+function computeMoneyStreak(txDates: Set<string>, noSpendSet: Set<string>): number {
+  let streak = 0
+  for (let i = 1; i <= 365; i++) {
+    const d = format(subDays(new Date(), i), 'yyyy-MM-dd')
+    if (txDates.has(d) || noSpendSet.has(d)) streak++
+    else break
+  }
+  return streak
+}
+
+function computeLongestMoneyStreak(txDates: Set<string>, noSpendSet: Set<string>): number {
+  const allDates = [...new Set([...txDates, ...noSpendSet])].sort()
+  let longest = 0, current = 0
+  for (let i = 0; i < allDates.length; i++) {
+    if (i === 0) { current = 1; longest = 1; continue }
+    const prev = parseISO(allDates[i - 1])
+    const cur  = parseISO(allDates[i])
+    const diff = Math.round((cur.getTime() - prev.getTime()) / 86400000)
+    current = diff === 1 ? current + 1 : 1
+    longest = Math.max(longest, current)
+  }
+  return longest
 }
 
 function computeLongestStreak(routines: HealthRoutine[], logs: HealthLog[]): number {
@@ -235,7 +259,7 @@ function WeeklyStrengthRow({ routines, logs }: { routines: HealthRoutine[]; logs
 
 export default function HealthPage() {
   const { user } = useAuth()
-  const { healthRoutines, healthLogs } = useAppStore()
+  const { healthRoutines, healthLogs, transactions, settings } = useAppStore()
   const refresh = useRefreshData()
 
   const [editing, setEditing]   = useState(false)
@@ -280,6 +304,11 @@ export default function HealthPage() {
   const pct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
   const streak        = useMemo(() => computeStreak(healthRoutines, healthLogs),        [healthRoutines, healthLogs])
   const longestStreak = useMemo(() => computeLongestStreak(healthRoutines, healthLogs), [healthRoutines, healthLogs])
+
+  const txDates     = useMemo(() => new Set(transactions.map(t => t.date)), [transactions])
+  const noSpendSet  = useMemo(() => new Set(settings?.noSpendDays ?? []),   [settings])
+  const moneyStreak        = useMemo(() => computeMoneyStreak(txDates, noSpendSet),        [txDates, noSpendSet])
+  const longestMoneyStreak = useMemo(() => computeLongestMoneyStreak(txDates, noSpendSet), [txDates, noSpendSet])
 
   async function handleTap(routine: HealthRoutine, delta = 1) {
     if (!user) return
@@ -332,15 +361,17 @@ export default function HealthPage() {
               <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', margin: '2px 0 0' }}>Today&apos;s plan</h1>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {streak > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20, background: '#f97316' + '22', color: '#f97316', fontWeight: 700, fontSize: 14 }}>
-                  <Flame size={16} />
-                  {streak}
-                </div>
-              )}
-              {longestStreak > 0 && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 20, fontSize: 14, fontWeight: 700,
+                background: moneyStreak > 0 ? '#f9731622' : 'var(--surface-2)',
+                color:      moneyStreak > 0 ? '#f97316'   : 'var(--text-4)',
+              }}>
+                <Flame size={16} />
+                {moneyStreak}
+              </div>
+              {longestMoneyStreak > moneyStreak && (
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)' }}>
-                  Best&nbsp;<span style={{ color: 'var(--text)', fontWeight: 700 }}>{longestStreak}d</span>
+                  Best&nbsp;<span style={{ color: 'var(--text)', fontWeight: 700 }}>{longestMoneyStreak}d</span>
                 </div>
               )}
               <button
@@ -415,13 +446,13 @@ export default function HealthPage() {
           <span className="h-eyebrow">Badges</span>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             {([
-              { name: 'First Week',       Icon: Leaf,    threshold: 7,  hint: '7-day streak'  },
-              { name: 'On Fire',          Icon: Flame,   threshold: 12, hint: '12-day streak' },
-              { name: 'Frugal Fortnight', Icon: Diamond, threshold: 14, hint: '14-day streak' },
-              { name: '30-Day Legend',    Icon: Trophy,  threshold: 30, hint: '30-day streak' },
-            ] as const).map(({ name, Icon, threshold, hint }) => {
-              const earned = longestStreak >= threshold
-              const daysAway = threshold - longestStreak
+              { name: 'First Week',       Icon: Leaf,    threshold: 7  },
+              { name: 'On Fire',          Icon: Flame,   threshold: 12 },
+              { name: 'Frugal Fortnight', Icon: Diamond, threshold: 14 },
+              { name: '30-Day Legend',    Icon: Trophy,  threshold: 30 },
+            ] as const).map(({ name, Icon, threshold }) => {
+              const earned = longestMoneyStreak >= threshold
+              const daysAway = threshold - longestMoneyStreak
               return (
                 <div
                   key={name}
