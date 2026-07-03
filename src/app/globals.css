@@ -371,8 +371,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
     font-weight: 700;
     letter-spacing: -0.025em;
     font-variant-numeric: tabular-nums;
-    overflow-wrap: break-word;
-    word-break: break-all;
+    white-space: nowrap;
     min-width: 0;
   }
   .serif {

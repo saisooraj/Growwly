@@ -554,25 +554,36 @@ export default function NetWorthPage() {
 // ── FI Calculator ──────────────────────────────────────────────────────────────
 
 function FICalculator({ masked }: { masked: boolean }) {
-  const { transactions, selectedMonth, settings } = useAppStore()
+  const { transactions, selectedMonth, settings, assets, liabilities } = useAppStore()
 
-  const { monthlyExpenses, monthlySavings, fiCorpus, yearsToFI, savingsRate } = useMemo(() => {
+  const { monthlySavings, fiCorpus, currentNetWorth, yearsToFI, savingsRate, progressPct } = useMemo(() => {
     const summary = buildMonthlySummary(transactions, selectedMonth, settings)
-    const monthlyExpenses = summary.totalExpenses
-    const monthlySavings = Math.max(0, summary.net)
-    const annualExpenses = monthlyExpenses * 12
-    const fiCorpus = annualExpenses * 25
-    const savingsRate = summary.totalIncome > 0 ? (summary.net / summary.totalIncome) * 100 : 0
+    const monthlySavings  = summary.savingsContributed
+    const fiCorpus        = summary.totalExpenses * 12 * 25
+    const savingsRate     = summary.totalIncome > 0 ? (monthlySavings / summary.totalIncome) * 100 : 0
+
+    const totalAssets      = assets.reduce((s, a) => s + (a.currentValue ?? a.value ?? 0), 0)
+    const totalLiabilities = liabilities.reduce((s, l) => s + (l.principal - (l.repaidAmount ?? 0)), 0)
+    const currentNetWorth  = Math.max(0, totalAssets - totalLiabilities)
+    const progressPct      = fiCorpus > 0 ? Math.min(100, (currentNetWorth / fiCorpus) * 100) : 0
 
     let yearsToFI: number | null = null
-    if (monthlySavings > 0 && fiCorpus > 0) {
-      const r = 0.12 / 12
-      const n = Math.log(1 + fiCorpus * r / monthlySavings) / Math.log(1 + r)
-      yearsToFI = n / 12
+    if (fiCorpus > 0) {
+      if (currentNetWorth >= fiCorpus) {
+        yearsToFI = 0
+      } else if (monthlySavings > 0) {
+        const r   = 0.12 / 12
+        const pmt = monthlySavings
+        const pv  = currentNetWorth
+        const fv  = fiCorpus
+        // FV = PV*(1+r)^n + PMT*((1+r)^n - 1)/r  =>  n = ln((fv + pmt/r)/(pv + pmt/r)) / ln(1+r)
+        const n = Math.log((fv + pmt / r) / (pv + pmt / r)) / Math.log(1 + r)
+        yearsToFI = n / 12
+      }
     }
 
-    return { monthlyExpenses, monthlySavings, fiCorpus, yearsToFI, savingsRate }
-  }, [transactions, selectedMonth, settings])
+    return { monthlySavings, fiCorpus, currentNetWorth, yearsToFI, savingsRate, progressPct }
+  }, [transactions, selectedMonth, settings, assets, liabilities])
 
   const fmt = (v: number) => masked ? '₹ •••' : formatCurrencyFull(v)
 
@@ -590,20 +601,37 @@ function FICalculator({ masked }: { masked: boolean }) {
           <p style={{ fontSize: 10, color: 'var(--text-4)', margin: '2px 0 0' }}>25× annual expenses</p>
         </div>
         <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: '12px 14px' }}>
-          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 4px' }}>Monthly Savings</p>
+          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 4px' }}>Monthly Contribution</p>
           <p style={{ fontSize: 16, fontWeight: 700, color: monthlySavings > 0 ? 'var(--good-ink)' : 'var(--bad-ink)', margin: 0 }}>{fmt(monthlySavings)}</p>
           <p style={{ fontSize: 10, color: 'var(--text-4)', margin: '2px 0 0' }}>{savingsRate.toFixed(1)}% of income</p>
         </div>
       </div>
 
-      <div style={{ background: yearsToFI && yearsToFI < 20 ? 'var(--good-soft)' : 'var(--surface-2)', borderRadius: 10, padding: '16px', textAlign: 'center' }}>
-        {yearsToFI !== null && monthlySavings > 0 ? (
+      {/* Net worth progress bar */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-3)' }}>
+          <span>Net worth <strong style={{ color: 'var(--text)' }}>{fmt(currentNetWorth)}</strong></span>
+          <span style={{ fontWeight: 700, color: progressPct >= 100 ? 'var(--good-ink)' : 'var(--brand-ink)' }}>{progressPct.toFixed(1)}% to FI</span>
+        </div>
+        <div style={{ height: 7, background: 'var(--surface-3)', borderRadius: 999, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${progressPct}%`, background: progressPct >= 100 ? 'var(--good)' : 'var(--brand)', borderRadius: 999, transition: 'width .6s ease' }} />
+        </div>
+      </div>
+
+      <div style={{ background: yearsToFI === 0 ? 'var(--good-soft)' : yearsToFI && yearsToFI < 20 ? 'var(--good-soft)' : 'var(--surface-2)', borderRadius: 10, padding: '16px', textAlign: 'center' }}>
+        {yearsToFI === 0 ? (
+          <>
+            <p style={{ fontSize: 11, color: 'var(--good-ink)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Financial Independence</p>
+            <p style={{ fontSize: 28, fontWeight: 700, color: 'var(--good-ink)', margin: '0 0 4px' }}>You&apos;re there!</p>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>Net worth exceeds your FI corpus</p>
+          </>
+        ) : yearsToFI !== null ? (
           <>
             <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Estimated time to FI</p>
             <p style={{ fontSize: 32, fontWeight: 700, color: yearsToFI < 20 ? 'var(--good-ink)' : 'var(--text)', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
               {yearsToFI < 1 ? 'Under 1 year!' : `${yearsToFI.toFixed(1)} years`}
             </p>
-            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>At current savings rate of {savingsRate.toFixed(1)}%</p>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>Net worth + {fmt(monthlySavings)}/mo at 12% p.a.</p>
           </>
         ) : (
           <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
@@ -613,7 +641,7 @@ function FICalculator({ masked }: { masked: boolean }) {
       </div>
 
       <p style={{ fontSize: 11, color: 'var(--text-4)', lineHeight: 1.5, margin: 0 }}>
-        <strong style={{ color: 'var(--text-3)' }}>How this works:</strong> The 4% rule says you can withdraw 4% of your portfolio annually in retirement. So you need 25× your yearly expenses saved. The timeline assumes you invest your monthly savings at 12% p.a. compounded monthly.
+        <strong style={{ color: 'var(--text-3)' }}>How this works:</strong> The 4% rule says you need 25× your annual expenses. Your current net worth is your starting point — the timeline shows how long to grow it to the FI corpus at 12% p.a. compounded monthly.
       </p>
     </div>
   )

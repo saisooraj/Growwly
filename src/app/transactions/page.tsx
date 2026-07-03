@@ -60,7 +60,8 @@ function TransactionsInner() {
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
-    return monthTxs.filter(t => {
+    const source = q ? [...transactions].sort((a, b) => b.date.localeCompare(a.date)) : monthTxs
+    return source.filter(t => {
       const savings = isSavingsTransfer(t)
       if (typeFilter === 'savings') {
         if (!savings) return false
@@ -89,7 +90,7 @@ function TransactionsInner() {
       }
       return true
     })
-  }, [monthTxs, typeFilter, catFilter, vehicleFilter, searchQuery])
+  }, [monthTxs, transactions, typeFilter, catFilter, vehicleFilter, searchQuery])
 
   // Savings aggregates (selected month, respecting the vehicle sub-filter)
   const savingsView = useMemo(() => {
@@ -167,16 +168,37 @@ function TransactionsInner() {
 
         {/* Mobile summary strip — hidden on desktop */}
         <div className="grid grid-cols-3 lg:hidden" style={{ gap: 10 }}>
-          {[
-            { label: 'Income',   value: formatCurrencyFull(summary.totalIncome), color: 'var(--good-ink)' },
-            { label: 'Expenses', value: formatCurrencyFull(summary.totalExpenses), color: 'var(--bad-ink)' },
-            { label: 'Net',      value: `${summary.cashNet >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(summary.cashNet))}`, color: summary.cashNet >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' },
-          ].map(s => (
-            <div key={s.label} className="card-sm" style={{ padding: '12px 14px' }}>
-              <div className="h-eyebrow" style={{ marginBottom: 6 }}>{s.label}</div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: s.color, letterSpacing: '-0.015em' }}>{s.value}</div>
+          {/* Income */}
+          <div className="card-sm" style={{ padding: '12px 14px' }}>
+            <div className="h-eyebrow" style={{ marginBottom: 6 }}>Income</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--good-ink)', letterSpacing: '-0.015em', whiteSpace: 'nowrap' }}>
+              {formatCurrencyFull(summary.totalIncome + summary.totalBorrowed + carryForward)}
             </div>
-          ))}
+            {carryForward > 0 && (
+              <div style={{ fontSize: 10, color: 'var(--brand-ink)', fontWeight: 600, marginTop: 3 }}>
+                ↩ {formatCurrencyFull(carryForward)} CF
+              </div>
+            )}
+          </div>
+          {/* Expenses */}
+          <div className="card-sm" style={{ padding: '12px 14px' }}>
+            <div className="h-eyebrow" style={{ marginBottom: 6 }}>Expenses</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--bad-ink)', letterSpacing: '-0.015em', whiteSpace: 'nowrap' }}>
+              {formatCurrencyFull(summary.totalExpenses)}
+            </div>
+            {summary.savingsContributed > 0 && (
+              <div style={{ fontSize: 10, color: 'var(--brand-ink)', fontWeight: 600, marginTop: 3 }}>
+                + {formatCurrencyFull(summary.savingsContributed)} saved
+              </div>
+            )}
+          </div>
+          {/* Net */}
+          <div className="card-sm" style={{ padding: '12px 14px' }}>
+            <div className="h-eyebrow" style={{ marginBottom: 6 }}>Net</div>
+            <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.015em', whiteSpace: 'nowrap', color: (summary.cashNet + carryForward) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
+              {(summary.cashNet + carryForward) >= 0 ? '+' : '−'}{formatCurrencyFull(Math.abs(summary.cashNet + carryForward))}
+            </div>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--row-gap)' }}
@@ -217,15 +239,15 @@ function TransactionsInner() {
               </div>
 
               {/* Type pills */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <SlidersHorizontal size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} />
-                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', flex: 1 }}>
+                <div style={{ display: 'flex', gap: 4, flex: 1, overflowX: 'auto', scrollbarWidth: 'none' }}>
                   {TYPE_OPTS.map(opt => (
                     <button
                       key={opt.id}
                       onClick={() => setTypeFilter(opt.id)}
                       style={{
-                        padding: '6px 14px', borderRadius: 999,
+                        padding: '6px 14px', borderRadius: 999, flexShrink: 0,
                         fontSize: 12.5, fontWeight: 600,
                         border: 'none',
                         background: typeFilter === opt.id ? 'var(--text)' : 'var(--surface-2)',
@@ -325,7 +347,7 @@ function TransactionsInner() {
                   transactions={filtered}
                   groupByDay
                   defaultExpandAll={catFilter !== 'all' || vehicleFilter !== 'all'}
-                  showBorrowings={catFilter === 'all' && typeFilter === 'all'}
+                  showBorrowings={catFilter === 'all' && typeFilter === 'all' && !searchQuery.trim()}
                 />
               </div>
             </div>

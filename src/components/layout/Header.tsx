@@ -241,8 +241,8 @@ export default function Header({ title, scrolled = false, onAdd }: { title?: str
       {/* Spacer pushes controls to the right on desktop */}
       <div className="hidden lg:block" style={{ flex: 1 }} />
 
-      {/* ── Search bar (desktop) ── */}
-      <SearchBar />
+      {/* ── Search bar (desktop, hidden on /transactions which has its own) ── */}
+      {pathname !== '/transactions' && <SearchBar />}
 
       {/* ── Month switcher ── */}
       <div style={{

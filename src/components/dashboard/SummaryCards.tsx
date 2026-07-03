@@ -22,11 +22,18 @@ interface StatProps {
 
 function Stat({ label, dateRange, value, sub, hint, tone = 'neutral', icon, maskable, masked, maskSub, onToggleMask }: StatProps) {
   const accentColor =
-    tone === 'good'    ? 'var(--good)' :
-    tone === 'bad'     ? 'var(--bad)'  :
-    tone === 'warn'    ? 'var(--warn)' :
-    tone === 'info'    ? 'var(--info)' :
+    tone === 'good'    ? 'var(--good)'     :
+    tone === 'bad'     ? 'var(--bad)'      :
+    tone === 'warn'    ? 'var(--warn)'     :
+    tone === 'info'    ? 'var(--info)'     :
     'var(--text-3)'
+
+  const valueColor =
+    tone === 'good'    ? 'var(--good-ink)' :
+    tone === 'bad'     ? 'var(--bad-ink)'  :
+    tone === 'warn'    ? 'var(--warn-ink)' :
+    tone === 'info'    ? 'var(--info-ink)' :
+    'var(--text)'
 
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'relative', overflow: 'hidden' }}>
@@ -53,7 +60,7 @@ function Stat({ label, dateRange, value, sub, hint, tone = 'neutral', icon, mask
           <span style={{ color: accentColor }}>{icon}</span>
         </div>
       </div>
-      <div className="display-num" style={{ fontSize: 'clamp(18px, 5.5vw, 30px)', lineHeight: 1, color: 'var(--text)' }}>
+      <div className="display-num" style={{ fontSize: 'clamp(18px, 5.5vw, 30px)', lineHeight: 1, color: valueColor }}>
         {masked ? '₹ ••••••' : value}
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-3)' }}>

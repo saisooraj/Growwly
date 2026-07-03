@@ -40,14 +40,14 @@ export default function IndexWidget() {
   )
 
   return (
-    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', margin: '0 -4px', padding: '0 4px 2px' }}>
+    <div style={{ display: 'flex', gap: 10 }}>
       {data.map(ix => {
         const up = ix.changePct >= 0
         return (
           <div
             key={ix.symbol}
             className="card"
-            style={{ flexShrink: 0, minWidth: 130, padding: '12px 14px' }}
+            style={{ flex: 1, minWidth: 0, padding: '12px 14px' }}
           >
             <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
               {ix.label}
