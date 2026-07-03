@@ -562,8 +562,13 @@ function FICalculator({ masked }: { masked: boolean }) {
     const fiCorpus        = summary.totalExpenses * 12 * 25
     const savingsRate     = summary.totalIncome > 0 ? (monthlySavings / summary.totalIncome) * 100 : 0
 
-    const totalAssets      = assets.reduce((s, a) => s + (a.currentValue ?? a.value ?? 0), 0)
-    const totalLiabilities = liabilities.reduce((s, l) => s + (l.principal - (l.repaidAmount ?? 0)), 0)
+    const totalAssets      = assets.reduce((s, a) => s + a.value, 0)
+    const totalLiabilities = liabilities.reduce((s, l) => {
+      const outstanding = l.tenureMonths > 0
+        ? calcOutstanding(l.principal, l.interestRate, l.tenureMonths, l.startDate)
+        : l.principal
+      return s + outstanding
+    }, 0)
     const currentNetWorth  = Math.max(0, totalAssets - totalLiabilities)
     const progressPct      = fiCorpus > 0 ? Math.min(100, (currentNetWorth / fiCorpus) * 100) : 0
 
