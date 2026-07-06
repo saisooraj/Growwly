@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { buildMonthlySummary, formatCurrency, getLast6Months } from '@/lib/utils'
+import { getCycleRange } from '@/lib/cycle'
+import { differenceInCalendarDays, parseISO, format } from 'date-fns'
 import Link from 'next/link'
 import {
   Sparkles, ArrowDownRight, Zap, TrendingDown, TrendingUp,
@@ -86,22 +88,39 @@ export default function SmartInsights() {
     }
 
     if (prev && prev.totalExpenses > 0) {
-      const diff = cur.totalExpenses - prev.totalExpenses
-      const pct = (diff / prev.totalExpenses) * 100
-      if (pct > 15) {
-        result.push({
-          id: 'mom-spike', sev: 'warn',
-          title: `Spending up ${pct.toFixed(0)}% vs last month`,
-          detail: `${formatCurrency(diff)} more than previous month`,
-          cta: 'Txns', href: '/transactions',
-        })
-      } else if (pct < -10) {
-        result.push({
-          id: 'mom-drop', sev: 'info',
-          title: `Spending down ${Math.abs(pct).toFixed(0)}% vs last month`,
-          detail: `Saved ${formatCurrency(Math.abs(diff))} vs last month`,
-          cta: 'Review', href: '/transactions',
-        })
+      // Compare daily run-rates so a partial current cycle doesn't skew the %
+      const curRange  = getCycleRange(selectedMonth, settings)
+      const today     = format(new Date(), 'yyyy-MM-dd')
+      const clampedEnd = today < curRange.end ? today : curRange.end
+      const daysElapsed = Math.max(1,
+        differenceInCalendarDays(parseISO(clampedEnd), parseISO(curRange.start)) + 1
+      )
+
+      const prevRange    = getCycleRange(prevMonth!, settings)
+      const prevCycleDays = Math.max(1,
+        differenceInCalendarDays(parseISO(prevRange.end), parseISO(prevRange.start)) + 1
+      )
+
+      const dailyCur  = cur.totalExpenses  / daysElapsed
+      const dailyPrev = prev.totalExpenses / prevCycleDays
+
+      if (dailyPrev > 0) {
+        const pct = ((dailyCur - dailyPrev) / dailyPrev) * 100
+        if (pct > 15) {
+          result.push({
+            id: 'mom-spike', sev: 'warn',
+            title: `Daily spend up ${pct.toFixed(0)}% vs last cycle`,
+            detail: `${formatCurrency(dailyCur)}/day now vs ${formatCurrency(dailyPrev)}/day last cycle`,
+            cta: 'Txns', href: '/transactions',
+          })
+        } else if (pct < -10) {
+          result.push({
+            id: 'mom-drop', sev: 'info',
+            title: `Daily spend down ${Math.abs(pct).toFixed(0)}% vs last cycle`,
+            detail: `${formatCurrency(dailyCur)}/day now vs ${formatCurrency(dailyPrev)}/day last cycle`,
+            cta: 'Review', href: '/transactions',
+          })
+        }
       }
     }
 
