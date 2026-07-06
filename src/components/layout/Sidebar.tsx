@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, ArrowLeftRight, CalendarDays, CalendarClock,
   FolderKanban, HandCoins, Settings, Leaf, Flame, LineChart,
-  Target, CheckSquare, TrendingUp, Activity,
+  Target, CheckSquare, TrendingUp, Activity, Sparkles,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
@@ -23,6 +23,7 @@ const ALL_NAV = [
   { href: '/tasks',        icon: CheckSquare,     label: 'Tasks',        optional: true, settingKey: 'showTasksTab' as const },
   { href: '/health',       icon: Activity,        label: 'Health',       optional: true, settingKey: 'showHealthTab' as const },
   { href: '/market',       icon: LineChart,       label: 'Market',       optional: false },
+  { href: '/chat',         icon: Sparkles,        label: 'AI Assistant', optional: false },
   { href: '/settings',     icon: Settings,        label: 'Settings',     optional: false },
 ]
 

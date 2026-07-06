@@ -8,7 +8,7 @@ import {
   Plus, X,
   CalendarDays, CalendarClock, Target, FolderKanban,
   HandCoins, CheckSquare, Activity, LineChart, Settings,
-  Flame, Leaf,
+  Flame, Leaf, Sparkles,
 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
@@ -32,6 +32,7 @@ const MORE_SECTIONS = [
   { href: '/tasks',      label: 'Tasks',      Icon: CheckSquare,  settingKey: 'showTasksTab' as const  },
   { href: '/health',     label: 'Health',     Icon: Activity,     settingKey: 'showHealthTab' as const },
   { href: '/market',     label: 'Market',     Icon: LineChart     },
+  { href: '/chat',       label: 'AI Chat',    Icon: Sparkles      },
   { href: '/settings',   label: 'Settings',   Icon: Settings      },
 ]
 
