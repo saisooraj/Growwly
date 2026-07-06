@@ -368,7 +368,7 @@ export function computeMoneyStreak(transactions: Transaction[], noSpendDays: str
 }
 
 export function computeLongestMoneyStreak(transactions: Transaction[], noSpendDays: string[]): number {
-  const all = [...new Set([...transactions.map(t => t.date), ...noSpendDays])].sort()
+  const all = Array.from(new Set(transactions.map(t => t.date).concat(noSpendDays))).sort()
   let longest = 0, current = 0
   for (let i = 0; i < all.length; i++) {
     if (i === 0) { current = 1; longest = 1; continue }
