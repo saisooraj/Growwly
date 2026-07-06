@@ -19,15 +19,15 @@ interface Alert {
 }
 
 export default function SmartInsights() {
-  const { transactions, budgets, selectedMonth, emergencyFund } = useAppStore()
+  const { transactions, budgets, selectedMonth, emergencyFund, settings, borrowings } = useAppStore()
   const [idx, setIdx] = useState(0)
 
   const alerts: Alert[] = useMemo(() => {
     const months = getLast6Months()
     const curIdx = months.indexOf(selectedMonth)
     const prevMonth = curIdx > 0 ? months[curIdx - 1] : null
-    const cur  = buildMonthlySummary(transactions, selectedMonth)
-    const prev = prevMonth ? buildMonthlySummary(transactions, prevMonth) : null
+    const cur  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
+    const prev = prevMonth ? buildMonthlySummary(transactions, prevMonth, settings, borrowings) : null
     const result: Alert[] = []
 
     if (cur.net < 0) {
@@ -106,7 +106,7 @@ export default function SmartInsights() {
     }
 
     return result
-  }, [transactions, budgets, selectedMonth, emergencyFund])
+  }, [transactions, budgets, selectedMonth, emergencyFund, settings, borrowings])
 
   // Clamp index when alerts change
   const safeIdx   = alerts.length > 0 ? Math.min(idx, alerts.length - 1) : 0
