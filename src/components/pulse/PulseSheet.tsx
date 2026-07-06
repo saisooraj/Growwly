@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { X, TrendingDown, TrendingUp, Minus, Calendar, AlertCircle, Zap } from 'lucide-react'
+import { X, TrendingDown, TrendingUp, Minus, Calendar, AlertCircle, Zap, ChevronDown, Pencil } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import type { FinancialPulse } from '@/types'
 import { formatCurrency, formatCurrencyFull } from '@/lib/utils'
@@ -20,6 +20,7 @@ const HEALTH_COLOR = {
 const ALLOC_COLOR: Record<string, string> = {
   ef:            'var(--info)',
   project:       'var(--brand)',
+  sip:           'oklch(0.62 0.17 285)',
   buffer:        'var(--warn)',
   discretionary: 'var(--good)',
 }
@@ -207,36 +208,244 @@ function UpcomingSection({ items }: { items: FinancialPulse['upcoming'] }) {
   )
 }
 
+// ── Allocation row ────────────────────────────────────────────────────────────
+
+interface AllocRowProps {
+  label: string; reason: string; amount: number; type: string; freeCash: number;
+  isEditing?: boolean; editVal?: string;
+  onEditStart?: () => void;
+  onEditChange?: (v: string) => void;
+  onEditConfirm?: () => void;
+  onEditCancel?: () => void;
+  onSkip?: () => void;
+}
+
+function AllocRow({ label, reason, amount, type, freeCash, isEditing, editVal, onEditStart, onEditChange, onEditConfirm, onEditCancel, onSkip }: AllocRowProps) {
+  const pct   = Math.round((amount / freeCash) * 100)
+  const color = ALLOC_COLOR[type] ?? 'var(--brand)'
+  const ib: React.CSSProperties = {
+    width: 20, height: 20, borderRadius: 6, border: 'none',
+    background: 'var(--surface-3)', color: 'var(--text-3)',
+    cursor: 'pointer', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', fontSize: 14, lineHeight: '1', flexShrink: 0,
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+          <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{label}</span>
+          <span style={{ fontSize: 11.5, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{reason}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, marginLeft: 8 }}>
+          {!isEditing && <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{pct}%</span>}
+          {isEditing ? (
+            <>
+              <input
+                autoFocus
+                value={editVal ?? ''}
+                onChange={e => onEditChange?.(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') onEditConfirm?.(); if (e.key === 'Escape') onEditCancel?.() }}
+                type="number" min={500}
+                style={{
+                  width: 86, background: 'var(--surface-2)', border: '1px solid var(--brand)',
+                  borderRadius: 6, padding: '2px 6px', outline: 'none',
+                  fontSize: 13, fontWeight: 600, color: 'var(--text)', textAlign: 'right',
+                }}
+              />
+              <button onClick={onEditConfirm} title="Confirm" style={{ ...ib, background: 'var(--brand)', color: '#fff', width: 22, height: 22 }}>✓</button>
+              <button onClick={onEditCancel}  title="Cancel"  style={ib}>✕</button>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{formatCurrencyFull(amount)}</span>
+              {onEditStart && (
+                <button onClick={onEditStart} title="Edit amount" style={ib}>
+                  <Pencil size={11} />
+                </button>
+              )}
+              {onSkip && (
+                <button onClick={onSkip} title="Skip suggestion" style={ib}>×</button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      <MiniBar pct={pct} color={color} />
+    </div>
+  )
+}
+
 // ── Section: Allocations ─────────────────────────────────────────────────────
 
+type EditTarget = { type: 'orig'; idx: number; val: string } | { type: 'custom'; idx: number; val: string }
+
 function AllocationsSection({ allocations, freeCash }: { allocations: FinancialPulse['allocations']; freeCash: number }) {
+  const [skipped, setSkipped]           = useState<Set<number>>(new Set())
+  const [overrides, setOverrides]       = useState<Record<number, number>>({})
+  const [custom, setCustom]             = useState<Array<{ label: string; amount: number }>>([])
+  const [editing, setEditing]           = useState<EditTarget | null>(null)
+  const [addingNew, setAddingNew]       = useState(false)
+  const [newLabel, setNewLabel]         = useState('')
+  const [newAmountStr, setNewAmountStr] = useState('')
+
   if (allocations.length === 0) return null
+
+  // Effective amount for an item (live during editing)
+  function origAmt(a: FinancialPulse['allocations'][0], idx: number): number {
+    if (editing?.type === 'orig' && editing.idx === idx) return Math.max(0, parseInt(editing.val) || 0)
+    return overrides[idx] ?? a.amount
+  }
+  function custAmt(i: number): number {
+    if (editing?.type === 'custom' && editing.idx === i) return Math.max(0, parseInt(editing.val) || 0)
+    return custom[i].amount
+  }
+
+  const activeOriginal = allocations
+    .map((a, i) => ({ ...a, origIdx: i }))
+    .filter(a => !skipped.has(a.origIdx) && a.type !== 'discretionary')
+
+  const nonDiscTotal     = activeOriginal.reduce((s, a) => s + origAmt(a, a.origIdx), 0)
+  const customTotal      = custom.reduce((s, _, i) => s + custAmt(i), 0)
+  const discretionaryAmt = Math.max(0, freeCash - nonDiscTotal - customTotal)
+
+  const skippedList = Array.from(skipped).map(i => ({ ...allocations[i], origIdx: i }))
+
+  function confirmEdit() {
+    if (!editing) return
+    const val = parseInt(editing.val)
+    if (isNaN(val) || val < 500) { setEditing(null); return }
+    if (editing.type === 'orig') {
+      setOverrides(prev => ({ ...prev, [editing.idx]: val }))
+    } else {
+      setCustom(prev => prev.map((c, i) => i === editing.idx ? { ...c, amount: val } : c))
+    }
+    setEditing(null)
+  }
+
+  const parsedNewAmt = Math.round(parseFloat(newAmountStr))
+  const newAmtValid  = !isNaN(parsedNewAmt) && parsedNewAmt >= 500 && parsedNewAmt <= discretionaryAmt - 500
+  const canAdd       = !addingNew && !editing && discretionaryAmt >= 1500
+
+  function handleAdd() {
+    if (!newLabel.trim() || !newAmtValid) return
+    setCustom(prev => [...prev, { label: newLabel.trim(), amount: parsedNewAmt }])
+    setNewLabel(''); setNewAmountStr(''); setAddingNew(false)
+  }
+
+  const ib: React.CSSProperties = {
+    width: 20, height: 20, borderRadius: 6, border: 'none',
+    background: 'var(--surface-3)', color: 'var(--text-3)',
+    cursor: 'pointer', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', fontSize: 14, lineHeight: '1', flexShrink: 0,
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 4 }}>
         Suggested split of {formatCurrencyFull(freeCash)}
       </div>
-      {allocations.map((a, i) => {
-        const pct = Math.round((a.amount / freeCash) * 100)
-        const color = ALLOC_COLOR[a.type] ?? 'var(--brand)'
+
+      {activeOriginal.map(a => {
+        const isEdit = editing?.type === 'orig' && editing.idx === a.origIdx
         return (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{a.label}</span>
-                <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{a.reason}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>{pct}%</span>
-                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{formatCurrencyFull(a.amount)}</span>
-              </div>
-            </div>
-            <MiniBar pct={pct} color={color} />
-          </div>
+          <AllocRow
+            key={a.origIdx}
+            label={a.label} reason={a.reason} amount={origAmt(a, a.origIdx)} type={a.type} freeCash={freeCash}
+            isEditing={isEdit} editVal={isEdit ? editing!.val : undefined}
+            onEditStart={() => setEditing({ type: 'orig', idx: a.origIdx, val: String(origAmt(a, a.origIdx)) })}
+            onEditChange={v => setEditing(prev => prev ? { ...prev, val: v } : prev)}
+            onEditConfirm={confirmEdit}
+            onEditCancel={() => setEditing(null)}
+            onSkip={() => { setEditing(null); setSkipped(prev => new Set(Array.from(prev).concat(a.origIdx))) }}
+          />
         )
       })}
+
+      {custom.map((c, i) => {
+        const isEdit = editing?.type === 'custom' && editing.idx === i
+        return (
+          <AllocRow
+            key={`custom-${i}`}
+            label={c.label} reason="Custom allocation" amount={custAmt(i)} type="project" freeCash={freeCash}
+            isEditing={isEdit} editVal={isEdit ? editing!.val : undefined}
+            onEditStart={() => setEditing({ type: 'custom', idx: i, val: String(custAmt(i)) })}
+            onEditChange={v => setEditing(prev => prev ? { ...prev, val: v } : prev)}
+            onEditConfirm={confirmEdit}
+            onEditCancel={() => setEditing(null)}
+            onSkip={() => { setEditing(null); setCustom(prev => prev.filter((_, j) => j !== i)) }}
+          />
+        )
+      })}
+
+      {discretionaryAmt > 0 && (
+        <AllocRow
+          label="Discretionary"
+          reason={skippedList.length > 0 ? 'Includes freed-up amounts' : 'Truly yours to spend freely'}
+          amount={discretionaryAmt} type="discretionary" freeCash={freeCash}
+        />
+      )}
+
+      {skippedList.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingTop: 10, borderTop: '1px solid var(--border)', marginTop: 2 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-3)', width: '100%', marginBottom: 2 }}>Skipped — tap to restore</span>
+          {skippedList.map(a => (
+            <button
+              key={a.origIdx}
+              onClick={() => setSkipped(prev => { const n = new Set(Array.from(prev)); n.delete(a.origIdx); return n })}
+              style={{
+                padding: '3px 10px', borderRadius: 99, fontSize: 11.5,
+                background: 'var(--surface-2)', border: '1px dashed var(--border)',
+                color: 'var(--text-3)', cursor: 'pointer',
+              }}
+            >↩ {a.label}</button>
+          ))}
+        </div>
+      )}
+
+      {canAdd && (
+        <button
+          onClick={() => setAddingNew(true)}
+          style={{
+            alignSelf: 'flex-start', marginTop: 4, padding: '4px 12px', borderRadius: 99, fontSize: 12,
+            background: 'transparent', border: '1px dashed var(--border-strong)',
+            color: 'var(--text-3)', cursor: 'pointer',
+          }}
+        >+ Add allocation</button>
+      )}
+
+      {addingNew && (
+        <div style={{
+          display: 'flex', gap: 6, alignItems: 'center', marginTop: 4,
+          padding: '8px 10px', borderRadius: 10,
+          background: 'var(--surface-2)', border: '1px solid var(--border)',
+        }}>
+          <input
+            autoFocus value={newLabel} onChange={e => setNewLabel(e.target.value)}
+            onKeyDown={e => e.key === 'Escape' && (setAddingNew(false), setNewLabel(''), setNewAmountStr(''))}
+            placeholder="Label (e.g. Vacation fund)"
+            style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 13, color: 'var(--text)', minWidth: 0 }}
+          />
+          <span style={{ fontSize: 12, color: 'var(--text-3)', flexShrink: 0 }}>₹</span>
+          <input
+            value={newAmountStr} onChange={e => setNewAmountStr(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') { setAddingNew(false); setNewLabel(''); setNewAmountStr('') } }}
+            placeholder={`max ${formatCurrency(discretionaryAmt)}`}
+            type="number" min={500} max={discretionaryAmt - 500}
+            style={{ width: 100, background: 'transparent', border: 'none', outline: 'none', fontSize: 13, color: 'var(--text)', textAlign: 'right', flexShrink: 0 }}
+          />
+          <button
+            onClick={handleAdd} disabled={!newLabel.trim() || !newAmtValid}
+            style={{
+              padding: '3px 10px', borderRadius: 8, fontSize: 12, fontWeight: 500, border: 'none', flexShrink: 0,
+              background: newLabel.trim() && newAmtValid ? 'var(--brand)' : 'var(--surface-3)',
+              color: newLabel.trim() && newAmtValid ? '#fff' : 'var(--text-3)',
+              cursor: newLabel.trim() && newAmtValid ? 'pointer' : 'default',
+            }}
+          >Add</button>
+          <button onClick={() => { setAddingNew(false); setNewLabel(''); setNewAmountStr('') }} style={ib}>×</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -311,38 +520,142 @@ function GoalsSection({ goals }: { goals: FinancialPulse['goals'] }) {
   )
 }
 
-// ── Section: Borrowing Alerts ────────────────────────────────────────────────
+// ── Section: Borrowings to Settle (accordion) ───────────────────────────────
 
-function BorrowingsSection({ alerts }: { alerts: FinancialPulse['borrowingAlerts'] }) {
+function BorrowingsToSettleSection({ alerts }: { alerts: FinancialPulse['borrowingAlerts'] }) {
+  const [expanded, setExpanded] = useState(false)
   if (alerts.length === 0) return null
 
+  const total = alerts.reduce((s, a) => s + a.outstanding, 0)
+  const overdueCount = alerts.filter(a => a.isOverdue).length
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {alerts.map((a, i) => (
-        <div key={i} style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '10px 12px', borderRadius: 10,
-          background: a.isOverdue ? 'var(--bad-soft)' : 'var(--surface-2)',
-          border: `1px solid ${a.isOverdue ? 'color-mix(in oklch, var(--bad) 25%, transparent)' : 'transparent'}`,
-        }}>
-          {a.isOverdue && <AlertCircle size={14} style={{ color: 'var(--bad-ink)', flexShrink: 0 }} />}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
-              {a.type === 'borrowed' ? `Owe ${a.person}` : `${a.person} owes you`}
-            </div>
-            <div style={{ fontSize: 11.5, color: a.isOverdue ? 'var(--bad-ink)' : 'var(--text-3)', marginTop: 2 }}>
-              {a.isOverdue
-                ? `Overdue by ${a.daysOverdue} day${a.daysOverdue !== 1 ? 's' : ''}`
-                : a.dueDate
-                  ? `Due ${format(parseISO(a.dueDate), 'MMM d')}`
-                  : 'No due date'}
-            </div>
-          </div>
-          <span style={{ fontSize: 14, fontWeight: 600, color: a.isOverdue ? 'var(--bad-ink)' : 'var(--text)', flexShrink: 0 }}>
-            {formatCurrencyFull(a.outstanding)}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      <button
+        onClick={() => setExpanded(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          width: '100%', padding: '10px 12px', borderRadius: 10,
+          background: overdueCount > 0 ? 'var(--bad-soft)' : 'var(--surface-2)',
+          border: `1px solid ${overdueCount > 0 ? 'color-mix(in oklch, var(--bad) 25%, transparent)' : 'transparent'}`,
+          cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {overdueCount > 0 && <AlertCircle size={14} style={{ color: 'var(--bad-ink)', flexShrink: 0 }} />}
+          <span style={{ fontSize: 13, fontWeight: 500, color: overdueCount > 0 ? 'var(--bad-ink)' : 'var(--text)' }}>
+            {alerts.length} {alerts.length === 1 ? 'repayment' : 'repayments'} pending
+            {overdueCount > 0 && ` · ${overdueCount} overdue`}
           </span>
         </div>
-      ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: overdueCount > 0 ? 'var(--bad-ink)' : 'var(--text)' }}>
+            {formatCurrencyFull(total)}
+          </span>
+          <ChevronDown
+            size={15}
+            style={{
+              color: 'var(--text-3)',
+              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform .2s ease',
+            }}
+          />
+        </div>
+      </button>
+
+      {expanded && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+          {alerts.map((a, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '9px 12px', borderRadius: 10,
+              background: a.isOverdue ? 'var(--bad-soft)' : 'var(--surface-2)',
+              border: `1px solid ${a.isOverdue ? 'color-mix(in oklch, var(--bad) 25%, transparent)' : 'var(--border)'}`,
+            }}>
+              {a.isOverdue && <AlertCircle size={13} style={{ color: 'var(--bad-ink)', flexShrink: 0 }} />}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>Owe {a.person}</div>
+                <div style={{ fontSize: 11.5, color: a.isOverdue ? 'var(--bad-ink)' : 'var(--text-3)', marginTop: 2 }}>
+                  {a.isOverdue
+                    ? `Overdue by ${a.daysOverdue} day${a.daysOverdue !== 1 ? 's' : ''}`
+                    : a.dueDate ? `Due ${format(parseISO(a.dueDate), 'MMM d')}` : 'No due date'}
+                </div>
+              </div>
+              <span style={{ fontSize: 14, fontWeight: 600, color: a.isOverdue ? 'var(--bad-ink)' : 'var(--text)', flexShrink: 0 }}>
+                {formatCurrencyFull(a.outstanding)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Section: Lent to Others (accordion) ─────────────────────────────────────
+
+function LentSection({ alerts }: { alerts: FinancialPulse['borrowingAlerts'] }) {
+  const [expanded, setExpanded] = useState(false)
+  if (alerts.length === 0) return null
+
+  const total = alerts.reduce((s, a) => s + a.outstanding, 0)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      <SectionTitle>Lent to Others</SectionTitle>
+      {/* Accordion header */}
+      <button
+        onClick={() => setExpanded(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          width: '100%', padding: '10px 12px', borderRadius: 10,
+          background: 'var(--surface-2)', border: '1px solid transparent',
+          cursor: 'pointer', textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
+          {alerts.length} {alerts.length === 1 ? 'person owes' : 'people owe'} you
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--good-ink)' }}>
+            {formatCurrencyFull(total)}
+          </span>
+          <ChevronDown
+            size={15}
+            style={{
+              color: 'var(--text-3)',
+              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform .2s ease',
+            }}
+          />
+        </div>
+      </button>
+
+      {/* Expanded rows */}
+      {expanded && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+          {alerts.map((a, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '9px 12px', borderRadius: 10,
+              background: 'var(--surface-2)',
+              border: '1px solid var(--border)',
+            }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{a.person}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
+                  {a.dueDate
+                    ? `Due ${format(parseISO(a.dueDate), 'MMM d')}`
+                    : 'No due date'}
+                </div>
+              </div>
+              <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', flexShrink: 0 }}>
+                {formatCurrencyFull(a.outstanding)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -374,10 +687,11 @@ export default function PulseSheet({ open, onClose, pulse }: Props) {
 
   if (!open || !mounted) return null
 
-  const monthLabel   = format(parseISO(`${pulse.month}-01`), 'MMMM yyyy')
-  const colors       = HEALTH_COLOR[pulse.health.label]
-  const genTime      = format(new Date(pulse.generatedAt), 'h:mm a')
-  const hasBorrowings = pulse.borrowingAlerts.length > 0
+  const monthLabel        = format(parseISO(`${pulse.month}-01`), 'MMMM yyyy')
+  const colors            = HEALTH_COLOR[pulse.health.label]
+  const genTime           = format(new Date(pulse.generatedAt), 'h:mm a')
+  const borrowingsToSettle = pulse.borrowingAlerts.filter(a => a.type === 'borrowed')
+  const lentAlerts         = pulse.borrowingAlerts.filter(a => a.type === 'lent')
 
   const sheet = (
     <div
@@ -485,11 +799,15 @@ export default function PulseSheet({ open, onClose, pulse }: Props) {
               <GoalsSection goals={pulse.goals} />
             </div>
 
-            {hasBorrowings && (
+            {borrowingsToSettle.length > 0 && (
               <div>
                 <SectionTitle>Borrowings to Settle</SectionTitle>
-                <BorrowingsSection alerts={pulse.borrowingAlerts} />
+                <BorrowingsToSettleSection alerts={borrowingsToSettle} />
               </div>
+            )}
+
+            {lentAlerts.length > 0 && (
+              <LentSection alerts={lentAlerts} />
             )}
 
           </div>

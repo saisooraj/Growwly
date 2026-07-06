@@ -9,7 +9,7 @@ import type {
   PulseUpcoming, PulseAllocation, PulseSpendCategory,
   PulseGoal, PulseBorrowingAlert, MonthlySummary,
 } from '@/types'
-import { buildMonthlySummary } from './utils'
+import { buildMonthlySummary, getTransactionsForMonth, EMERGENCY_FUND_VEHICLE } from './utils'
 
 export interface PulseSnapshot {
   transactions: Transaction[]
@@ -122,15 +122,29 @@ function computeAllocations(
   freeCash: number,
   snapshot: PulseSnapshot,
   daysLeft: number,
+  monthTxs: Transaction[],
 ): PulseAllocation[] {
   const { settings, emergencyFund, projects } = snapshot
   if (freeCash < 500) return []
 
+  // Which goals already received contributions this month?
+  const efFundedThisMonth = monthTxs.some(
+    t => (t.transferKind === 'savings_contribution' || t.transferKind === 'savings_transfer') &&
+         t.savingsVehicle === EMERGENCY_FUND_VEHICLE
+  )
+  const sipFundedThisMonth = monthTxs.some(
+    t => (t.transferKind === 'savings_contribution' || t.transferKind === 'savings_transfer') &&
+         t.savingsVehicle === 'SIP / Investments'
+  )
+  const projectsFundedThisMonth = new Set(
+    monthTxs.filter(t => t.projectId).map(t => t.projectId!)
+  )
+
   const allocations: PulseAllocation[] = []
   let remaining = freeCash
 
-  // 1. EF top-up
-  if (emergencyFund && emergencyFund.targetAmount > 0 &&
+  // 1. EF top-up (skip if already contributed this month)
+  if (!efFundedThisMonth && emergencyFund && emergencyFund.targetAmount > 0 &&
       emergencyFund.currentBalance < emergencyFund.targetAmount) {
     const gap = emergencyFund.targetAmount - emergencyFund.currentBalance
     const suggestion = Math.min(gap, Math.round(remaining * 0.4))
@@ -148,9 +162,14 @@ function computeAllocations(
     }
   }
 
-  // 2. Active projects sorted by deadline (earliest first)
+  // 2. Active projects sorted by deadline (skip ones already funded this month)
   const activeProjects = projects
-    .filter(p => p.status === 'active' && p.paid < p.totalBudget && p.totalBudget > 0)
+    .filter(p =>
+      p.status === 'active' &&
+      p.paid < p.totalBudget &&
+      p.totalBudget > 0 &&
+      !projectsFundedThisMonth.has(p.id)
+    )
     .sort((a, b) => {
       if (a.endDate && b.endDate) return a.endDate < b.endDate ? -1 : 1
       if (a.endDate) return -1
@@ -190,7 +209,24 @@ function computeAllocations(
     }
   }
 
-  // 4. Discretionary
+  // 4. SIP / Mutual Fund (skip if already invested this month)
+  // Cap at ₹30k (user's usual target); always suggest something if there's meaningful cash left
+  const SIP_CAP = 30000
+  if (!sipFundedThisMonth && remaining >= 1500) {
+    const sipSuggestion = Math.min(SIP_CAP, Math.round(remaining * 0.6))
+    if (sipSuggestion >= 500 && sipSuggestion <= remaining - 500) {
+      const atTarget = sipSuggestion >= SIP_CAP
+      allocations.push({
+        label: 'Mutual Fund / SIP',
+        amount: sipSuggestion,
+        reason: atTarget ? 'Your monthly SIP target' : 'Partial — invest what you can this month',
+        type: 'sip',
+      })
+      remaining -= sipSuggestion
+    }
+  }
+
+  // 5. Discretionary
   if (remaining >= 500) {
     allocations.push({
       label: 'Discretionary',
@@ -314,7 +350,8 @@ export function computePulse(
   upcoming.sort((a, b) => a.daysUntil - b.daysUntil)
 
   // ── Allocations ────────────────────────────────────────────────────────────
-  const allocations = computeAllocations(freeCash, snapshot, daysLeft)
+  const monthTxs = getTransactionsForMonth(transactions, month, snapshot.settings)
+  const allocations = computeAllocations(freeCash, snapshot, daysLeft, monthTxs)
 
   // ── Spend analysis (top 5 categories, MoM) ────────────────────────────────
   const spendAnalysis: PulseSpendCategory[] = Object.entries(curSummary.byCategory)
