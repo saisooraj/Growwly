@@ -39,9 +39,10 @@ function TransactionsInner() {
   const [catFilter, setCatFilter]   = useState<string>(searchParams.get('cat') ?? 'all')
   const [vehicleFilter, setVehicleFilter] = useState<string>(searchParams.get('vehicle') ?? 'all')
   const [searchQuery, setSearchQuery]   = useState<string>(searchParams.get('search') ?? '')
-  const [showIncome,   setShowIncome]   = useState(false)
-  const [showExpenses, setShowExpenses] = useState(false)
-  const [showNet,      setShowNet]      = useState(false)
+  const [showIncome,    setShowIncome]   = useState(false)
+  const [showExpenses,  setShowExpenses] = useState(false)
+  const [showNet,       setShowNet]      = useState(false)
+  const [mobileMasked,  setMobileMasked] = useState(true)
 
   const { transactions, borrowings, selectedMonth, settings } = useAppStore()
   const summary  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
@@ -167,36 +168,53 @@ function TransactionsInner() {
       <div className="txn-layout anim-page" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
         {/* Mobile summary strip — hidden on desktop */}
-        <div className="grid grid-cols-3 lg:hidden" style={{ gap: 10 }}>
-          {/* Income */}
-          <div className="card-sm" style={{ padding: '12px 14px' }}>
-            <div className="h-eyebrow" style={{ marginBottom: 6 }}>Income</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--good-ink)', letterSpacing: '-0.015em', whiteSpace: 'nowrap' }}>
-              {formatCurrencyFull(summary.totalIncome + summary.totalBorrowed + carryForward)}
-            </div>
-            {carryForward > 0 && (
-              <div style={{ fontSize: 10, color: 'var(--brand-ink)', fontWeight: 600, marginTop: 3 }}>
-                ↩ {formatCurrencyFull(carryForward)} CF
-              </div>
-            )}
+        <div className="lg:hidden" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Strip header with eye toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingInline: 2 }}>
+            <span className="h-eyebrow">This month</span>
+            <button
+              onClick={() => setMobileMasked(v => !v)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              {mobileMasked ? <Eye size={14} /> : <EyeOff size={14} />}
+              <span style={{ fontSize: 11, fontWeight: 600 }}>{mobileMasked ? 'Show' : 'Hide'}</span>
+            </button>
           </div>
-          {/* Expenses */}
-          <div className="card-sm" style={{ padding: '12px 14px' }}>
-            <div className="h-eyebrow" style={{ marginBottom: 6 }}>Expenses</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--bad-ink)', letterSpacing: '-0.015em', whiteSpace: 'nowrap' }}>
-              {formatCurrencyFull(summary.totalExpenses)}
-            </div>
-            {summary.savingsContributed > 0 && (
-              <div style={{ fontSize: 10, color: 'var(--brand-ink)', fontWeight: 600, marginTop: 3 }}>
-                + {formatCurrencyFull(summary.savingsContributed)} saved
+
+          <div className="grid grid-cols-3" style={{ gap: 10 }}>
+            {/* Income */}
+            <div className="card-sm" style={{ padding: '12px 14px' }}>
+              <div className="h-eyebrow" style={{ marginBottom: 6 }}>Income</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--good-ink)', letterSpacing: '-0.015em', whiteSpace: 'nowrap' }}>
+                {mobileMasked ? <span style={{ letterSpacing: '0.05em', color: 'var(--text-4)' }}>••••</span> : formatCurrencyFull(summary.totalIncome + summary.totalBorrowed + carryForward)}
               </div>
-            )}
-          </div>
-          {/* Net */}
-          <div className="card-sm" style={{ padding: '12px 14px' }}>
-            <div className="h-eyebrow" style={{ marginBottom: 6 }}>Net</div>
-            <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.015em', whiteSpace: 'nowrap', color: (summary.cashNet + carryForward) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
-              {(summary.cashNet + carryForward) >= 0 ? '+' : '−'}{formatCurrencyFull(Math.abs(summary.cashNet + carryForward))}
+              {!mobileMasked && carryForward > 0 && (
+                <div style={{ fontSize: 10, color: 'var(--brand-ink)', fontWeight: 600, marginTop: 3 }}>
+                  ↩ {formatCurrencyFull(carryForward)} CF
+                </div>
+              )}
+            </div>
+            {/* Expenses */}
+            <div className="card-sm" style={{ padding: '12px 14px' }}>
+              <div className="h-eyebrow" style={{ marginBottom: 6 }}>Expenses</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--bad-ink)', letterSpacing: '-0.015em', whiteSpace: 'nowrap' }}>
+                {mobileMasked ? <span style={{ letterSpacing: '0.05em', color: 'var(--text-4)' }}>••••</span> : formatCurrencyFull(summary.totalExpenses)}
+              </div>
+              {!mobileMasked && summary.savingsContributed > 0 && (
+                <div style={{ fontSize: 10, color: 'var(--brand-ink)', fontWeight: 600, marginTop: 3 }}>
+                  + {formatCurrencyFull(summary.savingsContributed)} saved
+                </div>
+              )}
+            </div>
+            {/* Net */}
+            <div className="card-sm" style={{ padding: '12px 14px' }}>
+              <div className="h-eyebrow" style={{ marginBottom: 6 }}>Net</div>
+              <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.015em', whiteSpace: 'nowrap', color: (summary.cashNet + carryForward) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
+                {mobileMasked
+                  ? <span style={{ letterSpacing: '0.05em', color: 'var(--text-4)' }}>••••</span>
+                  : <>{(summary.cashNet + carryForward) >= 0 ? '+' : '−'}{formatCurrencyFull(Math.abs(summary.cashNet + carryForward))}</>
+                }
+              </div>
             </div>
           </div>
         </div>

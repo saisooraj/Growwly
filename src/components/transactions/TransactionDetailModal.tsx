@@ -4,7 +4,7 @@ import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { X, Edit2, Trash2, Calendar, FileText, Repeat, Folder, ArrowLeftRight } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
-import { deleteTransaction } from '@/lib/firestore'
+import { deleteTransaction, deleteBorrowing } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
 import { formatCurrencyFull, CATEGORY_COLORS, getTransferDisplay } from '@/lib/utils'
 import { CategoryIcon, getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
@@ -28,23 +28,31 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
 
   const open = !!tx
 
+  // Synthetic borrowing rows have a fake id like "borrow-{borrowingId}"
+  const isSyntheticBorrowing = tx?.id?.startsWith('borrow-')
+
   async function doDelete() {
     if (!tx) return
     setDeleting(true)
     try {
-      await deleteTransaction(tx.id)
+      if (isSyntheticBorrowing) {
+        const borrowingId = tx.id.replace('borrow-', '')
+        await deleteBorrowing(borrowingId)
+        const { borrowings, setBorrowings } = useAppStore.getState()
+        setBorrowings(borrowings.filter(b => b.id !== borrowingId))
+      } else {
+        await deleteTransaction(tx.id)
+        const { transactions, setTransactions } = useAppStore.getState()
+        setTransactions(transactions.filter(t => t.id !== tx.id))
+      }
     } catch {
       toast.error('Failed to delete')
       setDeleting(false)
       return
     }
-    // Delete confirmed — remove from store and close immediately
-    const { transactions, setTransactions } = useAppStore.getState()
-    setTransactions(transactions.filter(t => t.id !== tx.id))
     toast.success('Deleted')
     onClose()
     setDeleting(false)
-    // Best-effort refresh to sync other data (project.paid, etc.)
     refresh().catch(() => {})
   }
 
@@ -225,7 +233,7 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
       />
       <ConfirmDialog
         open={confirmOpen}
-        message="Delete this transaction? This cannot be undone."
+        message={isSyntheticBorrowing ? 'Delete this borrowing record? This cannot be undone.' : 'Delete this transaction? This cannot be undone.'}
         onConfirm={doDelete}
         onClose={() => setConfirmOpen(false)}
       />
