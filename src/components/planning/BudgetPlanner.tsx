@@ -5,7 +5,7 @@ import { setBudget } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
-import { EXPENSE_CATEGORIES, formatCurrencyFull, buildMonthlySummary, getBudgetStatus, STATUS_COLORS } from '@/lib/utils'
+import { EXPENSE_CATEGORIES, SAVINGS_VEHICLES, formatCurrencyFull, buildMonthlySummary, getTransactionsForMonth, getBudgetStatus, STATUS_COLORS } from '@/lib/utils'
 import { getCategoryDisplayName } from '@/lib/categoryIcons'
 import type { Category } from '@/types'
 import toast from 'react-hot-toast'
@@ -22,6 +22,15 @@ export default function BudgetPlanner() {
   const monthBudgets = budgets.filter((b) => b.month === selectedMonth)
   const budgetMap = Object.fromEntries(monthBudgets.map((b) => [b.category, b.planned]))
 
+  // Some categories (e.g. Gold) are also savings vehicles — count contributions too
+  const savingsVehicleSet = new Set(SAVINGS_VEHICLES)
+  const monthTxs = getTransactionsForMonth(transactions, selectedMonth, settings)
+  const savingsActual: Record<string, number> = {}
+  for (const t of monthTxs) {
+    if (t.type !== 'transfer' || t.transferKind !== 'savings_contribution' || !t.savingsVehicle) continue
+    savingsActual[t.savingsVehicle] = (savingsActual[t.savingsVehicle] ?? 0) + t.amount
+  }
+
   async function save(cat: Category) {
     if (!user) return
     try {
@@ -35,7 +44,10 @@ export default function BudgetPlanner() {
   }
 
   const totalPlanned = Object.values(budgetMap).reduce((s, v) => s + v, 0)
-  const totalActual = summary.totalExpenses
+  const extraSavings = EXPENSE_CATEGORIES
+    .filter(cat => savingsVehicleSet.has(cat))
+    .reduce((sum, cat) => sum + (savingsActual[cat] ?? 0), 0)
+  const totalActual = summary.totalExpenses + extraSavings
   const variance = totalPlanned - totalActual
 
   return (
@@ -62,7 +74,7 @@ export default function BudgetPlanner() {
       {/* Category rows */}
       {EXPENSE_CATEGORIES.map((cat) => {
         const planned = budgetMap[cat] ?? 0
-        const actual = summary.byCategory[cat] ?? 0
+        const actual = (summary.byCategory[cat] ?? 0) + (savingsVehicleSet.has(cat) ? (savingsActual[cat] ?? 0) : 0)
         const status = getBudgetStatus(actual, planned)
         const sc = STATUS_COLORS[status]
         const pct = planned > 0 ? Math.min((actual / planned) * 100, 100) : 0
