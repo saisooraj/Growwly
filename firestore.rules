@@ -90,6 +90,11 @@ service cloud.firestore {
       allow update: if isAuth() && resource.data.userId == request.auth.uid;
     }
 
+    // User profile (privacy consent, etc.) — doc id = userId
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
     // Tasks
     match /tasks/{docId} {
       allow read, delete: if isAuth() && resource.data.userId == request.auth.uid;

@@ -924,6 +924,24 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                   )}
                   {/* ── End Split Panel ──────────────────────────────────── */}
 
+                  {/* Description — moved above category so suggestion chip is immediately visible */}
+                  <div>
+                    <label className="label">
+                      {activeTab === 'savings' ? 'Note' : txType === 'transfer' ? 'Who / what for' : 'Description'}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={
+                        activeTab === 'savings'
+                          ? 'e.g. Monthly SIP, bonus into FD…'
+                          : txType === 'transfer'
+                            ? selectedKind?.dir === 'in' ? 'e.g. Rahul paid back' : 'e.g. Lent to Priya'
+                            : 'e.g. Domino\'s pizza — we\'ll suggest a category'
+                      }
+                      className="input" value={notes} onChange={e => setNotes(e.target.value)}
+                    />
+                  </div>
+
                   {/* Category */}
                   {txType !== 'transfer' && (
                     <div>
@@ -971,20 +989,6 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                       </select>
                     </div>
                   )}
-
-                  {/* Notes */}
-                  <div>
-                    <label className="label">{activeTab === 'savings' ? 'Note' : txType === 'transfer' ? 'Who / what for' : 'Notes'}</label>
-                    <input
-                      type="text"
-                      placeholder={activeTab === 'savings'
-                        ? 'e.g. Monthly SIP, bonus into FD…'
-                        : txType === 'transfer'
-                          ? selectedKind?.dir === 'in' ? 'e.g. Rahul paid back' : 'e.g. Lent to Priya'
-                          : 'Optional note...'}
-                      className="input" value={notes} onChange={e => setNotes(e.target.value)}
-                    />
-                  </div>
 
                   {/* Recurring */}
                   {txType !== 'transfer' && (

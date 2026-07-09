@@ -12,6 +12,9 @@ import {
 import type { ConfirmationResult } from 'firebase/auth'
 import toast from 'react-hot-toast'
 import GoogleIcon from '@/components/ui/GoogleIcon'
+import { doc, setDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
+import { auth } from '@/lib/firebase'
 
 type Screen =
   | 'home'
@@ -54,6 +57,11 @@ function HomeScreen({ onMethod, onGoogle }: { onMethod: (s: Screen) => void; onG
         <GoogleIcon />
         Continue with Google
       </button>
+
+      <p className="text-center text-xs text-slate-600 mt-4">
+        By continuing, you agree to our{' '}
+        <a href="/privacy" className="text-slate-500 hover:text-slate-400 underline underline-offset-2">Privacy Policy</a>
+      </p>
     </>
   )
 }
@@ -224,6 +232,7 @@ function EmailScreen({
   const [confirm, setConfirm] = useState('')
   const [showPw, setShowPw]   = useState(false)
   const [loading, setLoading] = useState(false)
+  const [agreedToPrivacy, setAgreedToPrivacy] = useState(false)
 
   async function handleSubmit() {
     if (!email || !password) return
@@ -236,6 +245,12 @@ function EmailScreen({
         await signInWithEmail(email, password)
       } else {
         await signUpWithEmail(email, password)
+        if (auth.currentUser) {
+          await setDoc(doc(db, 'users', auth.currentUser.uid), {
+            privacyAgreed: true,
+            privacyAgreedAt: new Date().toISOString(),
+          }, { merge: true })
+        }
       }
       toast.success(mode === 'signin' ? 'Welcome back!' : 'Account created!')
     } catch (err: unknown) {
@@ -315,11 +330,28 @@ function EmailScreen({
             onKeyDown={e => e.key === 'Enter' && handleSubmit()}
           />
         )}
+        {mode === 'signup' && (
+          <label className="flex items-start gap-2.5 cursor-pointer mt-1">
+            <input
+              type="checkbox"
+              checked={agreedToPrivacy}
+              onChange={e => setAgreedToPrivacy(e.target.checked)}
+              className="mt-0.5 accent-brand-500 flex-shrink-0"
+            />
+            <span className="text-xs text-slate-400 leading-relaxed">
+              I agree to the{' '}
+              <a href="/privacy" target="_blank" className="text-slate-300 hover:text-white underline underline-offset-2">
+                Privacy Policy
+              </a>
+              . My financial data is stored securely and only the developer can access it — solely for technical support.
+            </span>
+          </label>
+        )}
       </div>
 
       <button
         onClick={handleSubmit}
-        disabled={!email || !password || loading}
+        disabled={!email || !password || loading || (mode === 'signup' && !agreedToPrivacy)}
         className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white font-semibold py-3.5 rounded-2xl transition-colors text-sm mb-4"
       >
         {loading ? (mode === 'signin' ? 'Signing in…' : 'Creating account…') : (mode === 'signin' ? 'Sign In' : 'Create Account')}
