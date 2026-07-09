@@ -105,40 +105,72 @@ function HealthSection({ health }: { health: FinancialPulse['health'] }) {
 
 // ── Section: Cash Position ───────────────────────────────────────────────────
 
+function Row({ label, sub, value, color, indent = false }: {
+  label: string; sub?: string; value: string; color: string; indent?: boolean
+}) {
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+      padding: indent ? '5px 0 5px 14px' : '9px 0',
+      borderBottom: indent ? 'none' : '1px solid var(--border)',
+    }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <span style={{ fontSize: indent ? 12 : 13, color: indent ? 'var(--text-4)' : 'var(--text-2)' }}>{label}</span>
+        {sub && <div style={{ fontSize: 11, color: 'var(--info-ink)', fontStyle: 'italic', marginTop: 1 }}>{sub}</div>}
+      </div>
+      <span style={{ fontSize: indent ? 12 : 13, fontWeight: indent ? 500 : 600, color, flexShrink: 0 }}>{value}</span>
+    </div>
+  )
+}
+
 function CashSection({ cash }: { cash: FinancialPulse['cashPosition'] }) {
-  const rows = [
-    { label: 'Income received',  amount: cash.monthIncome,   sign: '+', color: 'var(--good)' },
-    { label: 'Spent so far',     amount: -cash.monthExpenses, sign: '−', color: 'var(--bad)' },
-    { label: 'Reserved ahead',   amount: -cash.upcomingTotal, sign: '−', color: 'var(--warn)', hide: cash.upcomingTotal === 0 },
-  ]
+  const positive  = cash.surplusNet >= 0
+  const totalIn   = cash.monthIncome + cash.carryForward
+  const totalOut  = cash.monthExpenses + cash.savingsContributed + cash.totalLent + cash.upcomingTotal
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {rows.filter(r => !r.hide).map((r, i) => (
-        <div key={i} style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '9px 0',
-          borderBottom: '1px solid var(--border)',
-        }}>
-          <div>
-            <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{r.label}</span>
-            {i === 0 && cash.borrowedIncome > 0 && (
-              <div style={{ fontSize: 11, color: 'var(--info-ink)', fontStyle: 'italic', marginTop: 1 }}>
-                incl. {formatCurrencyFull(cash.borrowedIncome)} borrowed
-              </div>
-            )}
-          </div>
-          <span style={{ fontSize: 13, fontWeight: 500, color: r.color }}>
-            {r.sign} {formatCurrencyFull(Math.abs(r.amount))}
-          </span>
-        </div>
-      ))}
 
-      {/* Free cash total */}
+      {/* ── IN ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--good)', display: 'inline-block', flexShrink: 0 }} />
+          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>In</span>
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{formatCurrencyFull(totalIn)}</span>
+      </div>
+      {/* In sub-rows */}
+      <Row label="↑ income" value={`+ ${formatCurrencyFull(cash.monthIncome)}`} color="var(--text-3)"
+        sub={cash.borrowedIncome > 0 ? `incl. ${formatCurrencyFull(cash.borrowedIncome)} borrowed` : undefined} indent />
+      {cash.carryForward > 0 && (
+        <Row label="↩ carried forward" value={`+ ${formatCurrencyFull(cash.carryForward)}`} color="var(--brand-ink)" indent />
+      )}
+
+      {/* ── OUT ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--surface-3)', display: 'inline-block', flexShrink: 0 }} />
+          <span style={{ fontSize: 13, color: 'var(--text-2)' }}>Out</span>
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{formatCurrencyFull(totalOut)}</span>
+      </div>
+      {/* Out sub-rows */}
+      <Row label="spent" value={`− ${formatCurrencyFull(cash.monthExpenses)}`} color="var(--text-3)" indent />
+      {cash.savingsContributed > 0 && (
+        <Row label="→ savings" value={`− ${formatCurrencyFull(cash.savingsContributed)}`} color="var(--brand-ink)" indent />
+      )}
+      {cash.totalLent > 0 && (
+        <Row label="→ lent out" value={`− ${formatCurrencyFull(cash.totalLent)}`} color="var(--warn-ink)" indent />
+      )}
+      {cash.upcomingTotal > 0 && (
+        <Row label="reserved ahead" value={`− ${formatCurrencyFull(cash.upcomingTotal)}`} color="var(--warn-ink)" indent />
+      )}
+
+      {/* ── SURPLUS ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0' }}>
-        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Free cash</span>
-        <span style={{ fontSize: 18, fontWeight: 700, color: cash.freeCash > 0 ? 'var(--good)' : 'var(--bad)' }}>
-          {formatCurrencyFull(cash.freeCash)}
+        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Surplus</span>
+        <span style={{ fontSize: 18, fontWeight: 700, color: positive ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
+          {positive ? '+' : '−'}{formatCurrencyFull(Math.abs(cash.surplusNet))}
         </span>
       </div>
 
@@ -152,7 +184,7 @@ function CashSection({ cash }: { cash: FinancialPulse['cashPosition'] }) {
           <Calendar size={13} />
           <span>
             <strong style={{ color: 'var(--text-2)' }}>{formatCurrencyFull(cash.dailyBudget)}/day</strong>
-            {' '}for the next {cash.daysLeft} days
+            {' '}to spend freely for the next {cash.daysLeft} days
           </span>
         </div>
       )}
@@ -280,7 +312,12 @@ function AllocRow({ label, reason, amount, type, freeCash, isEditing, editVal, o
 
 type EditTarget = { type: 'orig'; idx: number; val: string } | { type: 'custom'; idx: number; val: string }
 
-function AllocationsSection({ allocations, freeCash }: { allocations: FinancialPulse['allocations']; freeCash: number }) {
+function AllocationsSection({ allocations, freeCash, savingsContributed, upcomingIncome }: {
+  allocations: FinancialPulse['allocations']
+  freeCash: number
+  savingsContributed: number
+  upcomingIncome: number
+}) {
   const [skipped, setSkipped]           = useState<Set<number>>(new Set())
   const [overrides, setOverrides]       = useState<Record<number, number>>({})
   const [custom, setCustom]             = useState<Array<{ label: string; amount: number }>>([])
@@ -342,9 +379,42 @@ function AllocationsSection({ allocations, freeCash }: { allocations: FinancialP
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 4 }}>
-        Suggested split of {formatCurrencyFull(freeCash)}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginBottom: 4 }}>
+        <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+          Suggested split of {formatCurrencyFull(freeCash)}
+        </div>
+        {savingsContributed > 0 && (
+          <div style={{ fontSize: 11, color: 'var(--brand-ink)' }}>
+            ✓ {formatCurrencyFull(savingsContributed)} already saved this month · add more anytime
+          </div>
+        )}
       </div>
+
+      {/* Upcoming income banner */}
+      {upcomingIncome > 0 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 12px', borderRadius: 10,
+          background: 'color-mix(in oklch, var(--good) 12%, var(--surface))',
+          border: '1px solid color-mix(in oklch, var(--good) 25%, transparent)',
+          marginBottom: 4,
+        }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+            background: 'color-mix(in oklch, var(--good) 20%, transparent)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14,
+          }}>↑</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--good-ink)' }}>
+              +{formatCurrencyFull(upcomingIncome)} incoming
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 1 }}>
+              pending receipt · your allocation room grows once received
+            </div>
+          </div>
+        </div>
+      )}
 
       {activeOriginal.map(a => {
         const isEdit = editing?.type === 'orig' && editing.idx === a.origIdx
@@ -783,7 +853,12 @@ export default function PulseSheet({ open, onClose, pulse }: Props) {
             {pulse.allocations.length > 0 && (
               <div>
                 <SectionTitle>How to Allocate Free Cash</SectionTitle>
-                <AllocationsSection allocations={pulse.allocations} freeCash={pulse.cashPosition.freeCash} />
+                <AllocationsSection
+                  allocations={pulse.allocations}
+                  freeCash={pulse.cashPosition.freeCash}
+                  savingsContributed={pulse.cashPosition.savingsContributed}
+                  upcomingIncome={pulse.cashPosition.upcomingIncome}
+                />
               </div>
             )}
 

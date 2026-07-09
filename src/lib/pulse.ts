@@ -252,11 +252,11 @@ function generateHeadline(
   }
   if (health.label === 'critical') return 'Finances need immediate attention this month'
   if (health.label === 'caution') return 'A few areas to watch — review the details below'
-  if (cash.freeCash > 0 && health.label === 'excellent') {
-    return `Excellent shape — ₹${cash.freeCash.toLocaleString('en-IN')} ready to put to work`
+  if (cash.surplusNet > 0 && health.label === 'excellent') {
+    return `Excellent shape — ₹${cash.surplusNet.toLocaleString('en-IN')} surplus this cycle`
   }
-  if (cash.freeCash > 0) {
-    return `Solid month — ₹${cash.freeCash.toLocaleString('en-IN')} in free cash`
+  if (cash.surplusNet > 0) {
+    return `Solid month — ₹${cash.surplusNet.toLocaleString('en-IN')} surplus`
   }
   return 'Here is your financial snapshot for this month'
 }
@@ -299,17 +299,31 @@ export function computePulse(
     return s + remaining
   }, 0)
 
-  const totalCashIn = curSummary.totalIncome + curSummary.totalBorrowed
-  // Cash already committed to savings vehicles this month is no longer free.
-  const netSavingsOut = Math.max(0, curSummary.savingsContributed - curSummary.savingsWithdrawn)
-  const freeCash    = Math.max(totalCashIn - curSummary.totalExpenses - upcomingTotal - netSavingsOut, 0)
-  const dailyBudget = daysLeft > 0 ? Math.round(freeCash / daysLeft) : 0
+  // Upcoming income: money still pending to arrive in the next 30 days
+  const upcomingIncome = upcomingExpenses.reduce((s, u) => {
+    if (u.flowType !== 'income') return s
+    const d = parseISO(u.dueDate)
+    if (!isBefore(d, thirtyDaysOut)) return s
+    const remaining = u.amount - (paidByUpcoming.get(u.id) ?? 0)
+    return remaining > 0 ? s + remaining : s
+  }, 0)
+
+  const carryForward  = Math.max(0, prevSummary.cashNet)
+  const surplusNet    = curSummary.cashNet + carryForward   // matches Net cashflow everywhere
+  // surplusNet already has savings deducted (via cashNet formula), so only subtract upcoming
+  const freeCash      = Math.max(surplusNet - upcomingTotal, 0)
+  const dailyBudget   = daysLeft > 0 ? Math.round(freeCash / daysLeft) : 0
 
   const cashPosition: PulseCashPosition = {
-    monthIncome: totalCashIn,
-    borrowedIncome: curSummary.totalBorrowed,
-    monthExpenses: curSummary.totalExpenses,
+    monthIncome:        curSummary.totalIncome + curSummary.totalBorrowed,
+    borrowedIncome:     curSummary.totalBorrowed,
+    monthExpenses:      curSummary.totalExpenses,
+    savingsContributed: curSummary.savingsContributed,
+    totalLent:          curSummary.totalLent,
     upcomingTotal,
+    upcomingIncome,
+    carryForward,
+    surplusNet,
     freeCash,
     daysLeft,
     dailyBudget,

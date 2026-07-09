@@ -25,6 +25,7 @@ export default function UpcomingPage() {
   const [confirm, setConfirm]           = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [spentOpen, setSpentOpen]       = useState(false)
 
+
   const paidByItem = useMemo(() => {
     const map = new Map<string, number>()
     for (const p of upcomingPayments) {
@@ -55,12 +56,15 @@ export default function UpcomingPage() {
     return map
   }, [pending])
 
-  const expenses    = upcomingExpenses.filter(i => (i.flowType ?? 'expense') === 'expense')
-  const incomes     = upcomingExpenses.filter(i => i.flowType === 'income')
-  const totalOut    = expenses.reduce((s, i) => s + i.amount, 0)
-  const totalIn     = incomes.reduce((s, i) => s + i.amount, 0)
-  const totalLogged = Array.from(paidByItem.values()).reduce((s, v) => s + v, 0)
-  const netPosition = totalIn - totalOut
+  const expenses        = upcomingExpenses.filter(i => (i.flowType ?? 'expense') === 'expense')
+  const incomes         = upcomingExpenses.filter(i => i.flowType === 'income')
+  const totalOut        = expenses.reduce((s, i) => s + i.amount, 0)
+  const totalIn         = incomes.reduce((s, i) => s + i.amount, 0)
+  const expenseSettled  = expenses.reduce((s, i) => s + Math.min(i.amount, paidByItem.get(i.id) ?? 0), 0)
+  const incomePending   = incomes.reduce((s, i) => s + Math.max(0, i.amount - (paidByItem.get(i.id) ?? 0)), 0)
+  const incomeReceived  = totalIn - incomePending
+  const allExpensesSettled = totalOut > 0 && expenseSettled >= totalOut
+  const netPosition     = totalIn - totalOut
 
   // Expenses that are OVERDUE or due within the next 7 days (unpaid)
   const { next7Total, overdueCount, next7Items } = useMemo(() => {
@@ -112,11 +116,13 @@ export default function UpcomingPage() {
               background: 'radial-gradient(ellipse 70% 60% at 100% 0%, rgba(255,255,255,0.14) 0%, transparent 60%)',
             }} />
 
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-              <div>
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, flexWrap: 'wrap' }}>
+
+              {/* Left — Expense status */}
+              <div style={{ flex: 1, minWidth: 130, paddingRight: totalIn > 0 ? 20 : 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)' }}>
-                    Due in next 7 days
+                    {next7Total > 0 ? 'Due in next 7 days' : 'Expenses'}
                   </span>
                   {overdueCount > 0 && (
                     <span style={{
@@ -128,30 +134,74 @@ export default function UpcomingPage() {
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: 'clamp(30px, 6vw, 46px)', fontWeight: 800, color: '#fff', letterSpacing: '-0.04em', lineHeight: 1 }}>
-                  {formatCurrencyFull(next7Total)}
-                </div>
-                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', marginTop: 8 }}>
-                  Full cycle outflow {formatCurrencyFull(totalOut)}
-                  {totalLogged > 0 && ` · ${formatCurrencyFull(totalLogged)} logged`}
+
+                {next7Total > 0 ? (
+                  <div style={{ fontSize: 'clamp(28px, 5.5vw, 44px)', fontWeight: 800, color: '#fff', letterSpacing: '-0.04em', lineHeight: 1 }}>
+                    {formatCurrencyFull(next7Total)}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{
+                      width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+                      background: 'rgba(255,255,255,0.18)', border: '1.5px solid rgba(255,255,255,0.38)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <CheckCircle2 size={17} color="#fff" strokeWidth={2.2} />
+                    </div>
+                    <div style={{ fontSize: 'clamp(22px, 4vw, 30px)', fontWeight: 800, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
+                      {allExpensesSettled ? 'All settled' : 'Nothing due'}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)', marginTop: 8 }}>
+                  {totalOut > 0
+                    ? `${formatCurrencyFull(expenseSettled)} of ${formatCurrencyFull(totalOut)} logged`
+                    : 'No expenses scheduled'}
                 </div>
               </div>
 
-              {/* Coming in pill */}
+              {/* Divider */}
               {totalIn > 0 && (
-                <div style={{
-                  background: 'rgba(255,255,255,0.18)',
-                  border: '1px solid rgba(255,255,255,0.28)',
-                  borderRadius: 14, padding: '10px 14px',
-                  backdropFilter: 'blur(8px)',
-                  flexShrink: 0,
-                }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>
-                    Incoming
+                <div style={{ width: 1, background: 'rgba(255,255,255,0.2)', margin: '2px 0', alignSelf: 'stretch', flexShrink: 0 }} />
+              )}
+
+              {/* Right — Income status */}
+              {totalIn > 0 && (
+                <div style={{ flex: 1, minWidth: 130, paddingLeft: 20 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: 8 }}>
+                    Income
                   </div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>
-                    +{formatCurrencyFull(totalIn)}
-                  </div>
+
+                  {incomePending > 0 ? (
+                    <>
+                      <div style={{ fontSize: 'clamp(28px, 5.5vw, 44px)', fontWeight: 800, color: '#fff', letterSpacing: '-0.04em', lineHeight: 1 }}>
+                        +{formatCurrencyFull(incomePending)}
+                      </div>
+                      <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)', marginTop: 8 }}>
+                        pending
+                        {incomeReceived > 0 && ` · ${formatCurrencyFull(incomeReceived)} received`}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                          width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+                          background: 'rgba(255,255,255,0.18)', border: '1.5px solid rgba(255,255,255,0.38)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          <CheckCircle2 size={17} color="#fff" strokeWidth={2.2} />
+                        </div>
+                        <div style={{ fontSize: 'clamp(22px, 4vw, 30px)', fontWeight: 800, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1.1 }}>
+                          All received
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)', marginTop: 8 }}>
+                        {formatCurrencyFull(totalIn)} this cycle
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>

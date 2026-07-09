@@ -209,6 +209,7 @@ export default function TasksPage() {
   const [modal, setModal] = useState<{ open: boolean; task?: Task; priority?: TaskPriority }>({ open: false })
   const [showDone, setShowDone] = useState(false)
 
+
   const pending = useMemo(() => tasks.filter(t => t.status === 'pending'), [tasks])
   const done    = useMemo(() => tasks.filter(t => t.status === 'done')
     .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? '')), [tasks])

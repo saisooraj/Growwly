@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import MobileNav from './MobileNav'
+import FloatingActions from './FloatingActions'
 import AuthGuard from '@/components/ui/AuthGuard'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import { useAppStore } from '@/store/appStore'
@@ -205,6 +206,7 @@ export default function AppShell({ title, children }: Props) {
           </main>
         </div>
         <MobileNav />
+        <FloatingActions />
 
       {/* Global add-transaction modal — lives outside the scroll/transform tree */}
       <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />

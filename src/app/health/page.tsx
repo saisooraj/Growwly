@@ -205,6 +205,7 @@ export default function HealthPage() {
   const [confirm, setConfirm]   = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [seeding, setSeeding]   = useState(false)
 
+
   // Optimistic local log counts — keyed by routineId
   const [localCounts, setLocalCounts] = useState<Record<string, number>>({})
 

@@ -209,8 +209,13 @@ export interface PulseCashPosition {
   monthIncome: number
   borrowedIncome: number  // portion of monthIncome that is borrowed
   monthExpenses: number
-  upcomingTotal: number   // expenses due in next 30 days
-  freeCash: number        // income − expenses − upcoming
+  savingsContributed: number
+  totalLent: number
+  upcomingTotal: number   // expense outflows still owed in next 30 days
+  upcomingIncome: number  // income still pending to arrive in next 30 days
+  carryForward: number    // previous cycle's positive cashNet
+  surplusNet: number      // cashNet + carryForward — matches Net cashflow everywhere else
+  freeCash: number        // surplusNet − savings − upcoming (daily-budget base)
   daysLeft: number
   dailyBudget: number     // freeCash / daysLeft
 }

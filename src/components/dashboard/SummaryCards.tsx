@@ -111,14 +111,16 @@ export default function SummaryCards() {
   const pendingBorrowCount = borrowings
     .filter(b => b.type === 'lent' && b.status !== 'repaid').length
 
-  const isDeficit = cur.cashNet < 0
+  const carryForward  = prev ? Math.max(0, prev.cashNet) : 0
+  const netCashflow   = cur.cashNet + carryForward
+  const isDeficit     = netCashflow < 0
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4" style={{ gap: 'var(--row-gap)' }}>
       <Stat
         label="Income"
         dateRange={cycleLabel ?? undefined}
-        value={formatCurrencyFull(cur.totalIncome + cur.totalBorrowed)}
+        value={formatCurrencyFull(cur.totalIncome + cur.totalBorrowed + carryForward)}
         sub={incomeChange !== null ? `${Number(incomeChange) > 0 ? '+' : ''}${incomeChange}% vs last month` : 'This month'}
         hint={cur.totalBorrowed > 0 ? `incl. ${formatCurrencyFull(cur.totalBorrowed)} borrowed` : undefined}
         tone="good"
@@ -142,8 +144,9 @@ export default function SummaryCards() {
       <Stat
         label="Net cashflow"
         dateRange={cycleLabel ?? undefined}
-        value={formatCurrencyFull(Math.abs(cur.cashNet))}
+        value={formatCurrencyFull(Math.abs(netCashflow))}
         sub={isDeficit ? 'Deficit — burning savings' : 'Surplus this month'}
+        hint={carryForward > 0 ? `incl. ${formatCurrencyFull(carryForward)} from last month` : undefined}
         tone={isDeficit ? 'bad' : 'good'}
         icon={<ArrowDownRight size={14} />}
         maskable

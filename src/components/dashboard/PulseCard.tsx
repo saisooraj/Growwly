@@ -62,9 +62,9 @@ export default function PulseCard() {
         {/* 3 key metrics */}
         <div style={{ display: 'flex', gap: 8 }}>
           {[
-            { label: 'Income',  value: formatCurrencyFull(pulse.cashPosition.monthIncome),   color: 'var(--good)' },
-            { label: 'Spent',   value: formatCurrencyFull(pulse.cashPosition.monthExpenses),  color: 'var(--text)' },
-            { label: 'Free',    value: formatCurrencyFull(pulse.cashPosition.freeCash),        color: c.bar },
+            { label: 'Income',   value: formatCurrencyFull(pulse.cashPosition.monthIncome),  color: 'var(--good)' },
+            { label: 'Spent',    value: formatCurrencyFull(pulse.cashPosition.monthExpenses), color: 'var(--text)' },
+            { label: 'Surplus',  value: formatCurrencyFull(pulse.cashPosition.surplusNet),    color: c.bar },
           ].map(m => (
             <div
               key={m.label}

@@ -15,6 +15,7 @@ export default function ProjectsPage() {
   const [editProject, setEditProject] = useState<Project | null>(null)
   const projects = useAppStore((s) => s.projects)
 
+
   const active = projects.filter((p) => p.status === 'active')
   const others = projects.filter((p) => p.status !== 'active')
 

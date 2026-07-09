@@ -13,6 +13,7 @@ export default function BorrowingsPage() {
   const [addOpen, setAddOpen] = useState(false)
   const [editBorrowing, setEditBorrowing] = useState<Borrowing | null>(null)
 
+
   return (
     <AppShell title="Borrowings">
       <div className="anim-page" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>

@@ -30,10 +30,15 @@ export default function UpcomingCard() {
   // Only first 5 for display
   const relevant = relevantAll.slice(0, 5)
 
-  const totalOut    = relevantAll.filter(i => (i.flowType ?? 'expense') === 'expense').reduce((s, i) => s + i.amount, 0)
-  const totalIn     = relevantAll.filter(i => i.flowType === 'income').reduce((s, i) => s + i.amount, 0)
-  const totalPaid   = relevantAll.reduce((s, i) => s + (paidByItem.get(i.id) ?? 0), 0)
-  const netPosition = totalIn - totalOut
+  // Use remaining (unpaid) amounts — paid items should not inflate the pending net
+  const remainingOut = relevantAll
+    .filter(i => (i.flowType ?? 'expense') === 'expense')
+    .reduce((s, i) => s + Math.max(0, i.amount - (paidByItem.get(i.id) ?? 0)), 0)
+  const remainingIn  = relevantAll
+    .filter(i => i.flowType === 'income')
+    .reduce((s, i) => s + Math.max(0, i.amount - (paidByItem.get(i.id) ?? 0)), 0)
+  const totalPaid    = relevantAll.reduce((s, i) => s + (paidByItem.get(i.id) ?? 0), 0)
+  const netPosition  = remainingIn - remainingOut
 
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -76,8 +81,8 @@ export default function UpcomingCard() {
               <span style={{ fontSize: 12, color: 'var(--text-3)' }}>net</span>
             </div>
             <div style={{ display: 'flex', gap: 10, fontSize: 11 }}>
-              {totalOut > 0 && <span style={{ color: 'var(--bad-ink)' }}>↓ {formatCurrencyFull(totalOut)} out</span>}
-              {totalIn > 0  && <span style={{ color: 'var(--good-ink)' }}>↑ {formatCurrencyFull(totalIn)} in</span>}
+              {remainingOut > 0 && <span style={{ color: 'var(--bad-ink)' }}>↓ {formatCurrencyFull(remainingOut)} due</span>}
+              {remainingIn > 0  && <span style={{ color: 'var(--good-ink)' }}>↑ {formatCurrencyFull(remainingIn)} in</span>}
               {totalPaid > 0 && <span style={{ color: 'var(--text-3)' }}>· {formatCurrencyFull(totalPaid)} logged</span>}
             </div>
           </div>
