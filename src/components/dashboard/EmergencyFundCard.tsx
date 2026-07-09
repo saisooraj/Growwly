@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { ShieldCheck, ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, ArrowRight } from 'lucide-react'
+import { ShieldCheck, ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, ArrowRight, Eye, EyeOff } from 'lucide-react'
 import Link from 'next/link'
 import { useAppStore } from '@/store/appStore'
 import { formatCurrencyFull, EMERGENCY_FUND_VEHICLE } from '@/lib/utils'
@@ -44,6 +44,7 @@ export default function EmergencyFundCard() {
       .sort((a, b) => b.date.localeCompare(a.date))
   }, [transactions])
 
+  const [masked, setMasked] = useState(true)
   const [txOpen, setTxOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [balance, setBalance] = useState('')
@@ -120,18 +121,26 @@ export default function EmergencyFundCard() {
             <div className="h-eyebrow">Emergency fund</div>
             {emergencyFund && (
               <div style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 2 }}>
-                Target {formatCurrencyFull(emergencyFund.targetAmount)} · 6 mo runway
+                Target {masked ? '₹ ••••' : formatCurrencyFull(emergencyFund.targetAmount)} · 6 mo runway
               </div>
             )}
           </div>
         </div>
-        <button
-          onClick={startEdit}
-          className="btn btn-sm"
-          style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-        >
-          {emergencyFund ? 'Top up' : 'Set up'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <button
+            onClick={() => setMasked(v => !v)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}
+          >
+            {masked ? <Eye size={13} /> : <EyeOff size={13} />}
+          </button>
+          <button
+            onClick={startEdit}
+            className="btn btn-sm"
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {emergencyFund ? 'Top up' : 'Set up'}
+          </button>
+        </div>
       </div>
 
       {emergencyFund ? (
@@ -139,11 +148,11 @@ export default function EmergencyFundCard() {
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, justifyContent: 'space-between' }}>
             <div>
               <div className="display-num" style={{ fontSize: 30, color: 'var(--text)' }}>
-                {formatCurrencyFull(emergencyFund.currentBalance)}
+                {masked ? '₹ ••••••' : formatCurrencyFull(emergencyFund.currentBalance)}
               </div>
               {emergencyFund.usedAmount > 0 && (
                 <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
-                  Used this year: {formatCurrencyFull(emergencyFund.usedAmount)}
+                  Used this year: {masked ? '₹ ••••' : formatCurrencyFull(emergencyFund.usedAmount)}
                 </div>
               )}
             </div>
@@ -200,7 +209,7 @@ export default function EmergencyFundCard() {
                           </p>
                         </div>
                         <span style={{ fontSize: 12, fontWeight: 600, color: isWithdrawal ? 'var(--bad-ink)' : 'var(--good-ink)', flexShrink: 0 }}>
-                          {isWithdrawal ? '−' : '+'}{formatCurrencyFull(t.amount)}
+                          {masked ? '₹ ••••' : `${isWithdrawal ? '−' : '+'}${formatCurrencyFull(t.amount)}`}
                         </span>
                       </div>
                     )

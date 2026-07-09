@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Zap, ChevronRight } from 'lucide-react'
+import { Zap, ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { usePulse } from '@/hooks/usePulse'
 import { formatCurrency, formatCurrencyFull } from '@/lib/utils'
@@ -16,7 +16,8 @@ const HEALTH_COLOR = {
 
 export default function PulseCard() {
   const pulse = usePulse()
-  const [open, setOpen] = useState(false)
+  const [open, setOpen]     = useState(false)
+  const [masked, setMasked] = useState(true)
 
   const c = HEALTH_COLOR[pulse.health.label]
   const monthLabel = format(parseISO(`${pulse.month}-01`), 'MMMM')
@@ -51,20 +52,28 @@ export default function PulseCard() {
               {pulse.health.score} / 100 · {pulse.health.label.charAt(0).toUpperCase() + pulse.health.label.slice(1)}
             </span>
           </div>
-          <ChevronRight size={15} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <button
+              onClick={e => { e.stopPropagation(); setMasked(v => !v) }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}
+            >
+              {masked ? <Eye size={13} /> : <EyeOff size={13} />}
+            </button>
+            <ChevronRight size={15} style={{ color: 'var(--text-3)' }} />
+          </div>
         </div>
 
         {/* Headline */}
         <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0, lineHeight: 1.45 }}>
-          {pulse.headline}
+          {masked ? 'Tap the eye to reveal your financial pulse' : pulse.headline}
         </p>
 
         {/* 3 key metrics */}
         <div style={{ display: 'flex', gap: 8 }}>
           {[
-            { label: 'Income',   value: formatCurrencyFull(pulse.cashPosition.monthIncome),  color: 'var(--good)' },
-            { label: 'Spent',    value: formatCurrencyFull(pulse.cashPosition.monthExpenses), color: 'var(--text)' },
-            { label: 'Surplus',  value: formatCurrencyFull(pulse.cashPosition.surplusNet),    color: c.bar },
+            { label: 'Income',  value: formatCurrencyFull(pulse.cashPosition.monthIncome),  color: 'var(--good)' },
+            { label: 'Spent',   value: formatCurrencyFull(pulse.cashPosition.monthExpenses), color: 'var(--text)' },
+            { label: 'Surplus', value: formatCurrencyFull(pulse.cashPosition.surplusNet),    color: c.bar },
           ].map(m => (
             <div
               key={m.label}
@@ -78,7 +87,7 @@ export default function PulseCard() {
                 {m.label}
               </span>
               <span style={{ fontSize: 14, fontWeight: 700, color: m.color, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {m.value}
+                {masked ? '₹ ••••' : m.value}
               </span>
             </div>
           ))}
@@ -88,10 +97,10 @@ export default function PulseCard() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
             {pulse.upcoming.length > 0
-              ? `${pulse.upcoming.length} obligation${pulse.upcoming.length !== 1 ? 's' : ''} ahead · ${formatCurrency(pulse.cashPosition.upcomingTotal)} reserved`
+              ? `${pulse.upcoming.length} obligation${pulse.upcoming.length !== 1 ? 's' : ''} ahead`
               : `${pulse.cashPosition.daysLeft} days left this month`
             }
-            {pulse.cashPosition.daysLeft > 0 && pulse.cashPosition.dailyBudget > 0 && (
+            {!masked && pulse.cashPosition.daysLeft > 0 && pulse.cashPosition.dailyBudget > 0 && (
               <> · {formatCurrency(pulse.cashPosition.dailyBudget)}/day</>
             )}
           </div>

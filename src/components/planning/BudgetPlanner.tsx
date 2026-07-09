@@ -9,10 +9,13 @@ import { EXPENSE_CATEGORIES, SAVINGS_VEHICLES, formatCurrencyFull, buildMonthlyS
 import { getCategoryDisplayName } from '@/lib/categoryIcons'
 import type { Category } from '@/types'
 import toast from 'react-hot-toast'
-import { Check, Edit2 } from 'lucide-react'
+import { Check, Edit2, Eye, EyeOff } from 'lucide-react'
+
+const MASK = '₹ ••••'
 
 export default function BudgetPlanner() {
   const { user } = useAuth()
+  const [masked, setMasked] = useState(true)
   const { budgets, transactions, selectedMonth, settings } = useAppStore()
   const refresh = useRefreshData()
   const [editing, setEditing] = useState<Category | null>(null)
@@ -52,20 +55,32 @@ export default function BudgetPlanner() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Totals header + eye toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>This month</span>
+        <button
+          onClick={() => setMasked(v => !v)}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'inherit' }}
+        >
+          {masked ? <Eye size={12} /> : <EyeOff size={12} />}
+          {masked ? 'Show' : 'Hide'}
+        </button>
+      </div>
+
       {/* Totals */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 4 }}>
         {[
-          { label: 'Planned', value: totalPlanned, color: 'var(--text)' },
-          { label: 'Actual',  value: totalActual,  color: 'var(--text)' },
-          { label: 'Variance', value: Math.abs(variance), color: variance >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)', prefix: variance >= 0 ? '+' : '−' },
+          { label: 'Planned',  value: totalPlanned,       color: 'var(--text)',                                               prefix: undefined },
+          { label: 'Actual',   value: totalActual,        color: 'var(--text)',                                               prefix: undefined },
+          { label: 'Variance', value: Math.abs(variance), color: variance >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)',        prefix: variance >= 0 ? '+' : '−' },
         ].map(({ label, value, color, prefix }) => (
           <div key={label} className="card-sm" style={{
             background: label === 'Variance' ? (variance >= 0 ? 'var(--good-soft)' : 'var(--bad-soft)') : 'var(--surface)',
             padding: '10px 12px',
           }}>
-            <p style={{ fontSize: 10.5, color: 'var(--text-3)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 600 }}>{label}</p>
-            <p className="display-num" style={{ fontSize: 'clamp(12px, 3.5vw, 17px)', color, fontWeight: 600, lineHeight: 1.2 }}>
-              {prefix ?? ''}{formatCurrencyFull(value)}
+            <p style={{ fontSize: 10.5, color: 'var(--text-3)', marginBottom: 4, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 600 }}>{label}</p>
+            <p className="display-num" style={{ fontSize: 'clamp(12px, 3.5vw, 17px)', color, fontWeight: 600, lineHeight: 1.2, margin: 0 }}>
+              {masked ? MASK : `${prefix ?? ''}${formatCurrencyFull(value)}`}
             </p>
           </div>
         ))}
@@ -121,7 +136,7 @@ export default function BudgetPlanner() {
                   onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
                 >
                   <Edit2 size={11} />
-                  {planned > 0 ? formatCurrencyFull(planned) : 'Set budget'}
+                  {planned > 0 ? (masked ? MASK : formatCurrencyFull(planned)) : 'Set budget'}
                 </button>
               )}
             </div>
@@ -134,10 +149,10 @@ export default function BudgetPlanner() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-3)', gap: 4 }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>
-                    Spent: <span className="num">{formatCurrencyFull(actual)}</span>
+                    Spent: <span className="num">{masked ? MASK : formatCurrencyFull(actual)}</span>
                   </span>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1, textAlign: 'right' }}>
-                    Left: <span className="num">{formatCurrencyFull(Math.max(planned - actual, 0))}</span>
+                    Left: <span className="num">{masked ? MASK : formatCurrencyFull(Math.max(planned - actual, 0))}</span>
                   </span>
                 </div>
               </>
@@ -145,7 +160,7 @@ export default function BudgetPlanner() {
 
             {planned === 0 && actual > 0 && (
               <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                Spent: <span className="num">{formatCurrencyFull(actual)}</span> · no budget set
+                Spent: <span className="num">{masked ? MASK : formatCurrencyFull(actual)}</span> · no budget set
               </p>
             )}
           </div>

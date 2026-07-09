@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Pencil, X, Check, ChevronDown, Tags, Home, Sparkles, Leaf } from 'lucide-react'
+import { Pencil, X, Check, ChevronDown, Tags, Home, Sparkles, Leaf, Eye, EyeOff } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
@@ -40,12 +40,14 @@ const BUCKET_META: Record<Bucket, { label: string; color: string; ink: string; s
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
+const MASK = '₹ ••••'
+
 function BucketRow({
-  bucket, pct, target, amount, items, totalIncome, expanded, onToggle,
+  bucket, pct, target, amount, items, totalIncome, expanded, onToggle, masked,
 }: {
   bucket: Bucket; pct: number; target: number; amount: number
   items: { cat: string; amt: number }[]; totalIncome: number
-  expanded: boolean; onToggle: () => void
+  expanded: boolean; onToggle: () => void; masked: boolean
 }) {
   const meta = BUCKET_META[bucket]
   const diff = pct - target
@@ -87,7 +89,8 @@ function BucketRow({
             }}>{statusLabel}</span>
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontWeight: 600 }}>
-            {formatCurrencyFull(amount)} <span style={{ color: 'var(--text-4)' }}>of {formatCurrencyFull(Math.round(target / 100 * totalIncome))} target</span>
+            {masked ? MASK : formatCurrencyFull(amount)}{' '}
+            <span style={{ color: 'var(--text-4)' }}>of {masked ? MASK : formatCurrencyFull(Math.round(target / 100 * totalIncome))} target</span>
           </div>
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -118,7 +121,7 @@ function BucketRow({
                   <div style={{ width: 56, height: 4, background: 'var(--surface-3)', borderRadius: 999, flexShrink: 0 }}>
                     <div style={{ height: '100%', width: `${barPct}%`, background: meta.color, borderRadius: 999 }} />
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', minWidth: 70, textAlign: 'right' }}>{formatCurrencyFull(amt)}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', minWidth: 70, textAlign: 'right' }}>{masked ? MASK : formatCurrencyFull(amt)}</span>
                 </div>
               )
             })
@@ -140,6 +143,7 @@ export default function SpendingRuleCard() {
   const needsCats   = settings?.categoryBuckets?.needs   ?? DEFAULT_NEEDS
   const savingsCats = settings?.categoryBuckets?.savings ?? DEFAULT_SAVINGS
 
+  const [masked, setMasked]                   = useState(true)
   const [editingRule, setEditingRule]         = useState(false)
   const [editingCats, setEditingCats]         = useState(false)
   const [expandedBucket, setExpandedBucket]   = useState<Bucket | null>(null)
@@ -268,10 +272,16 @@ export default function SpendingRuleCard() {
             <div>
               <div className="h-eyebrow" style={{ marginBottom: 6 }}>Monthly income</div>
               <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em', color: 'var(--text)', lineHeight: 1 }}>
-                {formatCurrencyFull(totalIncome === 1 ? 0 : totalIncome)}
+                {masked ? '₹ ••••••' : formatCurrencyFull(totalIncome === 1 ? 0 : totalIncome)}
               </div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                onClick={() => setMasked(v => !v)}
+                style={{ padding: '6px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}
+              >
+                {masked ? <Eye size={12} /> : <EyeOff size={12} />}
+              </button>
               {!editingRule && !editingCats && (
                 <>
                   <button onClick={openCatEdit} style={{ padding: '6px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>
@@ -410,6 +420,7 @@ export default function SpendingRuleCard() {
             totalIncome={totalIncome}
             expanded={expandedBucket === b}
             onToggle={() => setExpandedBucket(prev => prev === b ? null : b)}
+            masked={masked}
           />
         ))}
       </div>
