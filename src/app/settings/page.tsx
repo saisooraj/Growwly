@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useRef, useEffect } from 'react'
 import AppShell from '@/components/layout/AppShell'
+import { DEFAULT_CARD_ORDER } from '@/lib/dashboardConstants'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
 import { setUserSettings, exportAllUserData, importAllUserData } from '@/lib/firestore'
@@ -11,7 +12,7 @@ import { useRefreshData } from '@/hooks/useData'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { downloadJSON, getLast6Months, computeLongestMoneyStreak } from '@/lib/utils'
 import { getCycleRange, getLastWorkingDay, formatCycleRange } from '@/lib/cycle'
-import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, Leaf, Diamond, Trophy } from 'lucide-react'
+import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, Leaf, Diamond, Trophy, ChevronUp, ChevronDown } from 'lucide-react'
 import { IconLeaf, IconFlame } from '@tabler/icons-react'
 import LinkedAccounts from '@/components/auth/LinkedAccounts'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
@@ -50,6 +51,9 @@ export default function SettingsPage() {
   const [showTasksTab, setShowTasksTab]   = useState(false)
   const [savingTabs, setSavingTabs]       = useState(false)
 
+  // Dashboard card order
+  const [cardOrder, setCardOrder] = useState<string[]>(DEFAULT_CARD_ORDER)
+
   // Salary cycle
   const [cycleRule, setCycleRule]           = useState<SalaryCycleRule>('none')
   const [cycleFixedDay, setCycleFixedDay]   = useState('28')
@@ -72,6 +76,7 @@ export default function SettingsPage() {
       setShowHealthTab(settings.showHealthTab ?? false)
       setShowTasksTab(settings.showTasksTab ?? false)
       setAccentColor((settings.accentColor as typeof accentColor) ?? 'green')
+      setCardOrder(settings.dashboardCardOrder ?? DEFAULT_CARD_ORDER)
     }
   }, [settings])
 
@@ -742,6 +747,78 @@ export default function SettingsPage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Dashboard card order */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <LayoutGrid size={14} style={{ color: 'var(--brand)' }} />
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Dashboard Order</h2>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
+            Reorder the sections on your home screen using the arrows.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {cardOrder.map((id, idx) => {
+              const labels: Record<string, string> = {
+                hero: 'Hero — Safe to Spend, This Month, Streak',
+                insights: 'Smart Insights',
+                charts: 'Charts — Category Pie + Monthly Bar',
+                goals: 'Savings Goals',
+                transactions: 'Recent Transactions',
+                pulse: 'Monthly Pulse',
+                summary: 'KPI Summary Cards',
+                'health-ef': 'Health & Emergency Fund',
+                weekly: 'Weekly Tracker + Quick Actions',
+                upcoming: 'Upcoming Bills',
+              }
+              return (
+                <div key={id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 12px', borderRadius: 10,
+                  background: 'var(--surface-2)', border: '1px solid var(--border)',
+                }}>
+                  <span style={{ flex: 1, fontSize: 13, color: 'var(--text-2)', fontWeight: 500 }}>{labels[id] ?? id}</span>
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    <button
+                      disabled={idx === 0}
+                      onClick={async () => {
+                        const next = [...cardOrder]
+                        ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
+                        setCardOrder(next)
+                        await setUserSettings(user!.uid, { dashboardCardOrder: next })
+                      }}
+                      style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.3 : 1, display: 'flex' }}
+                    >
+                      <ChevronUp size={13} />
+                    </button>
+                    <button
+                      disabled={idx === cardOrder.length - 1}
+                      onClick={async () => {
+                        const next = [...cardOrder]
+                        ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
+                        setCardOrder(next)
+                        await setUserSettings(user!.uid, { dashboardCardOrder: next })
+                      }}
+                      style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', cursor: idx === cardOrder.length - 1 ? 'default' : 'pointer', opacity: idx === cardOrder.length - 1 ? 0.3 : 1, display: 'flex' }}
+                    >
+                      <ChevronDown size={13} />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <button
+            onClick={async () => {
+              setCardOrder(DEFAULT_CARD_ORDER)
+              await setUserSettings(user!.uid, { dashboardCardOrder: DEFAULT_CARD_ORDER })
+              toast.success('Order reset')
+            }}
+            style={{ fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', alignSelf: 'flex-start', padding: 0 }}
+          >
+            Reset to default
+          </button>
         </div>
 
         {/* Streak Badges */}

@@ -11,6 +11,9 @@ export type ActionType =
   | 'add_transaction'
   | 'update_transaction'
   | 'delete_transaction'
+  | 'set_budget'
+  | 'create_goal'
+  | 'create_project'
 
 export interface AddTransactionPayload {
   type: 'income' | 'expense'
@@ -34,10 +37,35 @@ export interface DeleteTransactionPayload {
   description: string // human-readable for preview
 }
 
+export interface SetBudgetPayload {
+  category: string
+  amount: number
+  month: string // YYYY-MM
+  description: string
+}
+
+export interface CreateGoalPayload {
+  name: string
+  targetAmount: number
+  targetDate?: string
+  description: string
+}
+
+export interface CreateProjectPayload {
+  name: string
+  totalBudget: number
+  description?: string
+  endDate?: string
+  projectDescription: string
+}
+
 export type ActionPayload =
   | AddTransactionPayload
   | UpdateTransactionPayload
   | DeleteTransactionPayload
+  | SetBudgetPayload
+  | CreateGoalPayload
+  | CreateProjectPayload
 
 export interface PendingAction {
   type: ActionType

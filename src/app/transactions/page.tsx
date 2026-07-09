@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useMemo, Suspense } from 'react'
+import { useState, useMemo, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Download, Plus, SlidersHorizontal, Eye, EyeOff, Search, X, PiggyBank } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
@@ -45,6 +45,24 @@ function TransactionsInner() {
   const [mobileMasked,  setMobileMasked] = useState(true)
 
   const { transactions, borrowings, selectedMonth, settings } = useAppStore()
+
+  // Infinite scroll — load more transactions when sentinel enters viewport
+  const VISIBLE_COUNT = 100
+  const [visibleCount, setVisibleCount] = useState(VISIBLE_COUNT)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) setVisibleCount(c => c + VISIBLE_COUNT)
+    }, { rootMargin: '300px' })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  // Reset visible count when filters change
+  useEffect(() => { setVisibleCount(VISIBLE_COUNT) }, [typeFilter, catFilter, vehicleFilter, searchQuery, selectedMonth])
   const summary  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
   const monthTxs = getTransactionsForMonth(transactions, selectedMonth, settings)
 
@@ -362,11 +380,19 @@ function TransactionsInner() {
               </div>
               <div style={{ padding: '8px 8px' }}>
                 <TransactionList
-                  transactions={filtered}
+                  transactions={filtered.slice(0, visibleCount)}
                   groupByDay
                   defaultExpandAll={catFilter !== 'all' || vehicleFilter !== 'all'}
                   showBorrowings={catFilter === 'all' && typeFilter === 'all' && !searchQuery.trim()}
                 />
+                {filtered.length > visibleCount && (
+                  <div ref={sentinelRef} style={{ height: 1, marginTop: 8 }} />
+                )}
+                {filtered.length > visibleCount && (
+                  <p style={{ fontSize: 12, color: 'var(--text-4)', textAlign: 'center', padding: '8px 0' }}>
+                    Showing {visibleCount} of {filtered.length} · scroll for more
+                  </p>
+                )}
               </div>
             </div>
           </div>

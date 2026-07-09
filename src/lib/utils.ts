@@ -379,6 +379,13 @@ export function computeLongestMoneyStreak(transactions: Transaction[], noSpendDa
   return longest
 }
 
+/** Sum of all expense + savings_contribution amounts for a given project. */
+export function computeProjectPaid(transactions: Transaction[], projectId: string): number {
+  return transactions
+    .filter(t => t.projectId === projectId && (t.type === 'expense' || isSavingsTransfer(t)))
+    .reduce((s, t) => s + t.amount, 0)
+}
+
 export function downloadJSON(data: unknown, filename: string) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)

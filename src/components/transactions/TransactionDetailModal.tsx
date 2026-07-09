@@ -4,9 +4,9 @@ import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { X, Edit2, Trash2, Calendar, FileText, Repeat, Folder, ArrowLeftRight } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
-import { deleteTransaction, deleteBorrowing } from '@/lib/firestore'
+import { deleteTransaction, deleteBorrowing, updateProject, updateSavingsGoal } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
-import { formatCurrencyFull, CATEGORY_COLORS, getTransferDisplay } from '@/lib/utils'
+import { formatCurrencyFull, CATEGORY_COLORS, getTransferDisplay, computeProjectPaid, isSavingsTransfer } from '@/lib/utils'
 import { CategoryIcon, getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import { useAppStore } from '@/store/appStore'
 import type { Transaction } from '@/types'
@@ -21,10 +21,9 @@ interface Props {
 
 export default function TransactionDetailModal({ tx, onClose }: Props) {
   const refresh = useRefreshData()
-  const { projects } = useAppStore()
+  const { projects, savingsGoals, setSavingsGoals } = useAppStore()
   const [editOpen, setEditOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const open = !!tx
 
@@ -42,18 +41,58 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
         setBorrowings(borrowings.filter(b => b.id !== borrowingId))
       } else {
         await deleteTransaction(tx.id)
-        const { transactions, setTransactions } = useAppStore.getState()
-        setTransactions(transactions.filter(t => t.id !== tx.id))
+        const { transactions, setTransactions, projects, setProjects } = useAppStore.getState()
+        const freshTxs = transactions.filter(t => t.id !== tx.id)
+        setTransactions(freshTxs)
+        // Recompute project.paid now that this transaction is gone
+        if (tx.projectId) {
+          const paid = computeProjectPaid(freshTxs, tx.projectId)
+          await updateProject(tx.projectId, { paid })
+          setProjects(projects.map(p => p.id === tx.projectId ? { ...p, paid } : p))
+        }
+        // Reverse savings contribution from matching goal
+        if (isSavingsTransfer(tx) && tx.transferKind === 'savings_contribution' && tx.savingsVehicle) {
+          const { savingsGoals: goals, setSavingsGoals: setGoals } = useAppStore.getState()
+          const goal = goals.find(g => g.name.trim().toLowerCase() === tx.savingsVehicle!.trim().toLowerCase())
+          if (goal) {
+            const newAmount = Math.max(0, goal.currentAmount - tx.amount)
+            await updateSavingsGoal(goal.id, { currentAmount: newAmount })
+            setGoals(goals.map(g => g.id === goal.id ? { ...g, currentAmount: newAmount } : g))
+          }
+        }
       }
     } catch {
       toast.error('Failed to delete')
       setDeleting(false)
       return
     }
-    toast.success('Deleted')
     onClose()
     setDeleting(false)
     refresh().catch(() => {})
+    // Show undo toast — re-creates the transaction if tapped within 5s
+    const snapshot = { ...tx }
+    toast(t => (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 13 }}>Deleted</span>
+        <button
+          onClick={async () => {
+            toast.dismiss(t.id)
+            try {
+              const { addTransaction: addTx } = await import('@/lib/firestore')
+              const { setTransactions: setTxs, transactions: currentTxs } = useAppStore.getState()
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+              const { id, userId, createdAt, ...payload } = snapshot
+              const newId = await addTx(userId, payload as never)
+              setTxs([{ ...snapshot, id: newId }, ...currentTxs])
+              toast.success('Restored')
+            } catch { toast.error('Could not restore') }
+          }}
+          style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand-ink)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+        >
+          Undo
+        </button>
+      </div>
+    ), { duration: 5000, icon: '🗑️' })
   }
 
   function handleEdit() {
@@ -211,7 +250,7 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
                     <Edit2 size={14} /> Edit
                   </button>
                   <button
-                    onClick={() => setConfirmOpen(true)}
+                    onClick={doDelete}
                     disabled={deleting}
                     className="btn-danger"
                     style={{ flex: 1, justifyContent: 'center', gap: 8 }}
@@ -230,12 +269,6 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
         open={editOpen}
         onClose={() => { setEditOpen(false); onClose() }}
         editTx={tx}
-      />
-      <ConfirmDialog
-        open={confirmOpen}
-        message={isSyntheticBorrowing ? 'Delete this borrowing record? This cannot be undone.' : 'Delete this transaction? This cannot be undone.'}
-        onConfirm={doDelete}
-        onClose={() => setConfirmOpen(false)}
       />
     </>
   )

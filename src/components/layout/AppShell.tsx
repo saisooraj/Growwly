@@ -10,6 +10,8 @@ import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
 import { Leaf } from 'lucide-react'
+import { parseISO, differenceInCalendarDays } from 'date-fns'
+import toast from 'react-hot-toast'
 
 interface Props {
   title?: string
@@ -90,8 +92,42 @@ function PullIndicator({ pull, busy }: { pull: number; busy: boolean }) {
 }
 
 export default function AppShell({ title, children }: Props) {
-  const settings = useAppStore(s => s.settings)
+  const settings     = useAppStore(s => s.settings)
+  const initialized  = useAppStore(s => s.initialized)
+  const upcomingExpenses  = useAppStore(s => s.upcomingExpenses)
+  const upcomingPayments  = useAppStore(s => s.upcomingPayments)
   const refresh = useRefreshData()
+
+  // ── Bill reminder (runs once per day after data loads) ──────────────────────
+  useEffect(() => {
+    if (!initialized) return
+    const today = new Date().toISOString().slice(0, 10)
+    const lastShown = localStorage.getItem('gw-bill-reminder-date')
+    if (lastShown === today) return
+
+    const paidMap = new Map<string, number>()
+    for (const p of upcomingPayments) {
+      paidMap.set(p.upcomingId, (paidMap.get(p.upcomingId) ?? 0) + p.amount)
+    }
+
+    const due = upcomingExpenses.filter(u => {
+      if ((u.flowType ?? 'expense') !== 'expense') return false
+      const remaining = u.amount - (paidMap.get(u.id) ?? 0)
+      if (remaining <= 0) return false
+      const days = differenceInCalendarDays(parseISO(u.dueDate), new Date())
+      return days >= 0 && days <= 3
+    })
+
+    if (due.length === 0) return
+    localStorage.setItem('gw-bill-reminder-date', today)
+
+    const names = due.slice(0, 2).map(u => u.label).join(', ')
+    const extra = due.length > 2 ? ` +${due.length - 2} more` : ''
+    toast(`📅 ${due.length} bill${due.length > 1 ? 's' : ''} due soon: ${names}${extra}`, {
+      duration: 6000,
+      icon: undefined,
+    })
+  }, [initialized]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const mainRef = useRef<HTMLElement>(null)
   const [scrollY, setScrollY] = useState(0)

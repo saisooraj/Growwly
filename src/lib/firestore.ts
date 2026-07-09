@@ -9,6 +9,10 @@ import {
   where,
   setDoc,
   getDoc,
+  orderBy,
+  limit as fsLimit,
+  startAfter,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { db } from './firebase'
 import type {
@@ -64,6 +68,24 @@ export async function getUserTransactions(
       const d = b.date.localeCompare(a.date)
       return d !== 0 ? d : b.createdAt.localeCompare(a.createdAt)
     })
+}
+
+const PAGE_SIZE = 50
+
+export async function getTransactionsPage(
+  userId: string,
+  cursor?: QueryDocumentSnapshot,
+): Promise<{ transactions: Transaction[]; lastDoc: QueryDocumentSnapshot | null; hasMore: boolean }> {
+  const q = cursor
+    ? query(collection(db, 'transactions'), where('userId', '==', userId), orderBy('date', 'desc'), orderBy('createdAt', 'desc'), startAfter(cursor), fsLimit(PAGE_SIZE))
+    : query(collection(db, 'transactions'), where('userId', '==', userId), orderBy('date', 'desc'), orderBy('createdAt', 'desc'), fsLimit(PAGE_SIZE))
+  const snap = await getDocs(q)
+  const transactions = snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))
+  return {
+    transactions,
+    lastDoc: snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null,
+    hasMore: snap.docs.length === PAGE_SIZE,
+  }
 }
 
 // ── Budgets ──────────────────────────────────────────────────────────────────

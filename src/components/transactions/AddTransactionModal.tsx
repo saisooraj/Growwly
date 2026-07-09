@@ -5,10 +5,10 @@ import { Dialog, Transition } from '@headlessui/react'
 import { X, RefreshCw, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Split, UserPlus, Trash2, PiggyBank } from 'lucide-react'
 import { IconMedal, IconCrane } from '@tabler/icons-react'
 import { format } from 'date-fns'
-import { addTransaction, updateTransaction, updateProject, addBorrowing, updateBorrowing, setUserSettings, setEmergencyFund } from '@/lib/firestore'
+import { addTransaction, updateTransaction, updateProject, updateSavingsGoal, addBorrowing, updateBorrowing, setUserSettings, setEmergencyFund } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
-import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTransfer, buildMonthlySummary, EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/utils'
+import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTransfer, buildMonthlySummary, EXPENSE_CATEGORIES, INCOME_CATEGORIES, computeProjectPaid } from '@/lib/utils'
 import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import { useAppStore } from '@/store/appStore'
 import CategoryPicker from '@/components/transactions/CategoryPicker'
@@ -69,7 +69,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 export default function AddTransactionModal({ open, onClose, editTx }: Props) {
   const { user } = useAuth()
   const refresh = useRefreshData()
-  const { projects, budgets, transactions, borrowings, settings, emergencyFund } = useAppStore()
+  const { projects, budgets, transactions, borrowings, settings, emergencyFund, savingsGoals, setSavingsGoals } = useAppStore()
 
   // Core fields
   const [activeTab, setActiveTab]       = useState<Tab>(savingsTabFor(editTx))
@@ -83,6 +83,7 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
   const [category, setCategory]         = useState<string>(editTx?.category ?? 'Food & Dining')
   const [date, setDate]                 = useState(editTx?.date ?? format(new Date(), 'yyyy-MM-dd'))
   const [notes, setNotes]               = useState(editTx?.notes ?? '')
+  const [suggestedCat, setSuggestedCat] = useState<string | null>(null)
   const [projectId, setProjectId]       = useState(editTx?.projectId ?? '')
   const [isRecurring, setIsRecurring]   = useState(editTx?.isRecurring ?? false)
   const [saving, setSaving]             = useState(false)
@@ -132,6 +133,25 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
       if (match) setProjectId(match.id)
     }
   }, [category, txType]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Auto-categorization from notes (debounced 600ms) ───────────────────────
+  useEffect(() => {
+    if (activeTab === 'savings' || txType === 'transfer') return
+    if (notes.trim().length < 3) { setSuggestedCat(null); return }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/chat/categorize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notes: notes.trim(), type: txType }),
+        })
+        const data = await res.json()
+        if (data.category && data.category !== category) setSuggestedCat(data.category)
+        else setSuggestedCat(null)
+      } catch { /* silent */ }
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [notes, txType, activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Split calculations ──────────────────────────────────────────────────────
 
@@ -265,35 +285,19 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
         ...(projectId && (txType === 'expense' || activeTab === 'savings') ? { projectId } : {}),
       }
 
+      // Collect affected project IDs upfront so we can recompute after refresh
+      const affectedProjectIds = new Set<string>()
+      if (txType === 'expense' || activeTab === 'savings') {
+        if (editTx?.projectId) affectedProjectIds.add(editTx.projectId)
+        if (projectId) affectedProjectIds.add(projectId)
+      }
+
       if (editTx) {
         await updateTransaction(editTx.id, payload)
-        if (txType === 'expense' || activeTab === 'savings') {
-          const oldProjId = editTx.projectId
-          const newProjId = projectId || undefined
-          const oldAmt = editTx.amount
-          const newAmt = effectiveAmount
-          if (oldProjId && oldProjId !== newProjId) {
-            const oldProj = projects.find(p => p.id === oldProjId)
-            if (oldProj) await updateProject(oldProjId, { paid: Math.max(0, oldProj.paid - oldAmt) })
-          }
-          if (newProjId) {
-            const proj = projects.find(p => p.id === newProjId)
-            if (proj) {
-              const adjusted = oldProjId === newProjId ? proj.paid - oldAmt + newAmt : proj.paid + newAmt
-              await updateProject(newProjId, { paid: Math.max(0, adjusted) })
-            }
-          }
-        }
         toast.success('Transaction updated')
       } else {
         // My share transaction
         await addTransaction(user.uid, payload as Omit<Transaction, 'id' | 'userId' | 'createdAt'>)
-
-        // Project.paid sync (expenses and savings contributions both count toward a project)
-        if ((txType === 'expense' || activeTab === 'savings') && projectId) {
-          const proj = projects.find(p => p.id === projectId)
-          if (proj) await updateProject(projectId, { paid: proj.paid + effectiveAmount })
-        }
 
         // Savings into / out of the Emergency Fund → keep the EF tracker balance in sync
         if (activeTab === 'savings' && savingsVehicle === EMERGENCY_FUND_VEHICLE) {
@@ -315,6 +319,19 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
               usedAmount: used + drawn,
               lastUpdated: new Date().toISOString(),
             })
+          }
+        }
+
+        // Auto-sync savings contribution / withdrawal → matching savings goal by name
+        if (activeTab === 'savings' && savingsVehicle) {
+          const goal = savingsGoals.find(
+            g => g.name.trim().toLowerCase() === savingsVehicle.trim().toLowerCase()
+          )
+          if (goal) {
+            const delta = savingsKind === 'savings_contribution' ? effectiveAmount : -effectiveAmount
+            const newAmount = Math.max(0, goal.currentAmount + delta)
+            await updateSavingsGoal(goal.id, { currentAmount: newAmount })
+            setSavingsGoals(savingsGoals.map(g => g.id === goal.id ? { ...g, currentAmount: newAmount } : g))
           }
         }
 
@@ -447,6 +464,21 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
       }
 
       await refresh()
+
+      // Recompute project.paid from actual transaction data (avoids incremental drift)
+      if (affectedProjectIds.size > 0) {
+        const { transactions: freshTxs, projects: freshProjs, setProjects } = useAppStore.getState()
+        const paidUpdates: Promise<void>[] = []
+        const paidMap: Record<string, number> = {}
+        for (const pid of Array.from(affectedProjectIds)) {
+          const paid = computeProjectPaid(freshTxs, pid)
+          paidMap[pid] = paid
+          paidUpdates.push(updateProject(pid, { paid }))
+        }
+        await Promise.all(paidUpdates)
+        setProjects(freshProjs.map(p => p.id in paidMap ? { ...p, paid: paidMap[p.id] } : p))
+      }
+
       onClose()
     } catch {
       toast.error('Something went wrong')
@@ -895,8 +927,24 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                   {/* Category */}
                   {txType !== 'transfer' && (
                     <div>
-                      <label className="label">Category</label>
-                      <CategoryPicker value={category} onChange={setCategory} type={txType === 'income' ? 'income' : 'expense'} />
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <label className="label" style={{ margin: 0 }}>Category</label>
+                        {suggestedCat && (
+                          <button
+                            type="button"
+                            onClick={() => { setCategory(suggestedCat); setSuggestedCat(null) }}
+                            style={{
+                              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
+                              background: 'var(--brand-soft)', color: 'var(--brand-ink)',
+                              border: '1px solid color-mix(in oklch, var(--brand) 30%, transparent)',
+                              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                            }}
+                          >
+                            ✦ Use &ldquo;{suggestedCat}&rdquo;
+                          </button>
+                        )}
+                      </div>
+                      <CategoryPicker value={category} onChange={v => { setCategory(v); setSuggestedCat(null) }} type={txType === 'income' ? 'income' : 'expense'} />
                     </div>
                   )}
 

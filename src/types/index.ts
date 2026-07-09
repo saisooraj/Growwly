@@ -75,6 +75,11 @@ export interface Borrowing {
   repaidAmount: number
   status: 'pending' | 'partial' | 'repaid'
   createdAt: string
+  // Optional loan/EMI fields — only shown when isLoan is true
+  isLoan?: boolean
+  interestRate?: number   // annual % (e.g. 8.5)
+  tenureMonths?: number   // total loan tenure
+  emiAmount?: number      // monthly EMI
 }
 
 export interface EmergencyFund {
@@ -117,6 +122,7 @@ export interface UserSettings {
   showHealthTab?: boolean                         // show Health tab in navigation (default: false)
   showTasksTab?: boolean                          // show Tasks tab in navigation (default: false)
   accentColor?: 'green' | 'purple' | 'orange' | 'pink' | 'blue'  // brand accent (default: green)
+  dashboardCardOrder?: string[]                   // ordered list of dashboard block IDs
   dailyLivingCost?: number                        // legacy — superseded by dailyLivingSchedules
   dailyLivingItems?: { label: string; amount: number }[]  // legacy
   dailyLivingSchedules?: {                        // per-day-of-week schedules

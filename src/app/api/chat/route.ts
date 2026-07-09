@@ -54,6 +54,49 @@ const FINANCE_TOOLS: AITool[] = [
       required: ['id', 'description'],
     },
   },
+  {
+    name: 'set_budget',
+    description: 'Set or update the monthly budget for a specific category. Use when the user asks to set, update, or change a budget.',
+    parameters: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', description: 'The expense category to budget for (e.g. Food & Dining, Transport)' },
+        amount: { type: 'number', description: 'Monthly budget amount in rupees' },
+        month: { type: 'string', description: 'Month in YYYY-MM format. Use the current month if not specified.' },
+        description: { type: 'string', description: 'Confirmation preview, e.g. "Set Food & Dining budget to ₹8,000 for July 2026"' },
+      },
+      required: ['category', 'amount', 'month', 'description'],
+    },
+  },
+  {
+    name: 'create_goal',
+    description: 'Create a new savings goal. Use when the user wants to set up a savings target.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Goal name, e.g. "Europe Trip" or "Emergency Fund"' },
+        targetAmount: { type: 'number', description: 'Target amount in rupees' },
+        targetDate: { type: 'string', description: 'Optional target date in YYYY-MM-DD format' },
+        description: { type: 'string', description: 'Confirmation preview, e.g. "Create goal \'Europe Trip\' — ₹1,50,000 target by Dec 2026"' },
+      },
+      required: ['name', 'targetAmount', 'description'],
+    },
+  },
+  {
+    name: 'create_project',
+    description: 'Create a new project to track a one-off budget (e.g. home renovation, wedding). Use when the user wants to track spending for a specific event or project.',
+    parameters: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Project name, e.g. "Home Renovation" or "Wedding"' },
+        totalBudget: { type: 'number', description: 'Total project budget in rupees' },
+        description: { type: 'string', description: 'Optional project description' },
+        endDate: { type: 'string', description: 'Optional target end date in YYYY-MM-DD format' },
+        projectDescription: { type: 'string', description: 'Confirmation preview, e.g. "Create project \'Home Renovation\' with ₹5,00,000 budget"' },
+      },
+      required: ['name', 'totalBudget', 'projectDescription'],
+    },
+  },
 ]
 
 // ── System prompt builder ────────────────────────────────────────────────────
@@ -144,7 +187,7 @@ ${categoryList || 'Food, Fuel, Salary, Transport, Shopping, Healthcare, Entertai
 2. If asked ANYTHING outside finance (movies, coding, general knowledge, personal advice, etc.), respond EXACTLY: "I can only help with finance-related questions such as expenses, budgets, savings, and transactions."
 3. Format all amounts with the currency symbol. Use Indian number format.
 4. Be concise but insightful. Use bullet points for category breakdowns.
-5. When the user asks to ADD, UPDATE, or DELETE data — use the appropriate tool. Never make database changes without going through the tool call → confirmation flow.
+5. When the user asks to ADD, UPDATE, or DELETE data — use the appropriate tool. Never make database changes without going through the tool call → confirmation flow. You can also SET BUDGETS (set_budget), CREATE SAVINGS GOALS (create_goal), and CREATE PROJECTS (create_project).
 6. When referencing a specific transaction, mention its date and category for clarity.
 7. For "how much did I spend on X" questions, sum all transactions in that category across the requested period.
 8. Do not make up data. Only answer from the financial data provided above.`
@@ -172,6 +215,10 @@ function generateActionPreview(
   if (toolName === 'delete_transaction') {
     return `Please confirm deletion:\n\n${args.description}`
   }
+
+  if (toolName === 'set_budget')     return `Please confirm:\n\n${args.description}`
+  if (toolName === 'create_goal')    return `Please confirm:\n\n${args.description}`
+  if (toolName === 'create_project') return `Please confirm:\n\n${args.projectDescription}`
 
   return 'Please confirm this action.'
 }
