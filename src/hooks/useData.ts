@@ -9,6 +9,7 @@ import {
   getUserBudgets,
   getUserProjects,
   getUserBorrowings,
+  getUserContacts,
   getEmergencyFund,
   getUserSettings,
   getUserSavingsGoals,
@@ -28,6 +29,7 @@ export function useData() {
     setBudgets,
     setProjects,
     setBorrowings,
+    setContacts,
     setEmergencyFund,
     setSettings,
     setSavingsGoals,
@@ -60,12 +62,13 @@ export function useData() {
         const from60 = new Date(); from60.setDate(from60.getDate() - 60)
         const from60Str = from60.toISOString().slice(0, 10)
 
-        const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming, upcomingPmts, tasks, assets, liabilities, healthRoutines, healthLogs] =
+        const [txs, budgets, projects, borrowings, contacts, ef, settings, goals, upcoming, upcomingPmts, tasks, assets, liabilities, healthRoutines, healthLogs] =
           await Promise.all([
             getUserTransactions(user.uid),
             getUserBudgets(user.uid),
             getUserProjects(user.uid),
             getUserBorrowings(user.uid),
+            getUserContacts(user.uid).catch(() => []),
             getEmergencyFund(user.uid),
             getUserSettings(user.uid),
             getUserSavingsGoals(user.uid).catch(() => []),
@@ -81,6 +84,7 @@ export function useData() {
         setBudgets(budgets)
         setProjects(projects)
         setBorrowings(borrowings)
+        setContacts(contacts)
         setEmergencyFund(ef)
         setSettings(settings)
         // Auto-advance to the correct cycle month if still on the default calendar month
@@ -112,6 +116,7 @@ export function useRefreshData() {
     setBudgets,
     setProjects,
     setBorrowings,
+    setContacts,
     setEmergencyFund,
     setSettings,
     setSavingsGoals,
@@ -132,12 +137,13 @@ export function useRefreshData() {
       const from60 = new Date(); from60.setDate(from60.getDate() - 60)
       const from60Str = from60.toISOString().slice(0, 10)
 
-      const [txs, budgets, projects, borrowings, ef, settings, goals, upcoming, upcomingPmts, tasks, assets, liabilities, healthRoutines, healthLogs] =
+      const [txs, budgets, projects, borrowings, contacts, ef, settings, goals, upcoming, upcomingPmts, tasks, assets, liabilities, healthRoutines, healthLogs] =
         await Promise.all([
           getUserTransactions(user.uid),
           getUserBudgets(user.uid),
           getUserProjects(user.uid),
           getUserBorrowings(user.uid),
+          getUserContacts(user.uid).catch(() => []),
           getEmergencyFund(user.uid),
           getUserSettings(user.uid),
           getUserSavingsGoals(user.uid).catch(() => []),
@@ -153,6 +159,7 @@ export function useRefreshData() {
       setBudgets(budgets)
       setProjects(projects)
       setBorrowings(borrowings)
+      setContacts(contacts)
       setEmergencyFund(ef)
       setSettings(settings)
       setSavingsGoals(goals)

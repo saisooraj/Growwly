@@ -34,12 +34,13 @@ type FilterKind = 'all' | 'lent' | 'borrowed'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function buildWhatsAppLink(b: Borrowing): string {
+function buildWhatsAppLink(b: Borrowing, phone?: string): string {
   const outstanding = b.amount - b.repaidAmount
   const msg = b.type === 'lent'
     ? `Hi ${b.person}, just a reminder that you owe me ₹${outstanding.toLocaleString('en-IN')}${b.description ? ` for ${b.description}` : ''}. Please let me know when you can repay. Thanks!`
     : `Hi ${b.person}, I still owe you ₹${outstanding.toLocaleString('en-IN')}${b.description ? ` for ${b.description}` : ''}. I'll arrange to repay soon.`
-  return `https://wa.me/?text=${encodeURIComponent(msg)}`
+  const number = phone ? phone.replace(/\D/g, '') : ''
+  return `https://wa.me/${number}?text=${encodeURIComponent(msg)}`
 }
 
 // Deterministic avatar color from name
@@ -70,7 +71,11 @@ function RecordRow({ b, onEdit, onDelete, onMarkRepaid }: {
   const outstanding = b.amount - b.repaidAmount
   const progress    = b.amount > 0 ? Math.min((b.repaidAmount / b.amount) * 100, 100) : 0
 
-  const { transactions } = useAppStore()
+  const { transactions, contacts } = useAppStore()
+  const contactPhone = useMemo(() =>
+    contacts.find(c => c.name.toLowerCase() === b.person.toLowerCase())?.phone,
+    [contacts, b.person]
+  )
   const linkedTxs = useMemo(() =>
     transactions.filter(t => t.borrowingId === b.id),
     [transactions, b.id]
@@ -152,7 +157,7 @@ function RecordRow({ b, onEdit, onDelete, onMarkRepaid }: {
                 <CheckCircle size={13} />
               </button>
               <a
-                href={buildWhatsAppLink(b)}
+                href={buildWhatsAppLink(b, contactPhone)}
                 target="_blank" rel="noopener noreferrer"
                 title="WhatsApp reminder"
                 style={{ width: 26, height: 26, borderRadius: 7, background: 'transparent', color: 'var(--text-4)', display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}

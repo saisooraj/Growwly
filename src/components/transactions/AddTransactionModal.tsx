@@ -69,7 +69,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 export default function AddTransactionModal({ open, onClose, editTx }: Props) {
   const { user } = useAuth()
   const refresh = useRefreshData()
-  const { projects, budgets, transactions, borrowings, settings, emergencyFund, savingsGoals, setSavingsGoals } = useAppStore()
+  const { projects, budgets, transactions, borrowings, contacts, settings, emergencyFund, savingsGoals, setSavingsGoals } = useAppStore()
 
   // Core fields
   const [activeTab, setActiveTab]       = useState<Tab>(savingsTabFor(editTx))
@@ -100,8 +100,11 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
   const [participants, setParticipants]   = useState<SplitParticipant[]>([])
   const [newName, setNewName]             = useState('')
 
-  // Unique known people from all borrowings (for suggestions)
-  const knownPeople = Array.from(new Set(borrowings.map(b => b.person))).sort()
+  // Unique known people from contacts + borrowings
+  const knownPeople = Array.from(new Set([
+    ...contacts.map(c => c.name),
+    ...borrowings.map(b => b.person),
+  ])).sort()
 
   const isRepaymentKind = transferKind === 'loan_repayment_received' || transferKind === 'loan_repayment_paid'
   const loanPersonTrimmed = loanPerson.trim()

@@ -6,13 +6,15 @@ import { AlertTriangle } from 'lucide-react'
 
 interface Props {
   open: boolean
+  title?: string
   message: string
   confirmLabel?: string
   onConfirm: () => void
   onClose: () => void
+  extraAction?: { label: string; onAction: () => void }
 }
 
-export default function ConfirmDialog({ open, message, confirmLabel = 'Delete', onConfirm, onClose }: Props) {
+export default function ConfirmDialog({ open, title, message, confirmLabel = 'Delete', onConfirm, onClose, extraAction }: Props) {
   const confirmRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -56,12 +58,22 @@ export default function ConfirmDialog({ open, message, confirmLabel = 'Delete', 
           }}>
             <AlertTriangle size={16} style={{ color: 'var(--bad-ink)' }} />
           </div>
-          <p style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.5, paddingTop: 6 }}>
-            {message}
-          </p>
+          <div style={{ paddingTop: 4 }}>
+            {title && <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{title}</p>}
+            <p style={{ fontSize: 14, color: 'var(--text-2)', lineHeight: 1.5 }}>{message}</p>
+          </div>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn" onClick={onClose}>Cancel</button>
+          {extraAction && (
+            <button
+              className="btn-danger"
+              style={{ opacity: 0.75 }}
+              onClick={() => { extraAction.onAction(); onClose() }}
+            >
+              {extraAction.label}
+            </button>
+          )}
           <button
             ref={confirmRef}
             className="btn-danger"

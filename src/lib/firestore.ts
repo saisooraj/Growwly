@@ -20,6 +20,7 @@ import type {
   Budget,
   Project,
   Borrowing,
+  Contact,
   EmergencyFund,
   UserSettings,
   SavingsGoal,
@@ -179,6 +180,36 @@ export async function getUserBorrowings(userId: string): Promise<Borrowing[]> {
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() } as Borrowing))
     .sort((a, b) => b.date.localeCompare(a.date))
+}
+
+// ── Contacts ────────────────────────────────────────────────────────────────
+
+export async function addContact(
+  userId: string,
+  data: Omit<Contact, 'id' | 'userId' | 'createdAt'>
+): Promise<string> {
+  const ref = await addDoc(collection(db, 'contacts'), {
+    ...data,
+    userId,
+    createdAt: new Date().toISOString(),
+  })
+  return ref.id
+}
+
+export async function updateContact(id: string, data: Partial<Contact>): Promise<void> {
+  await updateDoc(doc(db, 'contacts', id), data)
+}
+
+export async function deleteContact(id: string): Promise<void> {
+  await deleteDoc(doc(db, 'contacts', id))
+}
+
+export async function getUserContacts(userId: string): Promise<Contact[]> {
+  const q = query(collection(db, 'contacts'), where('userId', '==', userId))
+  const snap = await getDocs(q)
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as Contact))
+    .sort((a, b) => a.name.localeCompare(b.name))
 }
 
 // ── Emergency Fund ───────────────────────────────────────────────────────────

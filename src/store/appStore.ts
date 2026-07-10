@@ -4,6 +4,7 @@ import type {
   Budget,
   Project,
   Borrowing,
+  Contact,
   EmergencyFund,
   UserSettings,
   SavingsGoal,
@@ -22,6 +23,7 @@ interface AppState {
   budgets: Budget[]
   projects: Project[]
   borrowings: Borrowing[]
+  contacts: Contact[]
   emergencyFund: EmergencyFund | null
   settings: UserSettings | null
   savingsGoals: SavingsGoal[]
@@ -40,6 +42,7 @@ interface AppState {
   setBudgets: (b: Budget[]) => void
   setProjects: (p: Project[]) => void
   setBorrowings: (b: Borrowing[]) => void
+  setContacts: (c: Contact[]) => void
   setEmergencyFund: (e: EmergencyFund | null) => void
   setSettings: (s: UserSettings | null) => void
   setSavingsGoals: (g: SavingsGoal[]) => void
@@ -61,6 +64,7 @@ export const useAppStore = create<AppState>((set) => ({
   budgets: [],
   projects: [],
   borrowings: [],
+  contacts: [],
   emergencyFund: null,
   settings: null,
   savingsGoals: [],
@@ -79,6 +83,7 @@ export const useAppStore = create<AppState>((set) => ({
   setBudgets: (budgets) => set({ budgets }),
   setProjects: (projects) => set({ projects }),
   setBorrowings: (borrowings) => set({ borrowings }),
+  setContacts: (contacts) => set({ contacts }),
   setEmergencyFund: (emergencyFund) => set({ emergencyFund }),
   setSettings: (settings) => set({ settings }),
   setSavingsGoals: (savingsGoals) => set({ savingsGoals }),
@@ -98,6 +103,7 @@ export const useAppStore = create<AppState>((set) => ({
       budgets: [],
       projects: [],
       borrowings: [],
+      contacts: [],
       emergencyFund: null,
       settings: null,
       savingsGoals: [],

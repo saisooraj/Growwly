@@ -64,6 +64,14 @@ export interface Project {
   createdAt: string
 }
 
+export interface Contact {
+  id: string
+  userId: string
+  name: string
+  phone?: string
+  createdAt: string
+}
+
 export interface Borrowing {
   id: string
   userId: string
