@@ -5,7 +5,7 @@ import { Dialog, Transition } from '@headlessui/react'
 import { X, Calculator } from 'lucide-react'
 import { useForm, useWatch } from 'react-hook-form'
 import { format } from 'date-fns'
-import { addBorrowing, updateBorrowing } from '@/lib/firestore'
+import { addBorrowing, updateBorrowing, addTransaction } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import type { Borrowing } from '@/types'
@@ -93,8 +93,23 @@ export default function AddBorrowingModal({ open, onClose, editBorrowing }: Prop
         ...(data.isLoan && data.emiAmount     ? { emiAmount:     Number(data.emiAmount) }      : {}),
       }
       if (editBorrowing) {
+        const delta = payload.repaidAmount - editBorrowing.repaidAmount
         await updateBorrowing(editBorrowing.id, payload)
-        toast.success('Updated')
+        if (delta > 0) {
+          await addTransaction(user.uid, {
+            type: 'transfer',
+            transferKind: editBorrowing.type === 'lent' ? 'loan_repayment_received' : 'loan_repayment_paid',
+            amount: delta,
+            category: 'Other',
+            date: format(new Date(), 'yyyy-MM-dd'),
+            notes: editBorrowing.type === 'lent'
+              ? `Repayment from ${editBorrowing.person}${editBorrowing.description ? ' · ' + editBorrowing.description : ''}`
+              : `Repaid to ${editBorrowing.person}${editBorrowing.description ? ' · ' + editBorrowing.description : ''}`,
+            isRecurring: false,
+            borrowingId: editBorrowing.id,
+          })
+        }
+        toast.success(delta > 0 ? 'Updated & transaction logged' : 'Updated')
       } else {
         await addBorrowing(user.uid, payload)
         toast.success('Added')
