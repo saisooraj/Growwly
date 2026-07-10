@@ -40,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Toaster
               position="top-right"
               toastOptions={{
+                duration: 2000,
                 style: {
                   borderRadius: '10px',
                   background: 'var(--surface)',
@@ -49,7 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
                 },
                 success: { iconTheme: { primary: '#16a34a', secondary: '#fff' } },
-                error:   { iconTheme: { primary: '#dc2626', secondary: '#fff' } },
+                error:   { duration: 3500, iconTheme: { primary: '#dc2626', secondary: '#fff' } },
               }}
             />
           </AuthProvider>
