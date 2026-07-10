@@ -245,10 +245,9 @@ export default function TransactionList({ filterMonth = false, limit, transactio
       .filter(b => b.date >= start && b.date <= end)
       .map(borrowingToViewTx)
 
-    // Exclude loan transfer transactions that already have a synthetic borrowing row
-    // to prevent the same lend/repayment showing up twice in the list
-    const loanTransferKinds = new Set(['loan_given', 'loan_repayment_received', 'loan_repayment_paid'])
-    const filteredTxs = txs.filter(t => !(t.type === 'transfer' && t.transferKind && loanTransferKinds.has(t.transferKind)))
+    // Only hide loan_given transactions — they're represented by synthetic borrowing rows.
+    // Repayment transactions are shown as real entries so users can delete them and reverse the borrowing.
+    const filteredTxs = txs.filter(t => !(t.type === 'transfer' && t.transferKind === 'loan_given'))
 
     return [...filteredTxs, ...borrowingRows]
   }, [txOverride, storeTxs, borrowings, selectedMonth, settings, filterMonth, showBorrowings])

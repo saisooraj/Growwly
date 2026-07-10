@@ -1,14 +1,14 @@
 'use client'
 
-import { Fragment, useState, useEffect, useCallback } from 'react'
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { X, RefreshCw, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Split, UserPlus, Trash2, PiggyBank } from 'lucide-react'
 import { IconMedal, IconCrane } from '@tabler/icons-react'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { addTransaction, updateTransaction, updateProject, updateSavingsGoal, addBorrowing, updateBorrowing, setUserSettings, setEmergencyFund } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
-import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTransfer, buildMonthlySummary, EXPENSE_CATEGORIES, INCOME_CATEGORIES, computeProjectPaid } from '@/lib/utils'
+import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTransfer, buildMonthlySummary, EXPENSE_CATEGORIES, INCOME_CATEGORIES, computeProjectPaid, formatCurrencyFull } from '@/lib/utils'
 import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import { useAppStore } from '@/store/appStore'
 import CategoryPicker from '@/components/transactions/CategoryPicker'
@@ -88,7 +88,11 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
   const [isRecurring, setIsRecurring]   = useState(editTx?.isRecurring ?? false)
   const [saving, setSaving]             = useState(false)
   // Person name for loan transfers (auto-synced to borrowings)
-  const [loanPerson, setLoanPerson]     = useState('')
+  const [loanPerson, setLoanPerson]         = useState('')
+  const [personDropdownOpen, setPersonDropdownOpen] = useState(false)
+  const personInputRef = useRef<HTMLInputElement>(null)
+  // Allocation plan: borrowingId → amount to apply (editable, defaults to greedy)
+  const [allocation, setAllocation] = useState<Record<string, number>>({})
 
   // Split state
   const [splitEnabled, setSplitEnabled]   = useState(false)
@@ -98,6 +102,47 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
 
   // Unique known people from all borrowings (for suggestions)
   const knownPeople = Array.from(new Set(borrowings.map(b => b.person))).sort()
+
+  const isRepaymentKind = transferKind === 'loan_repayment_received' || transferKind === 'loan_repayment_paid'
+  const loanPersonTrimmed = loanPerson.trim()
+
+  // Filtered dropdown options
+  const filteredPeople = useMemo(() =>
+    knownPeople.filter(p => p.toLowerCase().includes(loanPersonTrimmed.toLowerCase())),
+    [knownPeople, loanPersonTrimmed]
+  )
+  const isNewPerson = !!loanPersonTrimmed && !knownPeople.some(p => p.toLowerCase() === loanPersonTrimmed.toLowerCase())
+
+  // Pending borrowings for the selected person (for repayment kinds)
+  const pendingForPerson = useMemo(() => {
+    if (!loanPersonTrimmed || !isRepaymentKind) return []
+    const bType = transferKind === 'loan_repayment_received' ? 'lent' : 'borrowed'
+    return borrowings
+      .filter(b => b.type === bType && b.status !== 'repaid' &&
+                   b.person.toLowerCase() === loanPersonTrimmed.toLowerCase())
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [loanPersonTrimmed, borrowings, transferKind, isRepaymentKind])
+
+  // Recompute greedy allocation whenever person, amount, or pending records change
+  useEffect(() => {
+    if (pendingForPerson.length === 0) { setAllocation({}); return }
+    const amt = Number(amount)
+    if (!amt) { setAllocation({}); return }
+    let remaining = amt
+    const plan: Record<string, number> = {}
+    for (const b of pendingForPerson) {
+      if (remaining <= 0) break
+      const outstanding = b.amount - b.repaidAmount
+      const apply = Math.min(outstanding, remaining)
+      if (apply > 0) { plan[b.id] = apply; remaining -= apply }
+    }
+    setAllocation(plan)
+  }, [pendingForPerson, amount])
+
+  const allocationTotal = useMemo(() =>
+    Object.values(allocation).reduce((s, v) => s + (Number(v) || 0), 0),
+    [allocation]
+  )
 
   // Reset on open/close
   useEffect(() => {
@@ -117,6 +162,8 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
       setParticipants([])
       setNewName('')
       setLoanPerson('')
+      setPersonDropdownOpen(false)
+      setAllocation({})
     }
   }, [open, editTx])
 
@@ -283,6 +330,7 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
             ? { transferKind, category: 'Other' }
             : { category }),
         ...(projectId && (txType === 'expense' || activeTab === 'savings') ? { projectId } : {}),
+        ...(txType === 'transfer' && loanPerson.trim() ? { loanPerson: loanPerson.trim() } : {}),
       }
 
       // Collect affected project IDs upfront so we can recompute after refresh
@@ -297,7 +345,7 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
         toast.success('Transaction updated')
       } else {
         // My share transaction
-        await addTransaction(user.uid, payload as Omit<Transaction, 'id' | 'userId' | 'createdAt'>)
+        const txId = await addTransaction(user.uid, payload as Omit<Transaction, 'id' | 'userId' | 'createdAt'>)
 
         // Savings into / out of the Emergency Fund → keep the EF tracker balance in sync
         if (activeTab === 'savings' && savingsVehicle === EMERGENCY_FUND_VEHICLE) {
@@ -349,8 +397,8 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
         if (txType === 'transfer' && loanPerson.trim()) {
           const person = loanPerson.trim()
           if (transferKind === 'loan_given') {
-            // Create a new "lent" borrowing record
-            await addBorrowing(user.uid, {
+            // Create a new "lent" borrowing record and link it back to the transaction
+            const borrowingId = await addBorrowing(user.uid, {
               type: 'lent',
               amount: effectiveAmount,
               person,
@@ -359,30 +407,18 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
               repaidAmount: 0,
               status: 'pending',
             })
-          } else if (transferKind === 'loan_repayment_received') {
-            // Mark repayment on the oldest pending "lent" borrowing for this person
-            const match = borrowings
-              .filter(b => b.type === 'lent' && b.status !== 'repaid' &&
-                           b.person.toLowerCase() === person.toLowerCase())
-              .sort((a, b) => a.date.localeCompare(b.date))[0]
-            if (match) {
-              const newRepaid = Math.min(match.repaidAmount + effectiveAmount, match.amount)
-              await updateBorrowing(match.id, {
+            await updateTransaction(txId, { borrowingId })
+          } else if (transferKind === 'loan_repayment_received' || transferKind === 'loan_repayment_paid') {
+            // Apply user-edited (or greedy-defaulted) allocation
+            for (const [bId, applyAmt] of Object.entries(allocation)) {
+              const amt = Number(applyAmt)
+              if (amt <= 0) continue
+              const b = borrowings.find(x => x.id === bId)
+              if (!b) continue
+              const newRepaid = Math.min(b.repaidAmount + amt, b.amount)
+              await updateBorrowing(bId, {
                 repaidAmount: newRepaid,
-                status: newRepaid >= match.amount ? 'repaid' : newRepaid > 0 ? 'partial' : 'pending',
-              })
-            }
-          } else if (transferKind === 'loan_repayment_paid') {
-            // Mark repayment on the oldest pending "borrowed" borrowing for this person
-            const match = borrowings
-              .filter(b => b.type === 'borrowed' && b.status !== 'repaid' &&
-                           b.person.toLowerCase() === person.toLowerCase())
-              .sort((a, b) => a.date.localeCompare(b.date))[0]
-            if (match) {
-              const newRepaid = Math.min(match.repaidAmount + effectiveAmount, match.amount)
-              await updateBorrowing(match.id, {
-                repaidAmount: newRepaid,
-                status: newRepaid >= match.amount ? 'repaid' : newRepaid > 0 ? 'partial' : 'pending',
+                status: newRepaid >= b.amount ? 'repaid' : 'partial',
               })
             }
           }
@@ -606,35 +642,175 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
                     </div>
                   )}
 
-                  {/* Person name — shown for all loan transfer types, with suggestions */}
+                  {/* Person combobox — shown for all loan transfer types */}
                   {activeTab === 'transfer' && ['loan_given', 'loan_repayment_received', 'loan_repayment_paid'].includes(transferKind) && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <label className="label">
-                        {transferKind === 'loan_given' ? 'Who are you lending to?' :
-                         transferKind === 'loan_repayment_received' ? 'Who paid you back?' :
-                         'Who are you repaying?'}
-                      </label>
-                      <input
-                        type="text"
-                        list="loan-people-suggestions"
-                        className="input"
-                        placeholder="e.g. Priya, Rahul…"
-                        value={loanPerson}
-                        onChange={e => setLoanPerson(e.target.value)}
-                        autoComplete="off"
-                        style={{ fontSize: 14 }}
-                      />
-                      <datalist id="loan-people-suggestions">
-                        {knownPeople.map(p => <option key={p} value={p} />)}
-                      </datalist>
-                      {loanPerson.trim() && knownPeople.some(p => p.toLowerCase() === loanPerson.trim().toLowerCase()) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, position: 'relative' }}>
+                        <label className="label">
+                          {transferKind === 'loan_given' ? 'Who are you lending to?' :
+                           transferKind === 'loan_repayment_received' ? 'Who paid you back?' :
+                           'Who are you repaying?'}
+                        </label>
+                        <input
+                          ref={personInputRef}
+                          type="text"
+                          className="input"
+                          placeholder="Search or add a person…"
+                          value={loanPerson}
+                          onChange={e => { setLoanPerson(e.target.value); setPersonDropdownOpen(true) }}
+                          onFocus={() => setPersonDropdownOpen(true)}
+                          onBlur={() => setTimeout(() => setPersonDropdownOpen(false), 150)}
+                          autoComplete="off"
+                          style={{ fontSize: 14 }}
+                        />
+                        {/* Dropdown */}
+                        {personDropdownOpen && (filteredPeople.length > 0 || (loanPersonTrimmed && isNewPerson)) && (
+                          <div style={{
+                            position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 60,
+                            background: 'var(--surface)', border: '1px solid var(--border)',
+                            borderRadius: 12, overflow: 'hidden',
+                            boxShadow: '0 8px 24px rgba(0,0,0,.18)',
+                            marginTop: 4,
+                          }}>
+                            {filteredPeople.map(p => (
+                              <button
+                                key={p} type="button"
+                                onMouseDown={() => { setLoanPerson(p); setPersonDropdownOpen(false) }}
+                                style={{
+                                  width: '100%', textAlign: 'left', padding: '10px 14px',
+                                  background: 'transparent', border: 'none', cursor: 'pointer',
+                                  fontSize: 13.5, color: 'var(--text)', display: 'flex',
+                                  alignItems: 'center', gap: 8,
+                                  borderBottom: '1px solid var(--border)',
+                                }}
+                                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                              >
+                                <span style={{
+                                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                                  background: 'var(--brand-soft)', color: 'var(--brand-ink)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: 12, fontWeight: 800,
+                                }}>
+                                  {p[0]?.toUpperCase()}
+                                </span>
+                                {p}
+                              </button>
+                            ))}
+                            {loanPersonTrimmed && isNewPerson && (
+                              <button
+                                type="button"
+                                onMouseDown={() => { setPersonDropdownOpen(false) }}
+                                style={{
+                                  width: '100%', textAlign: 'left', padding: '10px 14px',
+                                  background: 'transparent', border: 'none', cursor: 'pointer',
+                                  fontSize: 13.5, color: 'var(--brand-ink)', display: 'flex',
+                                  alignItems: 'center', gap: 8, fontWeight: 600,
+                                }}
+                                onMouseEnter={e => (e.currentTarget.style.background = 'var(--brand-soft)')}
+                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                              >
+                                <span style={{
+                                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                                  background: 'var(--brand-soft)', color: 'var(--brand-ink)',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: 16, fontWeight: 800,
+                                }}>+</span>
+                                Add &ldquo;{loanPersonTrimmed}&rdquo;
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Status chip */}
+                      {loanPersonTrimmed && !isNewPerson && (
                         <div style={{
-                          display: 'flex', alignItems: 'center', gap: 6,
                           fontSize: 11.5, color: 'var(--brand-ink)',
                           padding: '4px 8px', borderRadius: 7, background: 'var(--brand-soft)',
                           alignSelf: 'flex-start',
                         }}>
                           ✓ Linked to existing borrowing record
+                        </div>
+                      )}
+                      {loanPersonTrimmed && isNewPerson && isRepaymentKind && (
+                        <div style={{
+                          fontSize: 11.5, color: 'var(--warn-ink, #b45309)',
+                          padding: '4px 8px', borderRadius: 7, background: 'var(--warn-soft, #fef3c7)',
+                          alignSelf: 'flex-start',
+                        }}>
+                          No open records for {loanPersonTrimmed} — transaction will still be logged
+                        </div>
+                      )}
+
+                      {/* Allocation preview — shown when person is known + amount set + pending records exist */}
+                      {isRepaymentKind && loanPersonTrimmed && !isNewPerson && pendingForPerson.length > 0 && Number(amount) > 0 && (
+                        <div style={{
+                          background: 'var(--surface-2)', borderRadius: 12,
+                          padding: '10px 12px', border: '1px solid var(--border)',
+                          display: 'flex', flexDirection: 'column', gap: 0,
+                        }}>
+                          <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-4)', letterSpacing: '0.05em', marginBottom: 8 }}>
+                            WILL SETTLE
+                          </div>
+                          {pendingForPerson.map(b => {
+                            const outstanding = b.amount - b.repaidAmount
+                            const applied = Number(allocation[b.id] ?? 0)
+                            const untouched = applied === 0
+                            return (
+                              <div key={b.id} style={{
+                                display: 'flex', alignItems: 'center', gap: 8,
+                                padding: '6px 0',
+                                borderBottom: '1px solid var(--border)',
+                              }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 12.5, color: untouched ? 'var(--text-4)' : 'var(--text)', fontWeight: 500, lineHeight: 1.2 }}>
+                                    {b.description || 'Loan'} · {format(parseISO(b.date), 'dd MMM yy')}
+                                  </div>
+                                  <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 1 }}>
+                                    {formatCurrencyFull(outstanding)} outstanding
+                                  </div>
+                                </div>
+                                {untouched ? (
+                                  <span style={{ fontSize: 11, color: 'var(--text-4)', padding: '3px 8px', borderRadius: 6, background: 'var(--surface-3)', flexShrink: 0 }}>
+                                    Untouched
+                                  </span>
+                                ) : (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+                                    <span style={{ fontSize: 12, color: 'var(--text-3)' }}>₹</span>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={outstanding}
+                                      value={applied}
+                                      onChange={e => setAllocation(prev => ({ ...prev, [b.id]: Number(e.target.value) }))}
+                                      style={{
+                                        width: 70, fontSize: 13, fontWeight: 700,
+                                        color: 'var(--good-ink)', background: 'var(--surface)',
+                                        border: '1px solid var(--border)', borderRadius: 7,
+                                        padding: '3px 6px', textAlign: 'right',
+                                      }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                          {/* Total vs amount */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 }}>
+                            <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                              {allocationTotal !== Number(amount)
+                                ? <span style={{ color: allocationTotal > Number(amount) ? 'var(--bad-ink)' : 'var(--text-4)' }}>
+                                    {formatCurrencyFull(Math.abs(Number(amount) - allocationTotal))}{' '}
+                                    {allocationTotal > Number(amount) ? 'over-allocated' : 'unallocated'}
+                                  </span>
+                                : <span style={{ color: 'var(--good-ink)' }}>Fully allocated ✓</span>
+                              }
+                            </span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}>
+                              {formatCurrencyFull(allocationTotal)} / {formatCurrencyFull(Number(amount))}
+                            </span>
+                          </div>
                         </div>
                       )}
                     </div>

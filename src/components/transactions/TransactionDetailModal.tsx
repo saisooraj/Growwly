@@ -4,7 +4,7 @@ import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { X, Edit2, Trash2, Calendar, FileText, Repeat, Folder, ArrowLeftRight } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
-import { deleteTransaction, deleteBorrowing, updateProject, updateSavingsGoal } from '@/lib/firestore'
+import { deleteTransaction, deleteBorrowing, updateProject, updateSavingsGoal, updateBorrowing } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
 import { formatCurrencyFull, CATEGORY_COLORS, getTransferDisplay, computeProjectPaid, isSavingsTransfer } from '@/lib/utils'
 import { CategoryIcon, getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
@@ -37,8 +37,14 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
       if (isSyntheticBorrowing) {
         const borrowingId = tx.id.replace('borrow-', '')
         await deleteBorrowing(borrowingId)
-        const { borrowings, setBorrowings } = useAppStore.getState()
+        const { borrowings, setBorrowings, transactions, setTransactions } = useAppStore.getState()
         setBorrowings(borrowings.filter(b => b.id !== borrowingId))
+        // Also delete the linked loan_given transaction if one exists
+        const linkedTx = transactions.find(t => t.borrowingId === borrowingId && t.transferKind === 'loan_given')
+        if (linkedTx) {
+          await deleteTransaction(linkedTx.id)
+          setTransactions(transactions.filter(t => t.id !== linkedTx.id))
+        }
       } else {
         await deleteTransaction(tx.id)
         const { transactions, setTransactions, projects, setProjects } = useAppStore.getState()
@@ -59,6 +65,58 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
             await updateSavingsGoal(goal.id, { currentAmount: newAmount })
             setGoals(goals.map(g => g.id === goal.id ? { ...g, currentAmount: newAmount } : g))
           }
+        }
+
+        const isRepayment = tx.transferKind === 'loan_repayment_received' || tx.transferKind === 'loan_repayment_paid'
+
+        // Case 1: loan_given deleted → delete the borrowing record it created
+        if (tx.transferKind === 'loan_given' && tx.borrowingId) {
+          const { borrowings, setBorrowings } = useAppStore.getState()
+          await deleteBorrowing(tx.borrowingId)
+          setBorrowings(borrowings.filter(b => b.id !== tx.borrowingId))
+        }
+
+        // Case 2: repayment with a specific borrowingId → revert that single record
+        // (covers AddBorrowingModal repayments and markRepaid from BorrowingsList)
+        if (isRepayment && tx.borrowingId) {
+          const { borrowings, setBorrowings } = useAppStore.getState()
+          const b = borrowings.find(b => b.id === tx.borrowingId)
+          if (b) {
+            const newRepaid = Math.max(0, b.repaidAmount - tx.amount)
+            const updated = {
+              repaidAmount: newRepaid,
+              status: (newRepaid <= 0 ? 'pending' : newRepaid >= b.amount ? 'repaid' : 'partial') as 'pending' | 'partial' | 'repaid',
+            }
+            await updateBorrowing(b.id, updated)
+            setBorrowings(borrowings.map(x => x.id === b.id ? { ...x, ...updated } : x))
+          }
+        }
+
+        // Case 3: repayment with loanPerson but no borrowingId → reverse greedy across all records
+        // (covers AddTransactionModal repayments that may span multiple borrowing records)
+        if (isRepayment && tx.loanPerson && !tx.borrowingId) {
+          const borrowingType = tx.transferKind === 'loan_repayment_received' ? 'lent' : 'borrowed'
+          const { borrowings, setBorrowings } = useAppStore.getState()
+          const affected = borrowings
+            .filter(b => b.type === borrowingType && b.repaidAmount > 0 &&
+                         b.person.toLowerCase() === tx.loanPerson!.toLowerCase())
+            .sort((a, b) => b.date.localeCompare(a.date))
+          let remaining = tx.amount
+          const updates = [...borrowings]
+          for (const b of affected) {
+            if (remaining <= 0) break
+            const toRevert = Math.min(b.repaidAmount, remaining)
+            const newRepaid = b.repaidAmount - toRevert
+            const updated = {
+              repaidAmount: newRepaid,
+              status: (newRepaid <= 0 ? 'pending' : newRepaid >= b.amount ? 'repaid' : 'partial') as 'pending' | 'partial' | 'repaid',
+            }
+            await updateBorrowing(b.id, updated)
+            const idx = updates.findIndex(x => x.id === b.id)
+            if (idx !== -1) updates[idx] = { ...updates[idx], ...updated }
+            remaining -= toRevert
+          }
+          setBorrowings(updates)
         }
       }
     } catch {

@@ -70,6 +70,12 @@ function RecordRow({ b, onEdit, onDelete, onMarkRepaid }: {
   const outstanding = b.amount - b.repaidAmount
   const progress    = b.amount > 0 ? Math.min((b.repaidAmount / b.amount) * 100, 100) : 0
 
+  const { transactions } = useAppStore()
+  const linkedTxs = useMemo(() =>
+    transactions.filter(t => t.borrowingId === b.id),
+    [transactions, b.id]
+  )
+
   const accentColor = isBorrowed ? 'var(--bad)'      : 'var(--good)'
   const accentSoft  = isBorrowed ? 'var(--bad-soft)'  : 'var(--good-soft)'
   const accentInk   = isBorrowed ? 'var(--bad-ink)'   : 'var(--good-ink)'
@@ -190,6 +196,30 @@ function RecordRow({ b, onEdit, onDelete, onMarkRepaid }: {
       {b.amount > 0 && b.repaidAmount > 0 && b.repaidAmount < b.amount && (
         <div style={{ height: 3, background: 'var(--surface-3)', borderRadius: 999, overflow: 'hidden', marginLeft: isRepaid ? 0 : 8 }}>
           <div style={{ height: '100%', width: `${progress}%`, background: 'var(--good)', borderRadius: 999, transition: 'width .4s ease' }} />
+        </div>
+      )}
+
+      {/* Linked settlement transactions */}
+      {linkedTxs.length > 0 && (
+        <div style={{
+          borderTop: '1px solid var(--border)',
+          marginTop: 4, paddingTop: 8,
+          marginLeft: isRepaid ? 0 : 8,
+          display: 'flex', flexDirection: 'column', gap: 4,
+        }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-4)', letterSpacing: '0.06em', marginBottom: 2 }}>
+            SETTLEMENTS
+          </div>
+          {linkedTxs.map(t => (
+            <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11.5, color: 'var(--text-3)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {t.notes || (b.type === 'lent' ? 'Repayment received' : 'Repayment made')}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--good-ink)', flexShrink: 0 }}>
+                {formatCurrencyFull(t.amount)} · {format(parseISO(t.date), 'dd MMM')}
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -444,6 +474,8 @@ export default function BorrowingsList({ onEdit }: Props) {
             ? `Repayment from ${b.person}${b.description ? ' · ' + b.description : ''}`
             : `Repaid to ${b.person}${b.description ? ' · ' + b.description : ''}`,
           isRecurring: false,
+          loanPerson: b.person,
+          borrowingId: b.id,
         } as Parameters<typeof addTransaction>[1])
       }
       await updateBorrowing(b.id, { repaidAmount: b.amount, status: 'repaid' })
