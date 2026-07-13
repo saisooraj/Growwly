@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import AppShell from '@/components/layout/AppShell'
 import { DEFAULT_CARD_ORDER } from '@/lib/dashboardConstants'
 import { useAuth } from '@/context/AuthContext'
@@ -12,7 +13,8 @@ import { useRefreshData } from '@/hooks/useData'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { downloadJSON, getLast6Months, computeLongestMoneyStreak } from '@/lib/utils'
 import { getCycleRange, getLastWorkingDay, formatCycleRange } from '@/lib/cycle'
-import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, Leaf, Diamond, Trophy, ChevronUp, ChevronDown } from 'lucide-react'
+import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, ChevronUp, ChevronDown } from 'lucide-react'
+import { BADGES, getBadgeEarnedDate, type BadgeDef } from '@/lib/badges'
 import { IconLeaf, IconFlame } from '@tabler/icons-react'
 import LinkedAccounts from '@/components/auth/LinkedAccounts'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
@@ -21,7 +23,6 @@ import { format, parseISO } from 'date-fns'
 import type { FinancialMode } from '@/types'
 
 type SalaryCycleRule = 'none' | 'last-working-day' | 'fixed-day'
-
 
 export default function SettingsPage() {
   const { user, logout } = useAuth()
@@ -42,6 +43,11 @@ export default function SettingsPage() {
   const [importing, setImporting] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pendingImport, setPendingImport] = useState<any | null>(null)
+
+  // Badge modal
+  const [selectedBadge, setSelectedBadge] = useState<BadgeDef | null>(null)
+  const txDates = transactions.map(t => t.date)
+  const noSpendDays = settings?.noSpendDays ?? []
 
   // Accent color
   const [accentColor, setAccentColor] = useState<'green' | 'purple' | 'orange' | 'pink' | 'blue'>('green')
@@ -827,37 +833,44 @@ export default function SettingsPage() {
             <Flame size={14} style={{ color: '#f97316' }} />
             <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Streak Badges</h2>
           </div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+            Tap any badge to learn more. Longest streak: <span style={{ fontWeight: 600, color: 'var(--text)' }}>{longestMoneyStreak} days</span>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {([
-              { name: 'First Week',        Icon: Leaf,    threshold: 7  },
-              { name: 'On Fire',           Icon: Flame,   threshold: 12 },
-              { name: 'Frugal Fortnight',  Icon: Diamond, threshold: 14 },
-              { name: '30-Day Legend',     Icon: Trophy,  threshold: 30 },
-            ] as const).map(({ name, Icon, threshold }) => {
+            {BADGES.map((badge) => {
+              const { name, Icon, threshold, iconColor } = badge
               const earned   = longestMoneyStreak >= threshold
               const daysAway = threshold - longestMoneyStreak
               return (
-                <div key={name} style={{
-                  display: 'flex', alignItems: 'center', gap: 11, padding: '12px 13px',
-                  borderRadius: 14,
-                  background: earned ? 'var(--surface-2)' : 'transparent',
-                  border: earned ? '1px solid var(--border)' : '1.5px dashed var(--border)',
-                  opacity: earned ? 1 : 0.65,
-                }}>
+                <button
+                  key={name}
+                  onClick={() => setSelectedBadge(badge)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 11, padding: '12px 13px',
+                    borderRadius: 14, cursor: 'pointer', textAlign: 'left',
+                    fontFamily: 'inherit',
+                    background: earned ? 'var(--surface-2)' : 'transparent',
+                    border: earned ? `1px solid color-mix(in oklch, ${iconColor} 35%, var(--border))` : '1.5px dashed var(--border)',
+                    opacity: earned ? 1 : 0.6,
+                    transition: 'opacity .15s, transform .1s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'scale(1.02)' }}
+                  onMouseLeave={e => { e.currentTarget.style.opacity = earned ? '1' : '0.6'; e.currentTarget.style.transform = 'scale(1)' }}
+                >
                   <div style={{
                     width: 36, height: 36, borderRadius: 10, flexShrink: 0,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: earned ? 'var(--brand-soft)' : 'var(--surface-3)',
+                    background: earned ? `color-mix(in oklch, ${iconColor} 18%, var(--surface))` : 'var(--surface-3)',
                   }}>
-                    <Icon size={18} style={{ color: earned ? 'var(--brand-ink)' : 'var(--text-4)' }} />
+                    <Icon size={18} style={{ color: earned ? iconColor : 'var(--text-4)' }} />
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
                     <div style={{ fontSize: 11, fontWeight: 600, marginTop: 2, color: earned ? 'var(--good-ink)' : 'var(--text-4)' }}>
-                      {earned ? 'Earned' : daysAway === 1 ? '1 day away' : `${daysAway} days away`}
+                      {earned ? '✓ Earned' : daysAway === 1 ? '1 day away' : `${daysAway} days to go`}
                     </div>
                   </div>
-                </div>
+                </button>
               )
             })}
           </div>
@@ -894,6 +907,118 @@ export default function SettingsPage() {
         onConfirm={doImport}
         onClose={() => setPendingImport(null)}
       />
+
+      {/* Badge detail modal — portalled to body so position:fixed escapes the pull-to-refresh transform */}
+      {selectedBadge && createPortal((() => {
+        const { name, Icon, iconColor, description, quote, threshold } = selectedBadge
+        const earned     = longestMoneyStreak >= threshold
+        const daysAway   = threshold - longestMoneyStreak
+        const earnedDate = earned ? getBadgeEarnedDate(txDates, noSpendDays, threshold) : null
+        return (
+          <div
+            style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+            onClick={() => setSelectedBadge(null)}
+          >
+            <div
+              style={{
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-xl)', padding: 28, maxWidth: 360, width: '100%',
+                boxShadow: 'var(--shadow-lg)',
+                display: 'flex', flexDirection: 'column', gap: 20,
+                position: 'relative',
+              }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Close */}
+              <button
+                onClick={() => setSelectedBadge(null)}
+                style={{ position: 'absolute', top: 16, right: 16, padding: 6, borderRadius: 8, background: 'var(--surface-2)', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}
+              >
+                <X size={14} />
+              </button>
+
+              {/* Icon + name */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, paddingTop: 8 }}>
+                <div style={{
+                  width: 72, height: 72, borderRadius: 20,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: earned
+                    ? `color-mix(in oklch, ${iconColor} 20%, var(--surface-2))`
+                    : 'var(--surface-3)',
+                  border: earned ? `2px solid color-mix(in oklch, ${iconColor} 40%, transparent)` : '2px dashed var(--border)',
+                  boxShadow: earned ? `0 4px 20px color-mix(in oklch, ${iconColor} 25%, transparent)` : 'none',
+                }}>
+                  <Icon size={32} style={{ color: earned ? iconColor : 'var(--text-4)' }} />
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>{name}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 3 }}>{threshold}-day streak badge</div>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div style={{ fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.6, textAlign: 'center' }}>
+                {description}
+              </div>
+
+              {/* Earned / progress */}
+              {earned ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
+                  borderRadius: 12,
+                  background: `color-mix(in oklch, ${iconColor} 12%, var(--surface))`,
+                  border: `1px solid color-mix(in oklch, ${iconColor} 28%, transparent)`,
+                }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 10, flexShrink: 0,
+                    background: `color-mix(in oklch, ${iconColor} 22%, transparent)`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 16,
+                  }}>🏅</div>
+                  <div>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--good-ink)' }}>Badge Earned!</div>
+                    {earnedDate && (
+                      <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
+                        Achieved on {format(parseISO(earnedDate), 'dd MMM yyyy')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div style={{
+                  display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px',
+                  borderRadius: 12, background: 'var(--surface-2)', border: '1px solid var(--border)',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-3)' }}>
+                    <span>Your best streak</span>
+                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>{longestMoneyStreak} / {threshold} days</span>
+                  </div>
+                  <div style={{ height: 6, background: 'var(--surface-3)', borderRadius: 999, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', borderRadius: 999,
+                      width: `${Math.min(100, (longestMoneyStreak / threshold) * 100)}%`,
+                      background: iconColor, transition: 'width .4s ease',
+                    }} />
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--text-3)', textAlign: 'center' }}>
+                    {daysAway === 1 ? '1 more day to unlock' : `${daysAway} more days to unlock`}
+                  </div>
+                </div>
+              )}
+
+              {/* Quote */}
+              <div style={{
+                padding: '14px 16px', borderRadius: 12,
+                background: 'var(--surface-2)', borderLeft: `3px solid ${iconColor}`,
+              }}>
+                <div style={{ fontSize: 12.5, color: 'var(--text-2)', fontStyle: 'italic', lineHeight: 1.6 }}>
+                  {quote}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })(), document.body)}
     </AppShell>
   )
 }

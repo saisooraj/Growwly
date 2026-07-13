@@ -248,7 +248,7 @@ export interface PulseAllocation {
   label: string
   amount: number
   reason: string
-  type: 'ef' | 'project' | 'sip' | 'buffer' | 'discretionary'
+  type: 'ef' | 'project' | 'sip' | 'buffer' | 'discretionary' | 'repayment'
 }
 
 export interface PulseSpendCategory {

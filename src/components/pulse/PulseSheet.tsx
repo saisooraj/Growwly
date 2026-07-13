@@ -23,6 +23,7 @@ const ALLOC_COLOR: Record<string, string> = {
   sip:           'oklch(0.62 0.17 285)',
   buffer:        'var(--warn)',
   discretionary: 'var(--good)',
+  repayment:     'var(--bad)',
 }
 
 // ── Tiny sub-components ──────────────────────────────────────────────────────

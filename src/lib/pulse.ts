@@ -9,7 +9,7 @@ import type {
   PulseUpcoming, PulseAllocation, PulseSpendCategory,
   PulseGoal, PulseBorrowingAlert, MonthlySummary,
 } from '@/types'
-import { buildMonthlySummary, getTransactionsForMonth, EMERGENCY_FUND_VEHICLE } from './utils'
+import { buildMonthlySummary, getTransactionsForMonth, EMERGENCY_FUND_VEHICLE, formatCurrencyFull } from './utils'
 
 export interface PulseSnapshot {
   transactions: Transaction[]
@@ -124,8 +124,9 @@ function computeAllocations(
   daysLeft: number,
   monthTxs: Transaction[],
 ): PulseAllocation[] {
-  const { settings, emergencyFund, projects } = snapshot
+  const { settings, emergencyFund, projects, borrowings } = snapshot
   if (freeCash < 500) return []
+  const now = new Date()
 
   // Which goals already received contributions this month?
   const efFundedThisMonth = monthTxs.some(
@@ -162,7 +163,42 @@ function computeAllocations(
     }
   }
 
-  // 2. Active projects sorted by deadline (skip ones already funded this month)
+  // 2. Borrowed money repayment (you owe someone — settle before investing)
+  const pendingBorrowings = borrowings
+    .filter(b => b.type === 'borrowed' && b.status !== 'repaid')
+    .sort((a, b) => {
+      const aOver = a.dueDate && parseISO(a.dueDate) < now
+      const bOver = b.dueDate && parseISO(b.dueDate) < now
+      if (aOver && !bOver) return -1
+      if (!aOver && bOver) return 1
+      if (a.dueDate && b.dueDate) return a.dueDate.localeCompare(b.dueDate)
+      if (a.dueDate) return -1
+      if (b.dueDate) return 1
+      return 0
+    })
+
+  for (const b of pendingBorrowings.slice(0, 2)) {
+    if (remaining < 500) break
+    const owed = b.amount - b.repaidAmount
+    if (owed <= 0) continue
+    const suggestion = Math.min(owed, Math.round(remaining * 0.4))
+    if (suggestion < 500) continue
+    const isOverdue = b.dueDate && parseISO(b.dueDate) < now
+    const reason = isOverdue
+      ? 'Overdue repayment'
+      : b.dueDate
+        ? `Due ${format(parseISO(b.dueDate), 'dd MMM')}`
+        : `${formatCurrencyFull(owed)} outstanding`
+    allocations.push({
+      label: `Repay ${b.person}`,
+      amount: suggestion,
+      reason,
+      type: 'repayment',
+    })
+    remaining -= suggestion
+  }
+
+  // 3. Active projects sorted by deadline (skip ones already funded this month)
   const activeProjects = projects
     .filter(p =>
       p.status === 'active' &&
@@ -192,7 +228,7 @@ function computeAllocations(
     }
   }
 
-  // 3. Two-week spending buffer
+  // 4. Two-week spending buffer
   if (settings?.weeklyBudget && daysLeft > 7) {
     const bufferSuggestion = Math.min(
       Math.round(settings.weeklyBudget * 2),
@@ -209,7 +245,7 @@ function computeAllocations(
     }
   }
 
-  // 4. SIP / Mutual Fund (skip if already invested this month)
+  // 5. SIP / Mutual Fund (skip if already invested this month)
   // Cap at ₹30k (user's usual target); always suggest something if there's meaningful cash left
   const SIP_CAP = 30000
   if (!sipFundedThisMonth && remaining >= 1500) {

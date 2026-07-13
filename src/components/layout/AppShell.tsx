@@ -7,8 +7,11 @@ import MobileNav from './MobileNav'
 import FloatingActions from './FloatingActions'
 import AuthGuard from '@/components/ui/AuthGuard'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
+import BadgeCelebrationModal from '@/components/ui/BadgeCelebrationModal'
 import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
+import { computeLongestMoneyStreak } from '@/lib/utils'
+import { BADGES, getBadgeEarnedDate, SEEN_BADGES_KEY, type BadgeDef } from '@/lib/badges'
 import { Leaf } from 'lucide-react'
 import { parseISO, differenceInCalendarDays } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -94,9 +97,42 @@ function PullIndicator({ pull, busy }: { pull: number; busy: boolean }) {
 export default function AppShell({ title, children }: Props) {
   const settings     = useAppStore(s => s.settings)
   const initialized  = useAppStore(s => s.initialized)
+  const transactions = useAppStore(s => s.transactions)
   const upcomingExpenses  = useAppStore(s => s.upcomingExpenses)
   const upcomingPayments  = useAppStore(s => s.upcomingPayments)
   const refresh = useRefreshData()
+
+  // ── Badge celebration queue ─────────────────────────────────────────────────
+  const [badgeQueue, setBadgeQueue] = useState<BadgeDef[]>([])
+  const badgesChecked = useRef(false)
+
+  useEffect(() => {
+    if (!initialized || badgesChecked.current) return
+    badgesChecked.current = true
+
+    const streak = computeLongestMoneyStreak(transactions, settings?.noSpendDays ?? [])
+    const seen = new Set<number>(JSON.parse(localStorage.getItem(SEEN_BADGES_KEY) ?? '[]'))
+    const newBadges = BADGES
+      .filter(b => streak >= b.threshold && !seen.has(b.threshold))
+      .sort((a, b) => b.threshold - a.threshold)
+    if (newBadges.length > 0) setBadgeQueue(newBadges)
+  }, [initialized]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function dismissBadge() {
+    const current = badgeQueue[0]
+    if (!current) return
+    const seen = new Set<number>(JSON.parse(localStorage.getItem(SEEN_BADGES_KEY) ?? '[]'))
+    seen.add(current.threshold)
+    localStorage.setItem(SEEN_BADGES_KEY, JSON.stringify(Array.from(seen)))
+    setBadgeQueue(prev => prev.slice(1))
+  }
+
+  const activeBadge = badgeQueue[0] ?? null
+  const txDates = transactions.map(t => t.date)
+  const noSpendDays = settings?.noSpendDays ?? []
+  const activeBadgeEarnedDate = activeBadge
+    ? getBadgeEarnedDate(txDates, noSpendDays, activeBadge.threshold)
+    : null
 
   // ── Bill reminder (runs once per day after data loads) ──────────────────────
   useEffect(() => {
@@ -246,6 +282,14 @@ export default function AppShell({ title, children }: Props) {
 
       {/* Global add-transaction modal — lives outside the scroll/transform tree */}
       <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />
+
+      {/* Badge celebration — shown once per newly earned badge */}
+      <BadgeCelebrationModal
+        badge={activeBadge}
+        earnedDate={activeBadgeEarnedDate}
+        queueLength={badgeQueue.length}
+        onClose={dismissBadge}
+      />
       </div>
     </AuthGuard>
   )
