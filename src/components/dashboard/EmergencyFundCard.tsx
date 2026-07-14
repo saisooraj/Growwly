@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { ShieldCheck, ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, ArrowRight, Eye, EyeOff } from 'lucide-react'
+import { ShieldCheck, ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronUp, ArrowRight, Eye, EyeOff, Pencil } from 'lucide-react'
 import Link from 'next/link'
 import { useAppStore } from '@/store/appStore'
 import { formatCurrencyFull, EMERGENCY_FUND_VEHICLE } from '@/lib/utils'
@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import toast from 'react-hot-toast'
 import { format, parseISO } from 'date-fns'
+import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 
 function Bar({ value, tone = 'good', height = 6 }: { value: number; tone?: string; height?: number }) {
   const pct = Math.min(100, Math.max(0, value))
@@ -46,10 +47,11 @@ export default function EmergencyFundCard() {
 
   const [masked, setMasked] = useState(true)
   const [txOpen, setTxOpen] = useState(false)
+  const [topUpOpen, setTopUpOpen] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [balance, setBalance] = useState('')
+  const [confirmEdit, setConfirmEdit] = useState(false)
+  const [balance, setBalance] = useState('') // only used during first-time setup
   const [target, setTarget] = useState('')
-  const [used, setUsed] = useState('')
 
   const pct = emergencyFund
     ? Math.min((emergencyFund.currentBalance / emergencyFund.targetAmount) * 100, 100)
@@ -60,46 +62,104 @@ export default function EmergencyFundCard() {
     if (!user) return
     try {
       await setEmergencyFund(user.uid, {
-        currentBalance: Number(balance) || emergencyFund?.currentBalance || 0,
-        targetAmount:   Number(target)  || emergencyFund?.targetAmount  || 0,
-        usedAmount:     Number(used)    || emergencyFund?.usedAmount    || 0,
+        // balance only set on first-time setup; afterwards driven by transactions
+        currentBalance: emergencyFund ? emergencyFund.currentBalance : (Number(balance) || 0),
+        targetAmount:   Number(target) || emergencyFund?.targetAmount || 0,
+        // usedAmount is derived from withdrawal transactions, never manually edited
+        usedAmount:     emergencyFund?.usedAmount ?? 0,
         lastUpdated: new Date().toISOString(),
       })
       await refresh()
       setEditing(false)
-      toast.success('Emergency fund updated')
+      setConfirmEdit(false)
+      toast.success(emergencyFund ? 'Goal updated' : 'Emergency fund set up')
     } catch {
-      toast.error('Failed to update')
+      toast.error('Failed to save')
     }
   }
 
   function startEdit() {
     setBalance(String(emergencyFund?.currentBalance ?? ''))
     setTarget(String(emergencyFund?.targetAmount ?? ''))
-    setUsed(String(emergencyFund?.usedAmount ?? ''))
+    setConfirmEdit(false)
     setEditing(true)
   }
 
   if (editing) {
-    return (
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div className="h-eyebrow">Edit emergency fund</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div>
-            <label className="label">Current Balance (₹)</label>
-            <input className="input" type="number" value={balance} onChange={e => setBalance(e.target.value)} />
+    const isSetup = !emergencyFund
+
+    // ── Confirm step ──────────────────────────────────────────────────────────
+    if (confirmEdit) {
+      return (
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="h-eyebrow">Confirm {isSetup ? 'setup' : 'update'}</div>
+
+          <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--border)' }}>
+            {isSetup && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+                <span style={{ fontSize: 12.5, color: 'var(--text-3)' }}>Starting balance</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{formatCurrencyFull(Number(balance) || 0)}</span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px' }}>
+              <span style={{ fontSize: 12.5, color: 'var(--text-3)' }}>Goal</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{formatCurrencyFull(Number(target) || 0)}</span>
+            </div>
           </div>
-          <div>
-            <label className="label">Target Amount (₹)</label>
-            <input className="input" type="number" value={target} onChange={e => setTarget(e.target.value)} />
-          </div>
-          <div>
-            <label className="label">Used Amount (₹)</label>
-            <input className="input" type="number" value={used} onChange={e => setUsed(e.target.value)} />
+
+          {!isSetup && (
+            <p style={{ fontSize: 12, color: 'var(--text-4)', margin: 0 }}>
+              Only the goal is changing. Balance updates happen through Top up or withdrawal transactions.
+            </p>
+          )}
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={save} className="btn-primary" style={{ flex: 1, justifyContent: 'center' }}>Confirm</button>
+            <button onClick={() => setConfirmEdit(false)} className="btn-secondary" style={{ flex: 1, justifyContent: 'center' }}>Back</button>
           </div>
         </div>
+      )
+    }
+
+    // ── Edit step ─────────────────────────────────────────────────────────────
+    return (
+      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="h-eyebrow">{isSetup ? 'Set up emergency fund' : 'Edit goal'}</div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {isSetup ? (
+            <div>
+              <label className="label">Starting balance (₹)</label>
+              <input className="input" type="number" value={balance} onChange={e => setBalance(e.target.value)} placeholder="0" />
+              <p style={{ fontSize: 11.5, color: 'var(--text-4)', marginTop: 4 }}>
+                Your current emergency fund balance before you start tracking contributions.
+              </p>
+            </div>
+          ) : (
+            <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginBottom: 2 }}>Current balance</div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>{formatCurrencyFull(emergencyFund.currentBalance)}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 4 }}>
+                Use <strong>Top up</strong> to add money or log a <strong>withdrawal</strong> — balance updates through transactions.
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label className="label">Goal (₹)</label>
+            <input className="input" type="number" value={target} onChange={e => setTarget(e.target.value)} placeholder="0" />
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={save} className="btn-primary" style={{ flex: 1, justifyContent: 'center' }}>Save</button>
+          <button
+            onClick={() => { if (Number(target) > 0 || (!isSetup)) setConfirmEdit(true) }}
+            className="btn-primary"
+            style={{ flex: 1, justifyContent: 'center' }}
+            disabled={!target || Number(target) <= 0}
+          >
+            Save
+          </button>
           <button onClick={() => setEditing(false)} className="btn-secondary" style={{ flex: 1, justifyContent: 'center' }}>Cancel</button>
         </div>
       </div>
@@ -133,13 +193,32 @@ export default function EmergencyFundCard() {
           >
             {masked ? <Eye size={13} /> : <EyeOff size={13} />}
           </button>
-          <button
-            onClick={startEdit}
-            className="btn btn-sm"
-            style={{ whiteSpace: 'nowrap' }}
-          >
-            {emergencyFund ? 'Top up' : 'Set up'}
-          </button>
+          {emergencyFund ? (
+            <>
+              <button
+                onClick={() => setTopUpOpen(true)}
+                className="btn btn-sm"
+                style={{ whiteSpace: 'nowrap' }}
+              >
+                Top up
+              </button>
+              <button
+                onClick={startEdit}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)', display: 'flex', borderRadius: 6 }}
+                title="Edit fund settings"
+              >
+                <Pencil size={13} />
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={startEdit}
+              className="btn btn-sm"
+              style={{ whiteSpace: 'nowrap' }}
+            >
+              Set up
+            </button>
+          )}
         </div>
       </div>
 
@@ -237,6 +316,13 @@ export default function EmergencyFundCard() {
           Click &quot;Set up&quot; to configure your emergency fund tracker.
         </p>
       )}
+
+      <AddTransactionModal
+        open={topUpOpen}
+        onClose={() => setTopUpOpen(false)}
+        initialTab="savings"
+        initialSavingsVehicle={EMERGENCY_FUND_VEHICLE}
+      />
     </div>
   )
 }

@@ -22,6 +22,8 @@ interface Props {
   open: boolean
   onClose: () => void
   editTx?: Transaction | null
+  initialTab?: Tab
+  initialSavingsVehicle?: string
 }
 
 type SplitMode = 'equal' | 'percentage' | 'manual'
@@ -66,7 +68,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
   )
 }
 
-export default function AddTransactionModal({ open, onClose, editTx }: Props) {
+export default function AddTransactionModal({ open, onClose, editTx, initialTab, initialSavingsVehicle }: Props) {
   const { user } = useAuth()
   const refresh = useRefreshData()
   const { projects, budgets, transactions, borrowings, contacts, settings, emergencyFund, savingsGoals, setSavingsGoals } = useAppStore()
@@ -150,10 +152,10 @@ export default function AddTransactionModal({ open, onClose, editTx }: Props) {
   // Reset on open/close
   useEffect(() => {
     if (open) {
-      setActiveTab(savingsTabFor(editTx))
+      setActiveTab(editTx ? savingsTabFor(editTx) : (initialTab ?? 'expense'))
       setTransferKind(editTx?.transferKind ?? 'loan_repayment_received')
       setSavingsKind(editTx?.transferKind === 'savings_withdrawal' || editTx?.transferKind === 'ef_withdrawal' ? 'savings_withdrawal' : 'savings_contribution')
-      setSavingsVehicle(editTx?.savingsVehicle ?? EMERGENCY_FUND_VEHICLE)
+      setSavingsVehicle(editTx?.savingsVehicle ?? initialSavingsVehicle ?? EMERGENCY_FUND_VEHICLE)
       setAmount(editTx ? String(editTx.amount) : '')
       setCategory(editTx?.category ?? 'Food & Dining')
       setDate(editTx?.date ?? format(new Date(), 'yyyy-MM-dd'))
