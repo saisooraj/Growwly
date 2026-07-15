@@ -7,7 +7,7 @@ function cookieHeader(value: string, maxAge: number): string {
   return [
     `${SESSION_COOKIE}=${value}`,
     `Max-Age=${maxAge}`,
-    'Path=/admin',
+    'Path=/',
     'HttpOnly',
     'SameSite=Strict',
     process.env.NODE_ENV === 'production' ? 'Secure' : '',

@@ -26,6 +26,8 @@ const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: { domains: ['lh3.googleusercontent.com'] },
+  // firebase-admin uses native Node.js modules — must NOT be bundled by webpack
+  serverExternalPackages: ['firebase-admin'],
   async headers() {
     return [
       {

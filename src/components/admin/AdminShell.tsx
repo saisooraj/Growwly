@@ -58,6 +58,9 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
     }
   }, [user, loading, router])
 
+  // Login page must NOT be wrapped in the shell (would create a redirect loop)
+  if (pathname === '/admin/login') return <>{children}</>
+
   if (loading || !user || user.email !== ADMIN_EMAIL) {
     return (
       <div style={{

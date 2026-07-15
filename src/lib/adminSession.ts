@@ -85,7 +85,7 @@ export function sessionCookieOptions(maxAge: number = SESSION_MAX_AGE) {
   return [
     `${SESSION_COOKIE}`,
     `Max-Age=${maxAge}`,
-    'Path=/admin',
+    'Path=/',
     'HttpOnly',
     'SameSite=Strict',
     process.env.NODE_ENV === 'production' ? 'Secure' : '',
