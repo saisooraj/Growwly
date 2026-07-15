@@ -26,6 +26,10 @@ yarn-error.log*
 .env*.local
 .env
 
+# claude local settings (machine-specific permissions)
+.claude
+.claude/settings.local.json
+
 # vercel
 .vercel
 

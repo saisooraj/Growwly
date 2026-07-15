@@ -3,6 +3,7 @@ import { GroqProvider } from '@/lib/ai/groqProvider'
 import type { AITool } from '@/lib/ai/provider'
 import type { FinancialSnapshot, PendingAction } from '@/lib/ai/types'
 import type { ChatbotProviderConfig } from '@/lib/ai/chatbotSettings'
+import { adminDb, FieldValue } from '@/lib/firebaseAdmin'
 
 // ── Finance action tools ─────────────────────────────────────────────────────
 
@@ -281,6 +282,12 @@ export async function POST(req: NextRequest) {
       }
       return NextResponse.json({ type: 'action', action })
     }
+
+    // Track AI usage (non-blocking)
+    adminDb.doc('admin_system/stats').set({
+      totalChatRequests: FieldValue.increment(1),
+      lastChatAt: new Date().toISOString(),
+    }, { merge: true }).catch(() => {})
 
     return NextResponse.json({ type: 'message', content: response.content })
   } catch (err) {

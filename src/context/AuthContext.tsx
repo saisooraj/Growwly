@@ -22,7 +22,8 @@ import {
   User,
   ConfirmationResult,
 } from 'firebase/auth'
-import { auth, googleProvider } from '@/lib/firebase'
+import { auth, googleProvider, db } from '@/lib/firebase'
+import { doc, setDoc, getDoc } from 'firebase/firestore'
 
 export interface AuthContextType {
   user: User | null
@@ -85,9 +86,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u)
       setLoading(false)
+      if (u && db) {
+        const profileRef = doc(db, 'userProfiles', u.uid)
+        const now = new Date().toISOString()
+        try {
+          const snap = await getDoc(profileRef)
+          if (!snap.exists()) {
+            await setDoc(profileRef, {
+              uid: u.uid,
+              email: u.email,
+              displayName: u.displayName,
+              photoURL: u.photoURL,
+              createdAt: now,
+              lastActiveAt: now,
+            })
+          } else {
+            await setDoc(profileRef, {
+              email: u.email,
+              displayName: u.displayName,
+              photoURL: u.photoURL,
+              lastActiveAt: now,
+            }, { merge: true })
+          }
+        } catch { /* non-critical, don't block auth */ }
+      }
     })
     getRedirectResult(auth).catch(() => {})
     return unsub
