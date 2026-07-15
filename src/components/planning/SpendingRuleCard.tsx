@@ -253,29 +253,31 @@ export default function SpendingRuleCard() {
   const isOver = needsPct + wantsPct + savingsPct > 100
 
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20, overflow: 'visible' }}>
 
       {/* ── Income Hero ── */}
       <div style={{
         borderRadius: 16, padding: '20px',
         background: 'linear-gradient(135deg, var(--surface-2) 0%, var(--surface) 100%)',
         border: '1px solid var(--border)',
-        position: 'relative', overflow: 'hidden',
+        position: 'relative',
       }}>
-        <div style={{
-          position: 'absolute', top: -30, right: -20, width: 120, height: 120, borderRadius: '50%',
-          background: 'radial-gradient(circle, color-mix(in oklch, var(--brand) 12%, transparent), transparent 70%)',
-          pointerEvents: 'none',
-        }} />
+        {/* Decorative circle clipped within its own container so buttons aren't cut off */}
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 16, pointerEvents: 'none' }}>
+          <div style={{
+            position: 'absolute', top: -30, right: -20, width: 120, height: 120, borderRadius: '50%',
+            background: 'radial-gradient(circle, color-mix(in oklch, var(--brand) 12%, transparent), transparent 70%)',
+          }} />
+        </div>
         <div style={{ position: 'relative' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
             <div>
               <div className="h-eyebrow" style={{ marginBottom: 6 }}>Monthly income</div>
               <div style={{ fontSize: 34, fontWeight: 800, letterSpacing: '-0.03em', color: 'var(--text)', lineHeight: 1 }}>
                 {masked ? '₹ ••••••' : formatCurrencyFull(totalIncome === 1 ? 0 : totalIncome)}
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
               <button
                 onClick={() => setMasked(v => !v)}
                 style={{ padding: '6px 10px', borderRadius: 9, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}

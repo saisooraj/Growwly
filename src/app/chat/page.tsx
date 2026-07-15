@@ -122,11 +122,11 @@ export default function ChatPage() {
   const hasMessages = messages.length > 0
 
   return (
-    <AppShell title="Groowtt">
+    <AppShell title="Groowtt" fillPage>
       <div style={{
         display: 'flex', flexDirection: 'column',
-        height: 'calc(100dvh - 64px)',
-        maxHeight: 'calc(100dvh - 64px)',
+        flex: 1,
+        overflow: 'hidden',
         background: 'var(--bg)',
       }}>
 
@@ -219,7 +219,7 @@ export default function ChatPage() {
         </div>
 
         {/* ── Input bar ── */}
-        <div style={{
+        <div className="chat-input-bar" style={{
           flexShrink: 0,
           padding: '10px 14px 16px',
           borderTop: '1px solid var(--border)',

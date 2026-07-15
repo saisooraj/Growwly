@@ -173,7 +173,7 @@ export default function Header({ title, scrolled = false, onAdd }: { title?: str
       }}
     >
       {/* ── MOBILE title ── */}
-      <div className="lg:hidden" style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+      <div className="lg:hidden" style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           transform: scrolled ? 'translateY(-6px)' : 'translateY(0)',
           opacity: scrolled ? 0 : 1,
@@ -192,10 +192,10 @@ export default function Header({ title, scrolled = false, onAdd }: { title?: str
             </>
           ) : (
             <>
-              <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.15, color: 'var(--text)' }}>
+              <h1 style={{ margin: 0, fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2, color: 'var(--text)' }}>
                 {meta.title}
               </h1>
-              <div style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 500, marginTop: 1 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 500, marginTop: 1 }}>
                 {meta.sub}
               </div>
             </>

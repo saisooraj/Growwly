@@ -550,3 +550,36 @@ export async function updateLiability(id: string, data: Partial<Liability>): Pro
 export async function deleteLiability(id: string): Promise<void> {
   await deleteDoc(doc(db, 'liabilities', id))
 }
+
+// ── Account deletion ──────────────────────────────────────────────────────────
+
+/**
+ * Deletes all Firestore data for the given user across every collection,
+ * then deletes the Firebase Auth account itself.
+ * Throws if Auth deletion requires re-authentication (caller should sign out).
+ */
+export async function deleteAllUserData(userId: string, firebaseUser: import('firebase/auth').User): Promise<void> {
+  // Collections with documents queried by userId field
+  const userCollections = [
+    'transactions', 'budgets', 'projects', 'borrowings', 'contacts',
+    'healthRoutines', 'healthLogs', 'savingsGoals', 'upcoming',
+    'upcomingPayments', 'tasks', 'assets', 'liabilities',
+  ]
+
+  await Promise.all(
+    userCollections.map(async col => {
+      const snap = await getDocs(query(collection(db, col), where('userId', '==', userId)))
+      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)))
+    })
+  )
+
+  // Singleton docs keyed by userId
+  await Promise.all([
+    deleteDoc(doc(db, 'userSettings', userId)).catch(() => {}),
+    deleteDoc(doc(db, 'emergencyFunds', userId)).catch(() => {}),
+  ])
+
+  // Delete Firebase Auth account last (may throw auth/requires-recent-login)
+  const { deleteUser } = await import('firebase/auth')
+  await deleteUser(firebaseUser)
+}

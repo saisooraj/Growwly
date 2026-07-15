@@ -19,6 +19,7 @@ import toast from 'react-hot-toast'
 interface Props {
   title?: string
   children: React.ReactNode
+  fillPage?: boolean
 }
 
 const ACCENT_ATTRS: Record<string, string> = {
@@ -94,7 +95,7 @@ function PullIndicator({ pull, busy }: { pull: number; busy: boolean }) {
   )
 }
 
-export default function AppShell({ title, children }: Props) {
+export default function AppShell({ title, children, fillPage }: Props) {
   const settings     = useAppStore(s => s.settings)
   const initialized  = useAppStore(s => s.initialized)
   const transactions = useAppStore(s => s.transactions)
@@ -252,10 +253,11 @@ export default function AppShell({ title, children }: Props) {
             style={{
               flex: 1,
               background: 'var(--bg)',
-              overflowY: 'auto',
+              overflowY: fillPage ? 'hidden' : 'auto',
               overflowX: 'hidden',
               position: 'relative',
               WebkitOverflowScrolling: 'touch' as never,
+              ...(fillPage ? { padding: 0, display: 'flex', flexDirection: 'column' } : {}),
             }}
             onScroll={onScroll}
             onPointerDown={onPointerDown}
@@ -264,11 +266,14 @@ export default function AppShell({ title, children }: Props) {
             onPointerLeave={onPointerEnd}
             onPointerCancel={onPointerEnd}
           >
-            {/* Content shifts down with pull, springs back when released */}
+            {/* Content shifts down with pull, springs back when released.
+                Only apply transform when actually pulling — translateY(0px) creates a
+                stacking context that breaks position:fixed children even at rest. */}
             <div style={{
-              transform: `translateY(${pull}px)`,
+              transform: pull > 0 ? `translateY(${pull}px)` : undefined,
               transition: pull > 0 ? 'none' : 'transform .32s cubic-bezier(.22,1,.36,1)',
               minHeight: '100%',
+              ...(fillPage ? { flex: 1, display: 'flex', flexDirection: 'column' } : {}),
             }}>
               {children}
             </div>

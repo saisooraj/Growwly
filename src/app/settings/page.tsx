@@ -8,12 +8,12 @@ import AppShell from '@/components/layout/AppShell'
 import { DEFAULT_CARD_ORDER } from '@/lib/dashboardConstants'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
-import { setUserSettings, exportAllUserData, importAllUserData } from '@/lib/firestore'
+import { setUserSettings, exportAllUserData, importAllUserData, deleteAllUserData } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { downloadJSON, getLast6Months, computeLongestMoneyStreak } from '@/lib/utils'
 import { getCycleRange, getLastWorkingDay, formatCycleRange } from '@/lib/cycle'
-import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, ChevronUp, ChevronDown } from 'lucide-react'
+import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, ChevronUp, ChevronDown, Trash2, AlertTriangle } from 'lucide-react'
 import { BADGES, getBadgeEarnedDate, type BadgeDef } from '@/lib/badges'
 import { IconLeaf, IconFlame } from '@tabler/icons-react'
 import LinkedAccounts from '@/components/auth/LinkedAccounts'
@@ -43,6 +43,11 @@ export default function SettingsPage() {
   const [importing, setImporting] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [pendingImport, setPendingImport] = useState<any | null>(null)
+
+  // Delete account
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   // Badge modal
   const [selectedBadge, setSelectedBadge] = useState<BadgeDef | null>(null)
@@ -235,6 +240,27 @@ export default function SettingsPage() {
     } finally {
       setImporting(false)
       setPendingImport(null)
+    }
+  }
+
+  async function doDeleteAccount() {
+    if (!user || deleteConfirmText.toLowerCase() !== 'delete') return
+    setDeleting(true)
+    try {
+      await deleteAllUserData(user.uid, user)
+      // Auth account is now deleted — sign out cleans up local state
+      await logout()
+    } catch (err: unknown) {
+      const code = (err as { code?: string }).code
+      if (code === 'auth/requires-recent-login') {
+        toast.error('Please sign out and sign back in, then try again.')
+      } else {
+        toast.error('Failed to delete account. Please try again.')
+      }
+    } finally {
+      setDeleting(false)
+      setDeleteModalOpen(false)
+      setDeleteConfirmText('')
     }
   }
 
@@ -898,6 +924,34 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* Danger Zone */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16, border: '1px solid color-mix(in oklch, var(--bad) 35%, var(--border))' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--bad-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--bad-ink)', flexShrink: 0 }}>
+              <AlertTriangle size={14} />
+            </div>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--bad-ink)', margin: 0 }}>Danger Zone</h2>
+          </div>
+
+          <div style={{ padding: '14px 16px', borderRadius: 12, background: 'var(--bad-soft)', border: '1px solid color-mix(in oklch, var(--bad) 25%, transparent)' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--bad-ink)', margin: '0 0 6px' }}>Before you go…</p>
+            <p style={{ fontSize: 12.5, color: 'var(--text-2)', margin: 0, lineHeight: 1.65 }}>
+              Growwly holds your entire financial history — years of transactions, savings goals, net worth milestones, and spending patterns that help you make smarter decisions every day. Once deleted, this data cannot be recovered.
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '8px 0 0', lineHeight: 1.5 }}>
+              If you&apos;re taking a break, you can simply log out and return anytime. Consider <button onClick={handleExport} style={{ color: 'var(--brand)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, fontWeight: 600, textDecoration: 'underline' }}>exporting a backup</button> first.
+            </p>
+          </div>
+
+          <button
+            onClick={() => { setDeleteConfirmText(''); setDeleteModalOpen(true) }}
+            className="btn-danger"
+            style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <Trash2 size={14} /> Delete Account
+          </button>
+        </div>
+
       </div>
 
       <ConfirmDialog
@@ -907,6 +961,103 @@ export default function SettingsPage() {
         onConfirm={doImport}
         onClose={() => setPendingImport(null)}
       />
+
+      {/* Delete account confirmation modal */}
+      {deleteModalOpen && createPortal((
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => { if (!deleting) { setDeleteModalOpen(false); setDeleteConfirmText('') } }}
+        >
+          <div
+            style={{
+              background: 'var(--surface)', border: '1px solid color-mix(in oklch, var(--bad) 35%, var(--border))',
+              borderRadius: 'var(--radius-xl)', padding: 28, maxWidth: 400, width: '100%',
+              boxShadow: 'var(--shadow-lg)',
+              display: 'flex', flexDirection: 'column', gap: 20,
+              position: 'relative',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Close */}
+            <button
+              onClick={() => { setDeleteModalOpen(false); setDeleteConfirmText('') }}
+              disabled={deleting}
+              style={{ position: 'absolute', top: 16, right: 16, padding: 6, borderRadius: 8, background: 'var(--surface-2)', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', opacity: deleting ? 0.4 : 1 }}
+            >
+              <X size={14} />
+            </button>
+
+            {/* Header */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, paddingTop: 8 }}>
+              <div style={{
+                width: 56, height: 56, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'var(--bad-soft)', border: '2px solid color-mix(in oklch, var(--bad) 30%, transparent)',
+              }}>
+                <Trash2 size={24} style={{ color: 'var(--bad-ink)' }} />
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--bad-ink)', letterSpacing: '-0.02em' }}>Delete Account?</div>
+                <div style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.5 }}>
+                  This will permanently delete all your data and cannot be undone.
+                </div>
+              </div>
+            </div>
+
+            {/* What gets deleted */}
+            <div style={{ padding: '12px 16px', borderRadius: 12, background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.75 }}>
+              <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'var(--text-2)', fontSize: 12.5 }}>Everything will be deleted:</p>
+              <p style={{ margin: 0 }}>• All transactions and income records</p>
+              <p style={{ margin: 0 }}>• Savings goals, projects & borrowings</p>
+              <p style={{ margin: 0 }}>• Net worth assets & liabilities</p>
+              <p style={{ margin: 0 }}>• Emergency fund, settings & badges</p>
+            </div>
+
+            {/* Type-to-confirm */}
+            <div>
+              <label style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 500, display: 'block', marginBottom: 8 }}>
+                Type <strong style={{ color: 'var(--bad-ink)' }}>delete</strong> to confirm
+              </label>
+              <input
+                type="text"
+                className="input"
+                placeholder='type "delete"'
+                value={deleteConfirmText}
+                onChange={e => setDeleteConfirmText(e.target.value)}
+                disabled={deleting}
+                autoCapitalize="none"
+                autoCorrect="off"
+                style={{
+                  borderColor: deleteConfirmText.toLowerCase() === 'delete' ? 'var(--bad)' : undefined,
+                }}
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => { setDeleteModalOpen(false); setDeleteConfirmText('') }}
+                disabled={deleting}
+                className="btn"
+                style={{ flex: 1, justifyContent: 'center', opacity: deleting ? 0.5 : 1 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={doDeleteAccount}
+                disabled={deleting || deleteConfirmText.toLowerCase() !== 'delete'}
+                className="btn-danger"
+                style={{
+                  flex: 1, justifyContent: 'center', display: 'flex', alignItems: 'center', gap: 6,
+                  opacity: (deleting || deleteConfirmText.toLowerCase() !== 'delete') ? 0.45 : 1,
+                  cursor: (deleting || deleteConfirmText.toLowerCase() !== 'delete') ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {deleting ? 'Deleting…' : <><Trash2 size={13} /> Delete Forever</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
 
       {/* Badge detail modal — portalled to body so position:fixed escapes the pull-to-refresh transform */}
       {selectedBadge && createPortal((() => {

@@ -618,3 +618,8 @@ button, a, [role="button"] {
 .gw-hscroll,
 .gw-hscroll::-webkit-scrollbar { scrollbar-width: none; }
 .gw-hscroll::-webkit-scrollbar { display: none; }
+
+/* Chat input bar — extra bottom padding on mobile to clear the floating nav pill */
+@media (max-width: 1024px) {
+  .chat-input-bar { padding-bottom: 96px !important; }
+}

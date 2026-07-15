@@ -593,16 +593,16 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                   </button>
                 </div>
 
-                <form onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', flex: 1 }}>
+                <form id="add-tx-form" onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', flex: 1 }}>
 
                   {/* Type tabs */}
-                  <div style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 12, background: 'var(--surface-2)' }}>
+                  <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 12, background: 'var(--surface-2)' }}>
                     {TYPE_TABS.map(tab => (
                       <button key={tab.id} type="button" onClick={() => { setActiveTab(tab.id); setSplitEnabled(false) }}
                         style={{
-                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                          padding: '8px 10px', borderRadius: 9, border: 'none', cursor: 'pointer',
-                          fontSize: 13, fontWeight: 500,
+                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                          padding: '8px 6px', borderRadius: 9, border: 'none', cursor: 'pointer',
+                          fontSize: 12, fontWeight: 500, minWidth: 0,
                           background: activeTab === tab.id ? 'var(--surface)' : 'transparent',
                           color: activeTab === tab.id
                             ? tab.id === 'expense' ? 'var(--bad-ink)' : tab.id === 'income' ? 'var(--good-ink)' : tab.id === 'savings' ? 'var(--brand-ink)' : 'var(--info-ink)'
@@ -1195,28 +1195,29 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                     </div>
                   )}
 
-                  {/* Sticky save — stays visible at bottom even on long forms */}
-                  <div style={{
-                    position: 'sticky', bottom: 0,
-                    background: 'linear-gradient(to bottom, transparent 0%, var(--surface) 28%)',
-                    marginLeft: -20, marginRight: -20, marginBottom: -20,
-                    padding: '20px 20px 20px',
-                  }}>
-                    <button
-                      type="submit"
-                      disabled={saving || !amount || Number(amount) <= 0}
-                      className="btn-primary"
-                      style={{ width: '100%', justifyContent: 'center', padding: '13px', fontSize: 14, opacity: saving ? 0.6 : 1 }}
-                    >
-                      {saving ? 'Saving...' : editTx ? 'Update'
-                        : splitEnabled && participants.length > 0
-                          ? `Save & Split (${participants.length + 1} records)`
-                          : activeTab === 'savings' ? (savingsKind === 'savings_withdrawal' ? 'Withdraw from Savings' : 'Add to Savings')
-                          : txType === 'transfer' ? 'Log Transfer' : 'Add Transaction'}
-                    </button>
-                  </div>
-
                 </form>
+
+                {/* Fixed footer — outside the scrollable form so it always stays at the bottom */}
+                <div style={{
+                  flexShrink: 0,
+                  padding: '12px 20px 20px',
+                  borderTop: '1px solid var(--border)',
+                  background: 'var(--surface)',
+                }}>
+                  <button
+                    type="submit"
+                    form="add-tx-form"
+                    disabled={saving || !amount || Number(amount) <= 0}
+                    className="btn-primary"
+                    style={{ width: '100%', justifyContent: 'center', padding: '13px', fontSize: 14, opacity: saving ? 0.6 : 1 }}
+                  >
+                    {saving ? 'Saving...' : editTx ? 'Update'
+                      : splitEnabled && participants.length > 0
+                        ? `Save & Split (${participants.length + 1} records)`
+                        : activeTab === 'savings' ? (savingsKind === 'savings_withdrawal' ? 'Withdraw from Savings' : 'Add to Savings')
+                        : txType === 'transfer' ? 'Log Transfer' : 'Add Transaction'}
+                  </button>
+                </div>
               </Dialog.Panel>
             </Transition.Child>
           </div>

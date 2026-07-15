@@ -303,21 +303,23 @@ export default function UpcomingPage() {
 
       </div>
 
-      {/* FAB */}
+      {/* FAB — sits above the AI sparkle button (bottom-[100px], 50px tall → top at 150px).
+           Use bottom-[164px] on mobile to leave an 8px gap above it; desktop bottom-6. */}
       <button
         onClick={() => setAddOpen(true)}
-        className="fixed right-4 bottom-24 lg:right-6 lg:bottom-6 z-40 flex items-center justify-center"
+        className="fixed right-4 lg:right-6 lg:bottom-6 z-40 flex items-center justify-center"
         style={{
-          width: 56, height: 56, borderRadius: '50%',
+          bottom: 164,
+          width: 52, height: 52, borderRadius: '50%',
           background: 'var(--text)', color: 'var(--bg)',
           border: 'none', cursor: 'pointer',
-          boxShadow: 'var(--shadow-lg), 0 0 0 6px color-mix(in oklch, var(--text) 8%, transparent)',
+          boxShadow: 'var(--shadow-lg), 0 0 0 5px color-mix(in oklch, var(--text) 8%, transparent)',
           transition: 'transform .12s ease',
         }}
         onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.05)')}
         onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
       >
-        <Plus size={24} />
+        <Plus size={22} />
       </button>
 
       <AddUpcomingModal open={addOpen}    onClose={() => setAddOpen(false)} />
