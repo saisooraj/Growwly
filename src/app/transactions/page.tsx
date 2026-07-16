@@ -186,7 +186,7 @@ function TransactionsInner() {
       <div className="txn-layout anim-page" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
         {/* Mobile summary strip — hidden on desktop */}
-        <div className="lg:hidden" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div className="flex flex-col lg:hidden" style={{ gap: 8 }}>
           {/* Strip header with eye toggle */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingInline: 2 }}>
             <span className="h-eyebrow">This month</span>
