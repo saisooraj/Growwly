@@ -6,9 +6,10 @@ import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import {
-  TrendingUp, ShieldCheck, BarChart3, Wallet, Zap,
+  ShieldCheck, BarChart3, Wallet, Zap,
   Mail, ArrowLeft, Eye, EyeOff, ChevronRight, AlertTriangle, RefreshCw,
 } from 'lucide-react'
+import GrowwlyLogo from '@/components/ui/GrowwlyLogo'
 import type { ConfirmationResult } from 'firebase/auth'
 import toast from 'react-hot-toast'
 import GoogleIcon from '@/components/ui/GoogleIcon'
@@ -274,6 +275,18 @@ function EmailScreen({
   const [agreedToPrivacy, setAgreedToPrivacy] = useState(false)
   const [privacyShake, setPrivacyShake]       = useState(false)
   const privacyRef = useRef<HTMLLabelElement>(null)
+
+  // Auto-check the privacy box when the user agrees in the new-tab privacy page
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key === 'gw_privacy_agreed' && e.newValue) {
+        setAgreedToPrivacy(true)
+        localStorage.removeItem('gw_privacy_agreed')
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
 
   function shakePrivacy() {
     setPrivacyShake(true)
@@ -564,9 +577,7 @@ export default function LoginPage() {
   if (loading) return (
     <div className="min-h-screen bg-[#06030F] flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center animate-pulse bg-gradient-to-br from-brand-500 to-fuchsia-500 shadow-lg shadow-brand-500/30">
-          <TrendingUp size={24} className="text-white" />
-        </div>
+        <GrowwlyLogo size="md" pulse />
         <p className="text-sm text-slate-400 font-medium">Loading Growwly…</p>
       </div>
     </div>
@@ -582,8 +593,8 @@ export default function LoginPage() {
 
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-5 bg-gradient-to-br from-brand-500 to-fuchsia-500 shadow-2xl shadow-brand-500/30">
-            <TrendingUp size={30} className="text-white" />
+          <div className="flex justify-center mb-5">
+            <GrowwlyLogo size="lg" />
           </div>
           <h1 className="text-4xl font-display font-bold text-white mb-2 tracking-tight">
             Grow<span className="bg-gradient-to-r from-brand-400 to-fuchsia-400 bg-clip-text text-transparent">wly</span>

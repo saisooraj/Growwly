@@ -4,18 +4,17 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { useData } from '@/hooks/useData'
-import { TrendingUp, ShieldCheck } from 'lucide-react'
+import { ShieldCheck } from 'lucide-react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import Link from 'next/link'
+import GrowwlyLogo from '@/components/ui/GrowwlyLogo'
 
 function LoadingScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#06030F]">
       <div className="flex flex-col items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl flex items-center justify-center animate-pulse bg-gradient-to-br from-brand-500 to-fuchsia-500 shadow-lg shadow-brand-500/30">
-          <TrendingUp size={24} className="text-white" />
-        </div>
+        <GrowwlyLogo size="md" pulse />
         <p className="text-sm text-slate-400 font-medium">Loading Growwly...</p>
       </div>
     </div>

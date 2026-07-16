@@ -6,12 +6,24 @@ import { useRouter } from 'next/navigation'
 export default function PrivacyPage() {
   const router = useRouter()
 
+  function dismiss() {
+    if (window.history.length <= 1) window.close()
+    else router.back()
+  }
+
+  function handleAgree() {
+    // Signal the sign-up form in the original tab to auto-check the privacy box.
+    // The localStorage storage event fires in all OTHER open tabs.
+    localStorage.setItem('gw_privacy_agreed', Date.now().toString())
+    dismiss()
+  }
+
   return (
     <div className="min-h-screen bg-[#06030F] text-white px-4 py-12">
       <div className="max-w-2xl mx-auto">
 
         <button
-          onClick={() => router.back()}
+          onClick={dismiss}
           className="inline-flex items-center gap-2 text-slate-400 hover:text-white text-sm mb-10 transition-colors"
         >
           <ArrowLeft size={15} />
@@ -67,16 +79,15 @@ export default function PrivacyPage() {
 
         </div>
 
-        {/* Action buttons */}
         <div className="mt-12 flex flex-col sm:flex-row gap-3">
           <button
-            onClick={() => router.back()}
+            onClick={handleAgree}
             className="flex-1 bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3.5 rounded-2xl transition-colors text-sm"
           >
             I Understand & Agree
           </button>
           <button
-            onClick={() => router.back()}
+            onClick={dismiss}
             className="flex-1 bg-white/6 hover:bg-white/10 border border-white/10 text-slate-400 font-medium py-3.5 rounded-2xl transition-colors text-sm"
           >
             Go Back
