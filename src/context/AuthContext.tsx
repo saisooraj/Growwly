@@ -24,6 +24,7 @@ import {
 } from 'firebase/auth'
 import { auth, googleProvider, db } from '@/lib/firebase'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
+import { logAuthError } from '@/lib/authErrorLogger'
 
 export interface AuthContextType {
   user: User | null
@@ -57,11 +58,10 @@ export interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType)
 
-// Module-level verifier — single-use per attempt, cleared before re-creation
+// ── reCAPTCHA helpers ──────────────────────────────────────────────────────────
 let _recaptcha: RecaptchaVerifier | null = null
 
 function makeRecaptcha(): RecaptchaVerifier {
-  // Always clear any previous instance before creating a new one
   if (_recaptcha) {
     try { _recaptcha.clear() } catch { /* already cleared */ }
     _recaptcha = null
@@ -76,9 +76,30 @@ function clearRecaptcha() {
     try { _recaptcha.clear() } catch { /* ignore */ }
     _recaptcha = null
   }
-  // Wipe any rendered widget left in the container
   const el = document.getElementById('recaptcha-root')
   if (el) el.innerHTML = ''
+}
+
+// ── iOS / WKWebView detection ──────────────────────────────────────────────────
+// All browsers on iOS (Safari, Chrome, Firefox) use WKWebView and block popups.
+// Skip the popup attempt entirely and go straight to redirect on any iOS device.
+function isIOSDevice(): boolean {
+  if (typeof navigator === 'undefined') return false
+  return /iP(hone|ad|od)/i.test(navigator.userAgent)
+}
+
+// ── sessionStorage keys ────────────────────────────────────────────────────────
+const SS_REDIRECT_PENDING = 'gw_auth_redirect_pending'
+const SS_REDIRECT_FAILED  = 'gw_auth_redirect_failed'
+
+function ssGet(key: string): string | null {
+  try { return sessionStorage.getItem(key) } catch { return null }
+}
+function ssSet(key: string, val: string) {
+  try { sessionStorage.setItem(key, val) } catch { /* private mode */ }
+}
+function ssRemove(key: string) {
+  try { sessionStorage.removeItem(key) } catch { /* ignore */ }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -86,49 +107,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      setUser(u)
-      setLoading(false)
-      if (u && db) {
-        const profileRef = doc(db, 'userProfiles', u.uid)
-        const now = new Date().toISOString()
-        try {
-          const snap = await getDoc(profileRef)
-          if (!snap.exists()) {
-            await setDoc(profileRef, {
-              uid: u.uid,
-              email: u.email,
-              displayName: u.displayName,
-              photoURL: u.photoURL,
-              createdAt: now,
-              lastActiveAt: now,
-            })
-          } else {
-            await setDoc(profileRef, {
-              email: u.email,
-              displayName: u.displayName,
-              photoURL: u.photoURL,
-              lastActiveAt: now,
-            }, { merge: true })
+    let cancelled = false
+    let unsubAuthState: (() => void) | undefined
+
+    const redirectPending = ssGet(SS_REDIRECT_PENDING)
+
+    // Process any pending OAuth redirect BEFORE starting the auth state listener.
+    // This prevents onAuthStateChanged from firing with null (and triggering a
+    // premature redirect to /login) while the redirect result is still being settled.
+    getRedirectResult(auth)
+      .then(() => {
+        ssRemove(SS_REDIRECT_PENDING)
+        ssRemove(SS_REDIRECT_FAILED)
+      })
+      .catch(async (err) => {
+        const code = (err as { code?: string })?.code ?? 'unknown'
+        const msg  = (err as { message?: string })?.message ?? 'Redirect sign-in failed'
+
+        // Only treat as a failure if we actually initiated a redirect
+        if (redirectPending) {
+          ssRemove(SS_REDIRECT_PENDING)
+          ssSet(SS_REDIRECT_FAILED, code)
+          await logAuthError({ code, message: msg, flow: `google-redirect:${redirectPending}` })
+        }
+      })
+      .finally(() => {
+        if (cancelled) return
+
+        unsubAuthState = onAuthStateChanged(auth, async (u) => {
+          setUser(u)
+          setLoading(false)
+
+          if (u && db) {
+            const profileRef = doc(db, 'userProfiles', u.uid)
+            const now = new Date().toISOString()
+            try {
+              const snap = await getDoc(profileRef)
+              if (!snap.exists()) {
+                await setDoc(profileRef, {
+                  uid: u.uid,
+                  email: u.email,
+                  displayName: u.displayName,
+                  photoURL: u.photoURL,
+                  createdAt: now,
+                  lastActiveAt: now,
+                })
+              } else {
+                await setDoc(profileRef, {
+                  email: u.email,
+                  displayName: u.displayName,
+                  photoURL: u.photoURL,
+                  lastActiveAt: now,
+                }, { merge: true })
+              }
+            } catch { /* non-critical, don't block auth */ }
           }
-        } catch { /* non-critical, don't block auth */ }
-      }
-    })
-    getRedirectResult(auth).catch(() => {})
-    return unsub
+        })
+      })
+
+    return () => {
+      cancelled = true
+      unsubAuthState?.()
+    }
   }, [])
 
   // ── Google ──────────────────────────────────────────────────────────────────
 
   function signInWithGoogle() {
+    // All iOS browsers (Safari, Chrome, Firefox) use WKWebView and will always
+    // block popups — skip straight to redirect to avoid the race condition that
+    // caused the "stuck on login" bug in iOS Safari.
+    if (isIOSDevice()) {
+      ssSet(SS_REDIRECT_PENDING, 'ios')
+      signInWithRedirect(auth, googleProvider)
+      return
+    }
+
     signInWithPopup(auth, googleProvider).catch((err) => {
-      const code = err?.code ?? ''
+      const code = (err as { code?: string })?.code ?? ''
       const shouldRedirect =
         code === 'auth/popup-blocked' ||
         code === 'auth/popup-closed-by-user' ||
         code === 'auth/cancelled-popup-request' ||
         code === 'auth/operation-not-supported-in-this-environment'
-      if (shouldRedirect) signInWithRedirect(auth, googleProvider)
+      if (shouldRedirect) {
+        ssSet(SS_REDIRECT_PENDING, 'popup-blocked')
+        signInWithRedirect(auth, googleProvider)
+      }
     })
   }
 
@@ -181,7 +246,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!auth.currentUser) throw new Error('Not signed in')
     const verifier = makeRecaptcha()
     try {
-      // linkWithPhoneNumber ties the OTP flow to the current user's account
       const result = await linkWithPhoneNumber(auth.currentUser, phone, verifier)
       clearRecaptcha()
       return result
@@ -192,14 +256,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function confirmPhoneLink(result: ConfirmationResult, otp: string) {
-    // result.confirm() on a linkWithPhoneNumber result handles linking automatically
     await result.confirm(otp)
   }
 
   async function unlinkProvider(providerId: string) {
     if (!auth.currentUser) throw new Error('Not signed in')
     await unlink(auth.currentUser, providerId)
-    // Refresh user object
     await auth.currentUser.reload()
     setUser({ ...auth.currentUser })
   }
@@ -213,7 +275,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await updatePassword(auth.currentUser, newPassword)
   }
 
-  // Used when no password is set yet (phone/Google account adding email+pass)
   async function setInitialPassword(email: string, password: string) {
     if (!auth.currentUser) throw new Error('Not signed in')
     const credential = EmailAuthProvider.credential(email, password)

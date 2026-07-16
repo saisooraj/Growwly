@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import {
   TrendingUp, ShieldCheck, BarChart3, Wallet, Zap,
-  Mail, ArrowLeft, Eye, EyeOff, ChevronRight,
+  Mail, ArrowLeft, Eye, EyeOff, ChevronRight, AlertTriangle, RefreshCw,
 } from 'lucide-react'
 import type { ConfirmationResult } from 'firebase/auth'
 import toast from 'react-hot-toast'
@@ -24,13 +24,49 @@ type Screen =
   | 'email-signup'
   | 'email-conflict'
 
-// ── Shared input style ──────────────────────────────────────────────────────
+const SS_REDIRECT_FAILED = 'gw_auth_redirect_failed'
+
+function ssGet(key: string): string | null {
+  try { return sessionStorage.getItem(key) } catch { return null }
+}
+function ssRemove(key: string) {
+  try { sessionStorage.removeItem(key) } catch { /* ignore */ }
+}
+
+// ── Shared input style ────────────────────────────────────────────────────────
 const inputCls = "w-full bg-white/8 border border-white/15 rounded-2xl px-4 py-3.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-brand-400/60 focus:bg-white/10 transition-all"
 
-// ── Home screen ─────────────────────────────────────────────────────────────
-function HomeScreen({ onMethod, onGoogle }: { onMethod: (s: Screen) => void; onGoogle: () => void }) {
+// ── Redirect failure banner ───────────────────────────────────────────────────
+function RedirectFailedBanner({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="bg-amber-500/10 border border-amber-500/25 rounded-2xl p-4 mb-5 flex gap-3">
+      <AlertTriangle size={16} className="text-amber-400 flex-shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0">
+        <p className="text-amber-400 text-sm font-semibold mb-0.5">Sign-in was interrupted</p>
+        <p className="text-slate-400 text-xs leading-relaxed">
+          Your browser may have blocked the sign-in flow. Tap <strong className="text-slate-300">Continue with Google</strong> below to try again.
+        </p>
+      </div>
+      <button onClick={onDismiss} className="text-slate-600 hover:text-slate-400 text-xs self-start flex-shrink-0">✕</button>
+    </div>
+  )
+}
+
+// ── Home screen ───────────────────────────────────────────────────────────────
+function HomeScreen({
+  onMethod, onGoogle, redirectFailed, onDismissRedirectFailed,
+}: {
+  onMethod: (s: Screen) => void
+  onGoogle: () => void
+  redirectFailed: boolean
+  onDismissRedirectFailed: () => void
+}) {
   return (
     <>
+      {redirectFailed && (
+        <RedirectFailedBanner onDismiss={onDismissRedirectFailed} />
+      )}
+
       <div className="flex flex-col gap-3 mb-4">
         <button
           onClick={() => onMethod('email-signin')}
@@ -66,7 +102,7 @@ function HomeScreen({ onMethod, onGoogle }: { onMethod: (s: Screen) => void; onG
   )
 }
 
-// ── Phone number screen ──────────────────────────────────────────────────────
+// ── Phone number screen ───────────────────────────────────────────────────────
 function PhoneNumberScreen({
   onBack, onOTPSent,
 }: {
@@ -80,7 +116,6 @@ function PhoneNumberScreen({
   async function handleSend() {
     const trimmed = phone.trim()
     if (!trimmed) return
-    // Prepend +91 if not already international format
     const formatted = trimmed.startsWith('+') ? trimmed : `+91${trimmed.replace(/\D/g, '')}`
     setLoading(true)
     try {
@@ -90,7 +125,6 @@ function PhoneNumberScreen({
     } catch (err: unknown) {
       const code    = (err as { code?: string })?.code ?? ''
       const message = (err as { message?: string })?.message ?? ''
-      console.error('[Phone OTP error]', code, err)
       if (code === 'auth/invalid-phone-number') toast.error('Invalid phone number')
       else if (code === 'auth/too-many-requests') toast.error('Too many attempts. Try later.')
       else if (code === 'auth/operation-not-allowed') toast.error('Phone auth not enabled in Firebase Console')
@@ -136,13 +170,14 @@ function PhoneNumberScreen({
         {loading ? 'Sending…' : 'Send OTP'}
       </button>
       <p className="text-center text-xs text-slate-600 mt-3">
-        SMS requires Firebase Blaze plan · <button onClick={onBack} className="text-slate-500 hover:text-slate-400 underline underline-offset-2">Use email instead</button>
+        SMS requires Firebase Blaze plan ·{' '}
+        <button onClick={onBack} className="text-slate-500 hover:text-slate-400 underline underline-offset-2">Use email instead</button>
       </p>
     </>
   )
 }
 
-// ── OTP verification screen ──────────────────────────────────────────────────
+// ── OTP verification screen ───────────────────────────────────────────────────
 function OTPScreen({
   phone, confirmResult, onBack,
 }: {
@@ -173,7 +208,7 @@ function OTPScreen({
       const code = (err as { code?: string })?.code ?? ''
       if (code === 'auth/invalid-verification-code') toast.error('Wrong OTP. Try again.')
       else if (code === 'auth/code-expired') toast.error('OTP expired. Request a new one.')
-      else toast.error('Verification failed')
+      else toast.error('Verification failed. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -217,10 +252,9 @@ function OTPScreen({
   )
 }
 
-// ── Email sign-in / sign-up screen ──────────────────────────────────────────
+// ── Email sign-in / sign-up screen ────────────────────────────────────────────
 function EmailScreen({
-  onBack,
-  onConflict,
+  onBack, onConflict,
 }: {
   onBack: () => void
   onConflict: (email: string, methods: string[]) => void
@@ -233,18 +267,31 @@ function EmailScreen({
   const [showPw, setShowPw]   = useState(false)
   const [loading, setLoading] = useState(false)
   const [agreedToPrivacy, setAgreedToPrivacy] = useState(false)
+  const [privacyShake, setPrivacyShake]       = useState(false)
+  const privacyRef = useRef<HTMLLabelElement>(null)
+
+  function shakePrivacy() {
+    setPrivacyShake(true)
+    setTimeout(() => setPrivacyShake(false), 600)
+    privacyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 
   async function handleSubmit() {
-    if (!email || !password) return
-    if (mode === 'signup' && password !== confirm) { toast.error('Passwords do not match'); return }
+    if (!email.trim() || !password) return
+
+    if (mode === 'signup') {
+      if (!agreedToPrivacy) { shakePrivacy(); return }
+      if (password !== confirm) { toast.error('Passwords do not match'); return }
+    }
+
     if (password.length < 6) { toast.error('Password must be at least 6 characters'); return }
 
     setLoading(true)
     try {
       if (mode === 'signin') {
-        await signInWithEmail(email, password)
+        await signInWithEmail(email.trim(), password)
       } else {
-        await signUpWithEmail(email, password)
+        await signUpWithEmail(email.trim(), password)
         if (auth.currentUser) {
           await setDoc(doc(db, 'users', auth.currentUser.uid), {
             privacyAgreed: true,
@@ -255,19 +302,28 @@ function EmailScreen({
       toast.success(mode === 'signin' ? 'Welcome back!' : 'Account created!')
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code ?? ''
-      if (code === 'auth/account-exists-with-different-credential' || code === 'auth/email-already-in-use') {
-        const methods = await getSignInMethodsForEmail(email).catch(() => [])
-        onConflict(email, methods)
+      if (
+        code === 'auth/account-exists-with-different-credential' ||
+        code === 'auth/email-already-in-use'
+      ) {
+        const methods = await getSignInMethodsForEmail(email.trim()).catch(() => [])
+        onConflict(email.trim(), methods)
       } else if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
         toast.error('Incorrect email or password')
       } else if (code === 'auth/user-not-found') {
-        toast.error('No account with this email. Sign up instead?')
+        toast.error('No account with this email — try signing up instead')
       } else if (code === 'auth/too-many-requests') {
-        toast.error('Too many attempts. Try later or reset your password.')
+        toast.error('Too many attempts. Wait a few minutes and try again.')
       } else if (code === 'auth/weak-password') {
-        toast.error('Password too weak. Use at least 6 characters.')
+        toast.error('Password too weak — use at least 6 characters')
+      } else if (code === 'auth/invalid-email') {
+        toast.error('Invalid email address')
+      } else if (code === 'auth/network-request-failed') {
+        toast.error('Network error — check your connection and try again')
+      } else if (code === 'auth/user-disabled') {
+        toast.error('This account has been disabled. Contact support.')
       } else {
-        toast.error('Sign-in failed. Try again.')
+        toast.error('Something went wrong. Please try again.')
       }
     } finally {
       setLoading(false)
@@ -331,7 +387,14 @@ function EmailScreen({
           />
         )}
         {mode === 'signup' && (
-          <label className="flex items-start gap-2.5 cursor-pointer mt-1">
+          <label
+            ref={privacyRef}
+            className={`flex items-start gap-2.5 cursor-pointer mt-1 rounded-xl p-2 transition-all ${
+              privacyShake
+                ? 'bg-amber-500/10 border border-amber-500/40 animate-[shake_0.4s_ease-in-out]'
+                : 'border border-transparent'
+            }`}
+          >
             <input
               type="checkbox"
               checked={agreedToPrivacy}
@@ -351,10 +414,13 @@ function EmailScreen({
 
       <button
         onClick={handleSubmit}
-        disabled={!email || !password || loading || (mode === 'signup' && !agreedToPrivacy)}
+        disabled={!email.trim() || !password || loading}
         className="w-full bg-brand-500 hover:bg-brand-600 disabled:opacity-40 text-white font-semibold py-3.5 rounded-2xl transition-colors text-sm mb-4"
       >
-        {loading ? (mode === 'signin' ? 'Signing in…' : 'Creating account…') : (mode === 'signin' ? 'Sign In' : 'Create Account')}
+        {loading
+          ? (mode === 'signin' ? 'Signing in…' : 'Creating account…')
+          : (mode === 'signin' ? 'Sign In' : 'Create Account')
+        }
       </button>
 
       <div className="flex items-center gap-3 mb-4">
@@ -364,7 +430,7 @@ function EmailScreen({
       </div>
       <button
         onClick={signInWithGoogle}
-        className="w-full flex items-center justify-center gap-3 bg-white/8 hover:bg-white/12 border border-white/12 text-white font-medium py-3 px-4 rounded-2xl transition-all text-sm"
+        className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-900 font-semibold py-3 px-4 rounded-2xl transition-all text-sm"
       >
         <GoogleIcon />
         Continue with Google
@@ -373,7 +439,7 @@ function EmailScreen({
   )
 }
 
-// ── Conflict / account linking screen ───────────────────────────────────────
+// ── Conflict / account linking screen ─────────────────────────────────────────
 function ConflictScreen({
   email, methods, onBack, onGoogle,
 }: {
@@ -398,7 +464,9 @@ function ConflictScreen({
         </p>
       </div>
 
-      <p className="text-sm text-slate-300 mb-4">Sign in with your existing method first, then add a password in Settings → Linked Accounts.</p>
+      <p className="text-sm text-slate-300 mb-4">
+        Sign in with your existing method first, then add a password in Settings → Linked Accounts.
+      </p>
 
       {hasGoogle && (
         <button
@@ -413,7 +481,39 @@ function ConflictScreen({
   )
 }
 
-// ── Main login page ─────────────────────────────────────────────────────────
+// ── Persistent sign-in error screen ──────────────────────────────────────────
+// Shown if the user lands on login with a Google redirect error and retrying fails
+function PersistentErrorScreen({ onRetry, onEmail }: { onRetry: () => void; onEmail: () => void }) {
+  return (
+    <div className="text-center">
+      <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
+        <AlertTriangle size={22} className="text-red-400" />
+      </div>
+      <h2 className="text-base font-semibold text-white mb-2">Google sign-in unavailable</h2>
+      <p className="text-sm text-slate-400 mb-6 leading-relaxed">
+        Your browser blocked the sign-in window. This can happen in private browsing or when cookies are restricted.
+      </p>
+      <div className="flex flex-col gap-3">
+        <button
+          onClick={onRetry}
+          className="w-full flex items-center justify-center gap-2 bg-white hover:bg-slate-100 text-slate-900 font-semibold py-3.5 px-4 rounded-2xl transition-colors text-sm shadow-lg"
+        >
+          <RefreshCw size={14} />
+          Try Google again
+        </button>
+        <button
+          onClick={onEmail}
+          className="w-full flex items-center justify-center gap-2 bg-white/8 hover:bg-white/12 border border-white/12 text-white font-medium py-3.5 px-4 rounded-2xl transition-all text-sm"
+        >
+          <Mail size={14} />
+          Use email instead
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Main login page ───────────────────────────────────────────────────────────
 export default function LoginPage() {
   const { user, loading, signInWithGoogle } = useAuth()
   const router = useRouter()
@@ -424,12 +524,33 @@ export default function LoginPage() {
   const [conflictEmail, setConflictEmail] = useState('')
   const [conflictMethods, setConflictMethods] = useState<string[]>([])
 
+  // Detect if we landed here after a failed OAuth redirect
+  const [redirectFailed, setRedirectFailed]     = useState(false)
+  const [retryCount, setRetryCount]             = useState(0)
+  const [showPersistentError, setShowPersistentError] = useState(false)
+
+  useEffect(() => {
+    const failCode = ssGet(SS_REDIRECT_FAILED)
+    if (failCode) {
+      ssRemove(SS_REDIRECT_FAILED)
+      setRedirectFailed(true)
+    }
+  }, [])
+
   useEffect(() => {
     if (!loading && user) router.replace('/')
   }, [user, loading])
 
   function handleGoogle() {
-    try { signInWithGoogle() } catch { toast.error('Sign-in failed. Try again.') }
+    setRedirectFailed(false)
+    const next = retryCount + 1
+    setRetryCount(next)
+    // After 2 failed redirect attempts, show the persistent error screen
+    if (next >= 3) {
+      setShowPersistentError(true)
+      return
+    }
+    signInWithGoogle()
   }
 
   if (loading) return (
@@ -463,7 +584,7 @@ export default function LoginPage() {
         </div>
 
         {/* Feature pills — only on home screen */}
-        {screen === 'home' && (
+        {screen === 'home' && !showPersistentError && (
           <div className="grid grid-cols-3 gap-3 mb-6">
             {[
               { icon: BarChart3,   label: 'Visual Charts' },
@@ -480,20 +601,29 @@ export default function LoginPage() {
 
         {/* Auth card */}
         <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-7 shadow-2xl">
-          {screen === 'home' && (
-            <div className="flex items-center gap-2 mb-1">
-              <Zap size={16} className="text-brand-400" />
-              <h2 className="text-base font-semibold text-white">Get started free</h2>
-            </div>
-          )}
-          {screen === 'home' && (
-            <p className="text-sm text-slate-400 mb-6">Track expenses, plan budgets, grow your wealth.</p>
+          {screen === 'home' && !showPersistentError && (
+            <>
+              <div className="flex items-center gap-2 mb-1">
+                <Zap size={16} className="text-brand-400" />
+                <h2 className="text-base font-semibold text-white">Get started free</h2>
+              </div>
+              <p className="text-sm text-slate-400 mb-6">Track expenses, plan budgets, grow your wealth.</p>
+            </>
           )}
 
-          {screen === 'home' && (
-            <HomeScreen onMethod={setScreen} onGoogle={handleGoogle} />
-          )}
-          {screen === 'phone-number' && (
+          {showPersistentError ? (
+            <PersistentErrorScreen
+              onRetry={() => { setShowPersistentError(false); setRetryCount(0); signInWithGoogle() }}
+              onEmail={() => { setShowPersistentError(false); setScreen('email-signin') }}
+            />
+          ) : screen === 'home' ? (
+            <HomeScreen
+              onMethod={setScreen}
+              onGoogle={handleGoogle}
+              redirectFailed={redirectFailed}
+              onDismissRedirectFailed={() => setRedirectFailed(false)}
+            />
+          ) : screen === 'phone-number' ? (
             <PhoneNumberScreen
               onBack={() => setScreen('home')}
               onOTPSent={(result, phone) => {
@@ -502,15 +632,13 @@ export default function LoginPage() {
                 setScreen('phone-otp')
               }}
             />
-          )}
-          {screen === 'phone-otp' && phoneResult && (
+          ) : screen === 'phone-otp' && phoneResult ? (
             <OTPScreen
               phone={phoneNumber}
               confirmResult={phoneResult}
               onBack={() => setScreen('phone-number')}
             />
-          )}
-          {(screen === 'email-signin' || screen === 'email-signup') && (
+          ) : (screen === 'email-signin' || screen === 'email-signup') ? (
             <EmailScreen
               onBack={() => setScreen('home')}
               onConflict={(email, methods) => {
@@ -519,15 +647,14 @@ export default function LoginPage() {
                 setScreen('email-conflict')
               }}
             />
-          )}
-          {screen === 'email-conflict' && (
+          ) : screen === 'email-conflict' ? (
             <ConflictScreen
               email={conflictEmail}
               methods={conflictMethods}
               onBack={() => setScreen('email-signin')}
               onGoogle={handleGoogle}
             />
-          )}
+          ) : null}
 
           <p className="text-center text-xs text-slate-600 mt-5">
             Data secured with Firebase · Never shared
