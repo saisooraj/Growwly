@@ -6,10 +6,10 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import {
   LayoutDashboard, Users, Database, Activity,
-  Flag, ClipboardList, Leaf, LogOut, Shield,
+  Flag, ClipboardList, Leaf, LogOut, Shield, ShieldAlert,
 } from 'lucide-react'
 
-const ADMIN_EMAIL = 'saisoorajpnair@gmail.com'
+const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? 'saisoorajpnair@gmail.com'
 // Auto-logout after 60 minutes of no mouse/keyboard activity
 const INACTIVITY_MS = 60 * 60 * 1000
 
@@ -20,6 +20,7 @@ const NAV = [
   { href: '/admin/system',       icon: Activity,        label: 'System Health'  },
   { href: '/admin/feature-flags',icon: Flag,            label: 'Feature Flags'  },
   { href: '/admin/audit-log',    icon: ClipboardList,   label: 'Audit Log'      },
+  { href: '/admin/auth-alerts',  icon: ShieldAlert,     label: 'Auth Alerts'    },
 ]
 
 export default function AdminShell({ children }: { children: React.ReactNode }) {

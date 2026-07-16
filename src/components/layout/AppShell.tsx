@@ -68,7 +68,7 @@ function AdminAuthAlertBanner() {
         </span>
       </div>
       <a
-        href="/admin"
+        href="/admin/auth-alerts"
         style={{
           color: '#f87171', fontWeight: 600, fontSize: 12,
           textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,

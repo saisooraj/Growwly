@@ -1,5 +1,5 @@
 import { db } from './firebase'
-import { collection, addDoc, query, orderBy, limit, getDocs, writeBatch, doc } from 'firebase/firestore'
+import { collection, addDoc, query, orderBy, limit, getDocs, writeBatch, updateDoc, doc } from 'firebase/firestore'
 
 export interface AuthAlertRecord {
   id: string
@@ -33,23 +33,35 @@ export async function logAuthError(params: {
   }
 }
 
-// Fetch the 50 most recent alerts and filter unread client-side
-// (avoids needing a composite Firestore index)
-export async function getUnreadAuthAlerts(): Promise<AuthAlertRecord[]> {
+// All alerts (read + unread) for the admin alerts page
+export async function getAllAuthAlerts(limitCount = 200): Promise<AuthAlertRecord[]> {
   if (!db) return []
   try {
     const q = query(
       collection(db, 'adminAlerts'),
       orderBy('timestamp', 'desc'),
-      limit(50)
+      limit(limitCount)
     )
     const snap = await getDocs(q)
     return snap.docs
       .map(d => ({ id: d.id, ...d.data() } as AuthAlertRecord))
-      .filter(a => !a.read && a.type === 'auth_error')
+      .filter(a => a.type === 'auth_error')
   } catch {
     return []
   }
+}
+
+// Unread only — used by the AppShell banner
+export async function getUnreadAuthAlerts(): Promise<AuthAlertRecord[]> {
+  const all = await getAllAuthAlerts(50)
+  return all.filter(a => !a.read)
+}
+
+export async function markAlertRead(id: string): Promise<void> {
+  if (!db) return
+  try {
+    await updateDoc(doc(db, 'adminAlerts', id), { read: true })
+  } catch { /* non-critical */ }
 }
 
 export async function markAllAlertsRead(): Promise<void> {
@@ -60,7 +72,5 @@ export async function markAllAlertsRead(): Promise<void> {
     const batch = writeBatch(db)
     alerts.forEach(a => batch.update(doc(db!, 'adminAlerts', a.id), { read: true }))
     await batch.commit()
-  } catch {
-    // Non-critical
-  }
+  } catch { /* non-critical */ }
 }
