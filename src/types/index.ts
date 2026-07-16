@@ -130,7 +130,7 @@ export interface UserSettings {
   noSpendDays?: string[]                           // YYYY-MM-DD dates user marked as no-spend (counts for streak)
   showHealthTab?: boolean                         // show Health tab in navigation (default: false)
   showTasksTab?: boolean                          // show Tasks tab in navigation (default: false)
-  accentColor?: 'green' | 'purple' | 'orange' | 'pink' | 'blue'  // brand accent (default: green)
+  accentColor?: 'green' | 'purple' | 'orange' | 'pink' | 'blue' | 'black'  // brand accent (default: green)
   dashboardCardOrder?: string[]                   // ordered list of dashboard block IDs
   dailyLivingCost?: number                        // legacy — superseded by dailyLivingSchedules
   dailyLivingItems?: { label: string; amount: number }[]  // legacy
