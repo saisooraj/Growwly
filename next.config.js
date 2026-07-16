@@ -28,6 +28,16 @@ const nextConfig = {
   images: { domains: ['lh3.googleusercontent.com'] },
   // firebase-admin uses native Node.js modules — must NOT be bundled by webpack
   serverExternalPackages: ['firebase-admin'],
+  async rewrites() {
+    // Proxy Firebase's auth handler through your own domain so iOS Safari's ITP
+    // doesn't block it. authDomain in firebase.ts must be set to this domain.
+    return [
+      {
+        source: '/__/auth/:path*',
+        destination: `https://${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.firebaseapp.com/__/auth/:path*`,
+      },
+    ]
+  },
   async headers() {
     return [
       {

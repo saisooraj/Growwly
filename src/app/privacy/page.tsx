@@ -1,19 +1,29 @@
 'use client'
 
-import { TrendingUp } from 'lucide-react'
-import Link from 'next/link'
+import { ArrowLeft, ShieldCheck } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 export default function PrivacyPage() {
+  const router = useRouter()
+
   return (
     <div className="min-h-screen bg-[#06030F] text-white px-4 py-12">
       <div className="max-w-2xl mx-auto">
 
-        <Link href="/login" className="inline-flex items-center gap-2 text-slate-400 hover:text-white text-sm mb-10 transition-colors">
-          <TrendingUp size={16} className="text-brand-400" />
-          Growwly
-        </Link>
+        <button
+          onClick={() => router.back()}
+          className="inline-flex items-center gap-2 text-slate-400 hover:text-white text-sm mb-10 transition-colors"
+        >
+          <ArrowLeft size={15} />
+          Back
+        </button>
 
-        <h1 className="text-3xl font-bold mb-2">Privacy Policy</h1>
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-xl bg-brand-500/15 border border-brand-500/25 flex items-center justify-center flex-shrink-0">
+            <ShieldCheck size={18} className="text-brand-400" />
+          </div>
+          <h1 className="text-3xl font-bold">Privacy Policy</h1>
+        </div>
         <p className="text-slate-500 text-sm mb-10">Last updated: July 2026</p>
 
         <div className="space-y-8 text-slate-300 text-sm leading-relaxed">
@@ -56,6 +66,27 @@ export default function PrivacyPage() {
           </section>
 
         </div>
+
+        {/* Action buttons */}
+        <div className="mt-12 flex flex-col sm:flex-row gap-3">
+          <button
+            onClick={() => router.back()}
+            className="flex-1 bg-brand-500 hover:bg-brand-600 text-white font-semibold py-3.5 rounded-2xl transition-colors text-sm"
+          >
+            I Understand & Agree
+          </button>
+          <button
+            onClick={() => router.back()}
+            className="flex-1 bg-white/6 hover:bg-white/10 border border-white/10 text-slate-400 font-medium py-3.5 rounded-2xl transition-colors text-sm"
+          >
+            Go Back
+          </button>
+        </div>
+
+        <p className="text-center text-xs text-slate-600 mt-6">
+          Continuing to use Growwly means you accept this policy.
+        </p>
+
       </div>
     </div>
   )

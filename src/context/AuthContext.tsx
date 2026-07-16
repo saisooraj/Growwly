@@ -116,15 +116,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // This prevents onAuthStateChanged from firing with null (and triggering a
     // premature redirect to /login) while the redirect result is still being settled.
     getRedirectResult(auth)
-      .then(() => {
-        ssRemove(SS_REDIRECT_PENDING)
-        ssRemove(SS_REDIRECT_FAILED)
+      .then(async (result) => {
+        if (redirectPending && !result) {
+          // We initiated a redirect but got null back — iOS Safari / privacy browsers
+          // (DuckDuckGo, Brave) use ITP to wipe Firebase's IndexedDB state between
+          // navigations, so getRedirectResult finds nothing and resolves null instead
+          // of throwing. This is the most common iOS sign-in failure mode.
+          ssRemove(SS_REDIRECT_PENDING)
+          ssSet(SS_REDIRECT_FAILED, 'auth/redirect-state-lost')
+          await logAuthError({
+            code: 'auth/redirect-state-lost',
+            message: 'OAuth redirect completed but Firebase found no pending result — ITP or privacy browser likely cleared auth state',
+            flow: `google-redirect:${redirectPending}`,
+          })
+        } else {
+          ssRemove(SS_REDIRECT_PENDING)
+          ssRemove(SS_REDIRECT_FAILED)
+        }
       })
       .catch(async (err) => {
         const code = (err as { code?: string })?.code ?? 'unknown'
         const msg  = (err as { message?: string })?.message ?? 'Redirect sign-in failed'
 
-        // Only treat as a failure if we actually initiated a redirect
         if (redirectPending) {
           ssRemove(SS_REDIRECT_PENDING)
           ssSet(SS_REDIRECT_FAILED, code)

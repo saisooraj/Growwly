@@ -34,7 +34,10 @@ function ssRemove(key: string) {
 }
 
 // ── Shared input style ────────────────────────────────────────────────────────
-const inputCls = "w-full bg-white/8 border border-white/15 rounded-2xl px-4 py-3.5 text-white text-sm placeholder-slate-500 focus:outline-none focus:border-brand-400/60 focus:bg-white/10 transition-all"
+// login-input class applies autofill override in globals.css to prevent browsers
+// from painting the field white when auto-filling email/password.
+const inputCls = "login-input w-full rounded-2xl px-4 py-3.5 text-sm text-white placeholder:text-white/35 focus:outline-none transition-all"
+const inputStyle = { background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' } as const
 
 // ── Redirect failure banner ───────────────────────────────────────────────────
 function RedirectFailedBanner({ onDismiss }: { onDismiss: () => void }) {
@@ -96,7 +99,7 @@ function HomeScreen({
 
       <p className="text-center text-xs text-slate-600 mt-4">
         By continuing, you agree to our{' '}
-        <a href="/privacy" className="text-slate-500 hover:text-slate-400 underline underline-offset-2">Privacy Policy</a>
+        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-slate-500 hover:text-slate-400 underline underline-offset-2">Privacy Policy</a>
       </p>
     </>
   )
@@ -151,6 +154,7 @@ function PhoneNumberScreen({
         </div>
         <input
           className={inputCls}
+          style={inputStyle}
           type="tel"
           placeholder="98765 43210"
           value={phone}
@@ -226,6 +230,7 @@ function OTPScreen({
 
       <input
         className={`${inputCls} tracking-[0.4em] text-center text-lg font-semibold mb-4`}
+        style={inputStyle}
         type="number"
         placeholder="------"
         value={otp}
@@ -353,6 +358,7 @@ function EmailScreen({
       <div className="flex flex-col gap-3 mb-4">
         <input
           className={inputCls}
+          style={inputStyle}
           type="email"
           placeholder="Email address"
           value={email}
@@ -362,6 +368,7 @@ function EmailScreen({
         <div className="relative">
           <input
             className={inputCls + ' pr-11'}
+            style={inputStyle}
             type={showPw ? 'text' : 'password'}
             placeholder="Password"
             value={password}
@@ -379,6 +386,7 @@ function EmailScreen({
         {mode === 'signup' && (
           <input
             className={inputCls}
+            style={inputStyle}
             type={showPw ? 'text' : 'password'}
             placeholder="Confirm password"
             value={confirm}

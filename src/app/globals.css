@@ -647,3 +647,13 @@ button, a, [role="button"] {
   60%       { transform: translateX(-4px); }
   80%       { transform: translateX(4px); }
 }
+
+/* ── Login page: override browser autofill which paints inputs white ── */
+.login-input:-webkit-autofill,
+.login-input:-webkit-autofill:hover,
+.login-input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px rgba(18, 12, 36, 0.95) inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff;
+  transition: background-color 5000s ease-in-out 0s;
+}
