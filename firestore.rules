@@ -102,6 +102,18 @@ service cloud.firestore {
       allow update: if isAuth() && resource.data.userId == request.auth.uid;
     }
 
+    // User profiles — written by AuthContext on every sign-in (doc id = userId)
+    match /userProfiles/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Admin alerts — auth error logs written by client before sign-in completes.
+    // Anyone can create (pre-auth logging), only admin can read and mark as read.
+    match /adminAlerts/{docId} {
+      allow create: if true;
+      allow read, update: if isAuth() && request.auth.token.email == 'saisoorajpnair@gmail.com';
+    }
+
     // Tasks
     match /tasks/{docId} {
       allow read, delete: if isAuth() && resource.data.userId == request.auth.uid;
