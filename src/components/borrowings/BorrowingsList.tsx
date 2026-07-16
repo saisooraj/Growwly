@@ -498,31 +498,31 @@ export default function BorrowingsList({ onEdit }: Props) {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div style={{
           padding: '16px 18px', borderRadius: 'var(--radius-lg)',
-          background: 'var(--good-soft)',
-          border: '1px solid color-mix(in oklch, var(--good) 22%, transparent)',
+          background: 'linear-gradient(150deg, var(--brand-deep) 0%, var(--brand) 55%, var(--brand-2) 100%)',
+          boxShadow: '0 4px 20px -6px color-mix(in oklch, var(--brand) 45%, transparent)',
         }}>
-          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--good-ink)', opacity: 0.7, marginBottom: 6 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: 6 }}>
             Owed to you
           </div>
-          <div style={{ fontSize: 'clamp(20px,5vw,28px)', fontWeight: 800, color: 'var(--good-ink)', letterSpacing: '-0.03em', lineHeight: 1 }}>
+          <div style={{ fontSize: 'clamp(20px,5vw,28px)', fontWeight: 800, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1 }}>
             {formatCurrencyFull(totalLent)}
           </div>
-          <div style={{ fontSize: 11.5, color: 'var(--good-ink)', opacity: 0.65, marginTop: 5 }}>
+          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', marginTop: 5 }}>
             {personGroups.filter(g => g.activeLent > 0).length} {personGroups.filter(g => g.activeLent > 0).length === 1 ? 'person owes' : 'people owe'} you
           </div>
         </div>
         <div style={{
           padding: '16px 18px', borderRadius: 'var(--radius-lg)',
-          background: 'var(--bad-soft)',
-          border: '1px solid color-mix(in oklch, var(--bad) 22%, transparent)',
+          background: 'linear-gradient(150deg, var(--brand-2) 0%, var(--brand) 55%, var(--brand-deep) 100%)',
+          boxShadow: '0 4px 20px -6px color-mix(in oklch, var(--brand) 45%, transparent)',
         }}>
-          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--bad-ink)', opacity: 0.7, marginBottom: 6 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)', marginBottom: 6 }}>
             You owe
           </div>
-          <div style={{ fontSize: 'clamp(20px,5vw,28px)', fontWeight: 800, color: 'var(--bad-ink)', letterSpacing: '-0.03em', lineHeight: 1 }}>
+          <div style={{ fontSize: 'clamp(20px,5vw,28px)', fontWeight: 800, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1 }}>
             {formatCurrencyFull(totalBorrowed)}
           </div>
-          <div style={{ fontSize: 11.5, color: 'var(--bad-ink)', opacity: 0.65, marginTop: 5 }}>
+          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', marginTop: 5 }}>
             {personGroups.filter(g => g.activeBorrowed > 0).length} pending settlement{personGroups.filter(g => g.activeBorrowed > 0).length !== 1 ? 's' : ''}
           </div>
         </div>

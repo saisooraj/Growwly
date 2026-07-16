@@ -151,6 +151,22 @@
   --brand-soft: oklch(0.95 0.04 261);
   --brand-ink:  oklch(0.32 0.10 261);
 }
+/* Light mode: true black brand */
+:root[data-accent="black"] {
+  --brand:      oklch(0.14 0 0);
+  --brand-2:    oklch(0.24 0 0);
+  --brand-deep: oklch(0.06 0 0);
+  --brand-soft: oklch(0.96 0 0);
+  --brand-ink:  oklch(0.10 0 0);
+}
+/* Dark mode: silver-gray brand so gradient fills don't blow out */
+.dark[data-accent="black"] {
+  --brand:      oklch(0.68 0 0);
+  --brand-2:    oklch(0.56 0 0);
+  --brand-deep: oklch(0.36 0 0);
+  --brand-soft: oklch(0.20 0 0);
+  --brand-ink:  oklch(0.88 0 0);
+}
 
 /* ══════════════════════════════════════════
    Dark mode — remap hardcoded Tailwind color
@@ -622,4 +638,12 @@ button, a, [role="button"] {
 /* Chat input bar — extra bottom padding on mobile to clear the floating nav pill */
 @media (max-width: 1024px) {
   .chat-input-bar { padding-bottom: 96px !important; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-5px); }
+  40%       { transform: translateX(5px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
 }

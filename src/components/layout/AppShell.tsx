@@ -12,9 +12,11 @@ import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
 import { computeLongestMoneyStreak } from '@/lib/utils'
 import { BADGES, getBadgeEarnedDate, SEEN_BADGES_KEY, type BadgeDef } from '@/lib/badges'
-import { Leaf } from 'lucide-react'
+import { Leaf, AlertTriangle, X } from 'lucide-react'
 import { parseISO, differenceInCalendarDays } from 'date-fns'
 import toast from 'react-hot-toast'
+import { useAuth } from '@/context/AuthContext'
+import { getUnreadAuthAlerts, markAllAlertsRead, type AuthAlertRecord } from '@/lib/authErrorLogger'
 
 interface Props {
   title?: string
@@ -22,8 +24,75 @@ interface Props {
   fillPage?: boolean
 }
 
+// ── Admin auth alert banner ───────────────────────────────────────────────────
+// Shown at the top of the app when the admin has unread sign-in failure alerts.
+function AdminAuthAlertBanner() {
+  const { user } = useAuth()
+  const [alerts, setAlerts] = useState<AuthAlertRecord[]>([])
+  const [dismissed, setDismissed] = useState(false)
+
+  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL
+
+  useEffect(() => {
+    if (!adminEmail || user?.email !== adminEmail) return
+    getUnreadAuthAlerts().then(setAlerts).catch(() => {})
+  }, [user?.email, adminEmail])
+
+  if (!adminEmail || user?.email !== adminEmail || dismissed || alerts.length === 0) return null
+
+  async function handleDismiss() {
+    await markAllAlertsRead()
+    setDismissed(true)
+  }
+
+  return (
+    <div style={{
+      background: 'rgba(239,68,68,0.07)',
+      borderBottom: '1px solid rgba(239,68,68,0.18)',
+      padding: '9px 20px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+      fontSize: 13,
+      flexShrink: 0,
+    }}>
+      <AlertTriangle size={14} style={{ color: '#f87171', flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ color: '#f87171', fontWeight: 700 }}>{alerts.length}</span>
+        <span style={{ color: 'var(--text-2)' }}>
+          {' '}sign-in failure{alerts.length === 1 ? '' : 's'} since last check —{' '}
+        </span>
+        <span style={{ color: 'var(--text-4)', fontSize: 11 }}>
+          {alerts.slice(0, 2).map(a => a.flow.split(':')[0]).join(', ')}
+          {alerts.length > 2 ? ` +${alerts.length - 2} more` : ''}
+        </span>
+      </div>
+      <a
+        href="/admin"
+        style={{
+          color: '#f87171', fontWeight: 600, fontSize: 12,
+          textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
+        }}
+      >
+        View in Admin →
+      </a>
+      <button
+        onClick={handleDismiss}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: 'var(--text-4)', padding: 4, display: 'flex',
+          alignItems: 'center', flexShrink: 0,
+        }}
+        title="Dismiss"
+      >
+        <X size={14} />
+      </button>
+    </div>
+  )
+}
+
 const ACCENT_ATTRS: Record<string, string> = {
-  green: 'green', purple: 'purple', orange: 'orange', pink: 'pink', blue: 'blue',
+  green: 'green', purple: 'purple', orange: 'orange', pink: 'pink', blue: 'blue', black: 'black',
 }
 
 // Approximate hex values for each accent (used for favicon SVG + theme-color meta)
@@ -33,6 +102,7 @@ const BRAND_HEX: Record<string, { brand: string; deep: string }> = {
   orange: { brand: '#f97316', deep: '#ea580c' },
   pink:   { brand: '#ec4899', deep: '#db2777' },
   blue:   { brand: '#0073e5', deep: '#005ab8' },
+  black:  { brand: '#111111', deep: '#000000' },
 }
 
 function makeFaviconSvg(brand: string, deep: string): string {
@@ -247,6 +317,7 @@ export default function AppShell({ title, children, fillPage }: Props) {
         <Sidebar />
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: '100vh' }}>
           <Header title={title} scrolled={scrolled} onAdd={() => setAddOpen(true)} />
+          <AdminAuthAlertBanner />
           <main
             ref={mainRef}
             className="main-content"

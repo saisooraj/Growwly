@@ -13,7 +13,7 @@ import { useRefreshData } from '@/hooks/useData'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { downloadJSON, getLast6Months, computeLongestMoneyStreak } from '@/lib/utils'
 import { getCycleRange, getLastWorkingDay, formatCycleRange } from '@/lib/cycle'
-import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, ChevronUp, ChevronDown, Trash2, AlertTriangle } from 'lucide-react'
+import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, ChevronUp, ChevronDown, Trash2, AlertTriangle, Leaf } from 'lucide-react'
 import { BADGES, getBadgeEarnedDate, type BadgeDef } from '@/lib/badges'
 import { IconLeaf, IconFlame } from '@tabler/icons-react'
 import LinkedAccounts from '@/components/auth/LinkedAccounts'
@@ -55,7 +55,7 @@ export default function SettingsPage() {
   const noSpendDays = settings?.noSpendDays ?? []
 
   // Accent color
-  const [accentColor, setAccentColor] = useState<'green' | 'purple' | 'orange' | 'pink' | 'blue'>('green')
+  const [accentColor, setAccentColor] = useState<'green' | 'purple' | 'orange' | 'pink' | 'blue' | 'black'>('green')
 
   // Navigation tab toggles
   const [showHealthTab, setShowHealthTab] = useState(false)
@@ -276,12 +276,12 @@ export default function SettingsPage() {
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{
-              width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-              background: 'linear-gradient(135deg, var(--brand) 0%, var(--brand-deep) 100%)',
+              width: 38, height: 38, borderRadius: 13, flexShrink: 0,
+              background: 'linear-gradient(150deg, var(--brand-2) 0%, var(--brand) 100%)',
               color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,.25), 0 4px 12px -4px var(--brand)',
+              boxShadow: '0 6px 16px -5px var(--brand), inset 0 1px 0 rgba(255,255,255,.25)',
             }}>
-              <IconLeaf size={20} />
+              <Leaf size={20} strokeWidth={2} />
             </div>
             <div>
               <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0, letterSpacing: '-0.01em' }}>Growwly</h2>
@@ -670,15 +670,18 @@ export default function SettingsPage() {
           <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
             Changes the brand color across the entire app. Saved to your account and syncs across devices.
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
             {([
-              { id: 'green'  as const, label: 'Forest',  swatch: 'oklch(0.62 0.15 158)',   soft: 'oklch(0.95 0.05 162)' },
-              { id: 'purple' as const, label: 'Violet',  swatch: 'oklch(0.585 0.205 286)', soft: 'oklch(0.95 0.04 286)' },
-              { id: 'orange' as const, label: 'Ember',   swatch: 'oklch(0.66 0.19 42)',    soft: 'oklch(0.95 0.05 50)'  },
-              { id: 'pink'   as const, label: 'Rose',    swatch: 'oklch(0.62 0.22 358)',   soft: 'oklch(0.95 0.05 360)' },
-              { id: 'blue'   as const, label: 'Ocean',   swatch: 'oklch(0.54 0.22 261)',   soft: 'oklch(0.95 0.04 261)' },
-            ]).map(({ id, label, swatch, soft }) => {
+              { id: 'green'  as const, label: 'Forest',  swatch: 'oklch(0.62 0.15 158)',   soft: 'oklch(0.95 0.05 162)',  gradient: undefined },
+              { id: 'purple' as const, label: 'Violet',  swatch: 'oklch(0.585 0.205 286)', soft: 'oklch(0.95 0.04 286)',  gradient: undefined },
+              { id: 'orange' as const, label: 'Ember',   swatch: 'oklch(0.66 0.19 42)',    soft: 'oklch(0.95 0.05 50)',   gradient: undefined },
+              { id: 'pink'   as const, label: 'Rose',    swatch: 'oklch(0.62 0.22 358)',   soft: 'oklch(0.95 0.05 360)',  gradient: undefined },
+              { id: 'blue'   as const, label: 'Ocean',   swatch: 'oklch(0.54 0.22 261)',   soft: 'oklch(0.95 0.04 261)',  gradient: undefined },
+              { id: 'black'  as const, label: 'Mono',    swatch: 'oklch(0.14 0 0)',         soft: 'oklch(0.96 0 0)',       gradient: 'conic-gradient(oklch(0.14 0 0) 0deg 180deg, oklch(0.97 0 0) 180deg 360deg)' },
+            ]).map(({ id, label, swatch, soft, gradient }) => {
               const on = accentColor === id
+              const circleBg = gradient ?? `linear-gradient(140deg, oklch(from ${swatch} calc(l + 0.1) c h), ${swatch})`
+              const checkColor = id === 'black' ? (on ? 'var(--text)' : '#fff') : '#fff'
               return (
                 <button
                   key={id}
@@ -692,13 +695,14 @@ export default function SettingsPage() {
                 >
                   <div style={{
                     width: 32, height: 32, borderRadius: '50%',
-                    background: `linear-gradient(140deg, oklch(from ${swatch} calc(l + 0.1) c h), ${swatch})`,
+                    background: circleBg,
                     backgroundColor: swatch,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     boxShadow: on ? `0 4px 12px -3px ${swatch}` : 'none',
+                    border: id === 'black' ? '1.5px solid var(--border-strong)' : 'none',
                     transition: 'box-shadow .15s',
                   }}>
-                    {on && <Check size={15} color="#fff" strokeWidth={2.8} />}
+                    {on && <Check size={15} color={checkColor} strokeWidth={2.8} />}
                   </div>
                   <span style={{ fontSize: 12, fontWeight: 700, color: on ? swatch : 'var(--text-3)' }}>{label}</span>
                 </button>
