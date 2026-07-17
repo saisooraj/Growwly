@@ -77,7 +77,7 @@ function RecordRow({ b, onEdit, onDelete, onMarkRepaid }: {
     [contacts, b.person]
   )
   const linkedTxs = useMemo(() =>
-    transactions.filter(t => t.borrowingId === b.id),
+    transactions.filter(t => t.borrowingId === b.id && t.transferKind !== 'loan_given'),
     [transactions, b.id]
   )
 
