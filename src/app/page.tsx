@@ -2,6 +2,8 @@
 
 export const dynamic = 'force-dynamic'
 
+import { useAuth } from '@/context/AuthContext'
+import LandingPage from '@/components/LandingPage'
 import AppShell from '@/components/layout/AppShell'
 
 // ── New design cards ────────────────────────────────────────────────────────
@@ -53,7 +55,18 @@ function BorrowedStat() {
   )
 }
 
-export default function DashboardPage() {
+
+export default function RootPage() {
+  const { user, loading: authLoading } = useAuth()
+
+  // Show dashboard only once we're sure the user is logged in.
+  // During auth loading and when unauthenticated, show the landing page —
+  // this avoids a jarring dark → light flash and the Strict Mode double-mount flicker.
+  if (!authLoading && user) return <DashboardPage />
+  return <LandingPage />
+}
+
+function DashboardPage() {
   const loading  = useAppStore((s) => s.loading)
   const settings = useAppStore((s) => s.settings)
   const cardOrder = settings?.dashboardCardOrder ?? DEFAULT_CARD_ORDER

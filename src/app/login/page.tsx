@@ -550,6 +550,15 @@ export default function LoginPage() {
   const [retryCount, setRetryCount]             = useState(0)
   const [showPersistentError, setShowPersistentError] = useState(false)
 
+  // Safety net: if Firebase auth loading takes >2s (Strict Mode double-mount,
+  // slow network, etc.), force the form to show so users aren't stuck forever.
+  const [authTimedOut, setAuthTimedOut] = useState(false)
+  useEffect(() => {
+    if (!loading) return
+    const t = setTimeout(() => setAuthTimedOut(true), 2000)
+    return () => clearTimeout(t)
+  }, [loading])
+
   useEffect(() => {
     const failCode = ssGet(SS_REDIRECT_FAILED)
     if (failCode) {
@@ -574,7 +583,7 @@ export default function LoginPage() {
     signInWithGoogle()
   }
 
-  if (loading) return (
+  if (loading && !authTimedOut) return (
     <div className="min-h-screen bg-[#06030F] flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
         <GrowwlyLogo size="md" pulse />
