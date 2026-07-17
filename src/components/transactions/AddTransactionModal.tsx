@@ -346,8 +346,19 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       }
 
       if (editTx) {
-        await updateTransaction(editTx.id, payload)
-        toast.success('Transaction updated')
+        if (editTx.id.startsWith('borrow-')) {
+          // Synthetic borrowing row — update the underlying borrowing record
+          const borrowingId = editTx.id.replace('borrow-', '')
+          await updateBorrowing(borrowingId, {
+            amount: Number(amount),
+            date,
+            ...(notes ? { description: notes } : {}),
+          })
+          toast.success('Updated')
+        } else {
+          await updateTransaction(editTx.id, payload)
+          toast.success('Transaction updated')
+        }
       } else {
         // My share transaction
         const txId = await addTransaction(user.uid, payload as Omit<Transaction, 'id' | 'userId' | 'createdAt'>)
