@@ -131,6 +131,7 @@ export interface UserSettings {
   showHealthTab?: boolean                         // show Health tab in navigation (default: false)
   showTasksTab?: boolean                          // show Tasks tab in navigation (default: false)
   accentColor?: 'green' | 'purple' | 'orange' | 'pink' | 'blue' | 'black'  // brand accent (default: green)
+  seenBadges?: number[]                            // badge thresholds the user has already seen (cross-device)
   dashboardCardOrder?: string[]                   // ordered list of dashboard block IDs
   dailyLivingCost?: number                        // legacy — superseded by dailyLivingSchedules
   dailyLivingItems?: { label: string; amount: number }[]  // legacy

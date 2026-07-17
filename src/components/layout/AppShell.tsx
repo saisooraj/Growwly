@@ -17,6 +17,7 @@ import { parseISO, differenceInCalendarDays } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { getUnreadAuthAlerts, markAllAlertsRead, type AuthAlertRecord } from '@/lib/authErrorLogger'
+import { setUserSettings } from '@/lib/firestore'
 
 interface Props {
   title?: string
@@ -176,25 +177,51 @@ export default function AppShell({ title, children, fillPage }: Props) {
   // ── Badge celebration queue ─────────────────────────────────────────────────
   const [badgeQueue, setBadgeQueue] = useState<BadgeDef[]>([])
   const badgesChecked = useRef(false)
+  const { user } = useAuth()
+  const setSettings = useAppStore(s => s.setSettings)
 
   useEffect(() => {
-    if (!initialized || badgesChecked.current) return
+    if (!initialized || badgesChecked.current || !settings) return
     badgesChecked.current = true
 
-    const streak = computeLongestMoneyStreak(transactions, settings?.noSpendDays ?? [])
-    const seen = new Set<number>(JSON.parse(localStorage.getItem(SEEN_BADGES_KEY) ?? '[]'))
+    const streak = computeLongestMoneyStreak(transactions, settings.noSpendDays ?? [])
+
+    // Firestore is the source of truth; fall back to localStorage for migration
+    let seenThresholds: number[] = settings.seenBadges ?? []
+    if (seenThresholds.length === 0) {
+      const local = localStorage.getItem(SEEN_BADGES_KEY)
+      if (local) {
+        try { seenThresholds = JSON.parse(local) } catch { /* ignore */ }
+      }
+    }
+
+    const seen = new Set<number>(seenThresholds)
     const newBadges = BADGES
       .filter(b => streak >= b.threshold && !seen.has(b.threshold))
       .sort((a, b) => b.threshold - a.threshold)
     if (newBadges.length > 0) setBadgeQueue(newBadges)
-  }, [initialized]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [initialized, settings]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function dismissBadge() {
     const current = badgeQueue[0]
-    if (!current) return
-    const seen = new Set<number>(JSON.parse(localStorage.getItem(SEEN_BADGES_KEY) ?? '[]'))
+    if (!current || !user || !settings) return
+
+    const seen = new Set<number>(settings.seenBadges ?? [])
     seen.add(current.threshold)
-    localStorage.setItem(SEEN_BADGES_KEY, JSON.stringify(Array.from(seen)))
+    const seenBadges = Array.from(seen)
+
+    // Optimistically update the store so re-renders don't re-show the badge
+    setSettings({ ...settings, seenBadges })
+
+    // Persist to Firestore so all devices see the updated seen list
+    setUserSettings(user.uid, { seenBadges }).catch(() => {
+      // Revert store on failure so the badge can be retried
+      setSettings(settings)
+    })
+
+    // Clear the legacy localStorage entry after first successful Firestore write
+    localStorage.removeItem(SEEN_BADGES_KEY)
+
     setBadgeQueue(prev => prev.slice(1))
   }
 

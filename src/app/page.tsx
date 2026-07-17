@@ -2,8 +2,10 @@
 
 export const dynamic = 'force-dynamic'
 
+import { useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import LandingPage from '@/components/LandingPage'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import AppShell from '@/components/layout/AppShell'
 
 // ── New design cards ────────────────────────────────────────────────────────
@@ -58,11 +60,19 @@ function BorrowedStat() {
 
 export default function RootPage() {
   const { user, loading: authLoading } = useAuth()
+  const [mounted, setMounted] = useState(false)
 
-  // Show dashboard only once we're sure the user is logged in.
-  // During auth loading and when unauthenticated, show the landing page —
-  // this avoids a jarring dark → light flash and the Strict Mode double-mount flicker.
-  if (!authLoading && user) return <DashboardPage />
+  useEffect(() => setMounted(true), [])
+
+  // Guard: server and client must render the same thing during hydration.
+  // Firebase can resolve auth from IndexedDB as a microtask before React
+  // finishes hydrating, causing a server/client mismatch if we switch to
+  // DashboardPage mid-hydration. The mounted flag defers the switch until
+  // after hydration is complete.
+  // Show a loader (not LandingPage) while waiting — this prevents a flash of
+  // the landing page for users who are already logged in.
+  if (!mounted || authLoading) return <LoadingScreen />
+  if (user) return <DashboardPage />
   return <LandingPage />
 }
 

@@ -8,18 +8,7 @@ import { ShieldCheck } from 'lucide-react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import Link from 'next/link'
-import GrowwlyLogo from '@/components/ui/GrowwlyLogo'
-
-function LoadingScreen() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-[#06030F]">
-      <div className="flex flex-col items-center gap-3">
-        <GrowwlyLogo size="md" pulse />
-        <p className="text-sm text-slate-400 font-medium">Loading Growwly...</p>
-      </div>
-    </div>
-  )
-}
+import LoadingScreen from '@/components/ui/LoadingScreen'
 
 function PrivacyConsentSheet({ onAgree, saving }: { onAgree: () => void; saving: boolean }) {
   return (
