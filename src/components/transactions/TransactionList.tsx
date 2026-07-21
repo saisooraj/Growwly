@@ -137,6 +137,11 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
               ? <span className="pill" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0, background: 'var(--good-soft)', color: 'var(--good-ink)', border: 'none' }}>savings</span>
               : <span className="pill info" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0 }}>transfer</span>
           )}
+          {tx.settledPerson && (
+            <span className="pill" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0, background: 'var(--warn-soft)', color: 'var(--warn-ink)', border: 'none' }}>
+              via {tx.settledPerson}
+            </span>
+          )}
           {tx.isRecurring && (
             <span className="pill" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0 }}>recurring</span>
           )}

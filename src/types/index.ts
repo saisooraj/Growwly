@@ -27,8 +27,10 @@ export interface Transaction {
   recurringDay?: number // day-of-month to repeat (1–31)
   transferKind?: TransferKind
   savingsVehicle?: string  // for savings transfers: which vehicle (Emergency Fund, SIP, Stocks…)
-  borrowingId?: string  // optional link to a single Borrowing record
-  loanPerson?: string   // person name for loan transfers (used to reverse greedy allocation on delete)
+  borrowingId?: string       // optional link to a single Borrowing record
+  loanPerson?: string        // person name for loan transfers (used to reverse greedy allocation on delete)
+  settledBorrowingId?: string // if set, this expense partially or fully offsets a "lent" borrowing
+  settledPerson?: string      // denormalized person name for the settled borrowing
 }
 
 export interface SavingsGoal {

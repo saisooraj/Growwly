@@ -77,7 +77,10 @@ function RecordRow({ b, onEdit, onDelete, onMarkRepaid }: {
     [contacts, b.person]
   )
   const linkedTxs = useMemo(() =>
-    transactions.filter(t => t.borrowingId === b.id && t.transferKind !== 'loan_given'),
+    transactions.filter(t =>
+      (t.borrowingId === b.id && t.transferKind !== 'loan_given') ||
+      t.settledBorrowingId === b.id
+    ),
     [transactions, b.id]
   )
 
@@ -217,9 +220,19 @@ function RecordRow({ b, onEdit, onDelete, onMarkRepaid }: {
           </div>
           {linkedTxs.map(t => (
             <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11.5, color: 'var(--text-3)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {t.notes || (b.type === 'lent' ? 'Repayment received' : 'Repayment made')}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 }}>
+                {t.settledBorrowingId && (
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: 'var(--warn-soft)', color: 'var(--warn-ink)', flexShrink: 0 }}>
+                    expense
+                  </span>
+                )}
+                <span style={{ fontSize: 11.5, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {t.settledBorrowingId
+                    ? (t.category ? `${t.category}${t.notes ? ` · ${t.notes}` : ''}` : t.notes || 'Expense')
+                    : (t.notes || (b.type === 'lent' ? 'Repayment received' : 'Repayment made'))
+                  }
+                </span>
+              </div>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--good-ink)', flexShrink: 0 }}>
                 {formatCurrencyFull(t.amount)} · {format(parseISO(t.date), 'dd MMM')}
               </span>

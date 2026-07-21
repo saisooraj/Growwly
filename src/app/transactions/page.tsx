@@ -2,9 +2,9 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useMemo, useEffect, useRef, Suspense } from 'react'
+import { useState, useMemo, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Download, Plus, SlidersHorizontal, Eye, EyeOff, Search, X, PiggyBank } from 'lucide-react'
+import { Download, Plus, SlidersHorizontal, Eye, EyeOff, Search, X, PiggyBank, CalendarRange } from 'lucide-react'
 import AppShell from '@/components/layout/AppShell'
 import TransactionList from '@/components/transactions/TransactionList'
 import { useAppStore } from '@/store/appStore'
@@ -39,6 +39,8 @@ function TransactionsInner() {
   const [catFilter, setCatFilter]   = useState<string>(searchParams.get('cat') ?? 'all')
   const [vehicleFilter, setVehicleFilter] = useState<string>(searchParams.get('vehicle') ?? 'all')
   const [searchQuery, setSearchQuery]   = useState<string>(searchParams.get('search') ?? '')
+  const [dateFrom, setDateFrom] = useState<string>('')
+  const [dateTo,   setDateTo]   = useState<string>('')
   const [showIncome,    setShowIncome]   = useState(false)
   const [showExpenses,  setShowExpenses] = useState(false)
   const [showNet,       setShowNet]      = useState(false)
@@ -46,23 +48,11 @@ function TransactionsInner() {
 
   const { transactions, borrowings, selectedMonth, settings } = useAppStore()
 
-  // Infinite scroll — load more transactions when sentinel enters viewport
   const VISIBLE_COUNT = 100
   const [visibleCount, setVisibleCount] = useState(VISIBLE_COUNT)
-  const sentinelRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const el = sentinelRef.current
-    if (!el) return
-    const observer = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting) setVisibleCount(c => c + VISIBLE_COUNT)
-    }, { rootMargin: '300px' })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
 
   // Reset visible count when filters change
-  useEffect(() => { setVisibleCount(VISIBLE_COUNT) }, [typeFilter, catFilter, vehicleFilter, searchQuery, selectedMonth])
+  useEffect(() => { setVisibleCount(VISIBLE_COUNT) }, [typeFilter, catFilter, vehicleFilter, searchQuery, selectedMonth, dateFrom, dateTo])
   const summary  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
   const monthTxs = getTransactionsForMonth(transactions, selectedMonth, settings)
 
@@ -79,8 +69,13 @@ function TransactionsInner() {
 
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
-    const source = q ? [...transactions].sort((a, b) => b.date.localeCompare(a.date)) : monthTxs
+    const usesDateFilter = dateFrom || dateTo
+    const source = (q || usesDateFilter)
+      ? [...transactions].sort((a, b) => b.date.localeCompare(a.date))
+      : monthTxs
     return source.filter(t => {
+      if (dateFrom && t.date < dateFrom) return false
+      if (dateTo   && t.date > dateTo)   return false
       const savings = isSavingsTransfer(t)
       if (typeFilter === 'savings') {
         if (!savings) return false
@@ -90,7 +85,6 @@ function TransactionsInner() {
         if (typeFilter !== 'all' && typeFilter !== 'transfer' && t.type !== typeFilter) return false
         if (catFilter !== 'all' && t.category !== catFilter) return false
       }
-      // ── Full-text search across description, category, amount, transfer kind ──
       if (q) {
         const catDisplay = getCategoryDisplayName(t.category ?? '').toLowerCase()
         const notes      = (t.notes ?? '').toLowerCase()
@@ -109,7 +103,8 @@ function TransactionsInner() {
       }
       return true
     })
-  }, [monthTxs, transactions, typeFilter, catFilter, vehicleFilter, searchQuery])
+  }, [monthTxs, transactions, typeFilter, catFilter, vehicleFilter, searchQuery, dateFrom, dateTo])
+
 
   // Savings aggregates (selected month, respecting the vehicle sub-filter)
   const savingsView = useMemo(() => {
@@ -162,23 +157,7 @@ function TransactionsInner() {
   )
   const topCatsTotal = topCats.reduce((s, [, v]) => s + v, 0) || 1
 
-  // Reusable KPI stat block
-  function StatBlock({
-    label, value, color, masked, onToggle, shown, sub,
-  }: { label: string; value: string | null; color: string; masked: boolean; onToggle: () => void; shown: boolean; sub?: React.ReactNode }) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span className="h-eyebrow">{label}</span>
-          <button onClick={onToggle} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex' }}>
-            {shown ? <EyeOff size={13} /> : <Eye size={13} />}
-          </button>
-        </div>
-        <div className="display-num" style={{ fontSize: 22, color }}>{shown && value ? value : '₹ •••'}</div>
-        {sub}
-      </div>
-    )
-  }
+
 
   return (
     <AppShell title="Transactions">
@@ -301,41 +280,86 @@ function TransactionsInner() {
                 </button>
               </div>
 
-              {/* Sub-filters row */}
-              {(typeFilter !== 'transfer' && typeFilter !== 'savings') && (
-                <select
-                  value={catFilter}
-                  onChange={e => setCatFilter(e.target.value)}
-                  style={{
-                    fontSize: 13, padding: '8px 12px',
-                    background: 'var(--surface-2)', border: '1px solid var(--border)',
-                    borderRadius: 10, color: 'var(--text-2)', outline: 'none', cursor: 'pointer',
-                    fontFamily: 'inherit', maxWidth: 280,
-                  }}
-                >
-                  <option value="all">All Categories</option>
-                  {allCats.map(c => (
-                    <option key={c} value={c}>{getCategoryDisplayName(c)}</option>
-                  ))}
-                </select>
-              )}
-              {typeFilter === 'savings' && usedVehicles.length > 0 && (
-                <select
-                  value={vehicleFilter}
-                  onChange={e => setVehicleFilter(e.target.value)}
-                  style={{
-                    fontSize: 13, padding: '8px 12px',
-                    background: 'var(--surface-2)', border: '1px solid var(--border)',
-                    borderRadius: 10, color: 'var(--text-2)', outline: 'none', cursor: 'pointer',
-                    fontFamily: 'inherit', maxWidth: 280,
-                  }}
-                >
-                  <option value="all">All Vehicles</option>
-                  {usedVehicles.map(v => (
-                    <option key={v} value={v}>{v}</option>
-                  ))}
-                </select>
-              )}
+              {/* Sub-filters row: category/vehicle select + compact date range */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {(typeFilter !== 'transfer' && typeFilter !== 'savings') && (
+                  <select
+                    value={catFilter}
+                    onChange={e => setCatFilter(e.target.value)}
+                    style={{
+                      fontSize: 13, padding: '7px 10px',
+                      background: 'var(--surface-2)', border: '1px solid var(--border)',
+                      borderRadius: 10, color: 'var(--text-2)', outline: 'none', cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    <option value="all">All Categories</option>
+                    {allCats.map(c => (
+                      <option key={c} value={c}>{getCategoryDisplayName(c)}</option>
+                    ))}
+                  </select>
+                )}
+                {typeFilter === 'savings' && usedVehicles.length > 0 && (
+                  <select
+                    value={vehicleFilter}
+                    onChange={e => setVehicleFilter(e.target.value)}
+                    style={{
+                      fontSize: 13, padding: '7px 10px',
+                      background: 'var(--surface-2)', border: '1px solid var(--border)',
+                      borderRadius: 10, color: 'var(--text-2)', outline: 'none', cursor: 'pointer',
+                      fontFamily: 'inherit',
+                    }}
+                  >
+                    <option value="all">All Vehicles</option>
+                    {usedVehicles.map(v => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                )}
+
+                {/* Compact date range — right side */}
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <CalendarRange size={13} style={{ color: (dateFrom || dateTo) ? 'var(--brand-ink)' : 'var(--text-4)', flexShrink: 0 }} />
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    max={dateTo || undefined}
+                    onChange={e => setDateFrom(e.target.value)}
+                    style={{
+                      fontSize: 12, padding: '5px 7px',
+                      background: dateFrom ? 'var(--brand-soft)' : 'var(--surface-2)',
+                      border: `1px solid ${dateFrom ? 'var(--brand)' : 'var(--border)'}`,
+                      borderRadius: 8, color: dateFrom ? 'var(--brand-ink)' : 'var(--text-3)',
+                      outline: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                      colorScheme: 'dark', width: 130,
+                    }}
+                  />
+                  <span style={{ fontSize: 11, color: 'var(--text-4)' }}>–</span>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    min={dateFrom || undefined}
+                    onChange={e => setDateTo(e.target.value)}
+                    style={{
+                      fontSize: 12, padding: '5px 7px',
+                      background: dateTo ? 'var(--brand-soft)' : 'var(--surface-2)',
+                      border: `1px solid ${dateTo ? 'var(--brand)' : 'var(--border)'}`,
+                      borderRadius: 8, color: dateTo ? 'var(--brand-ink)' : 'var(--text-3)',
+                      outline: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                      colorScheme: 'dark', width: 130,
+                    }}
+                  />
+                  {(dateFrom || dateTo) && (
+                    <button
+                      onClick={() => { setDateFrom(''); setDateTo('') }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2, color: 'var(--text-3)', flexShrink: 0 }}
+                      title="Clear dates"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Savings summary */}
@@ -380,18 +404,29 @@ function TransactionsInner() {
               </div>
               <div style={{ padding: '8px 8px' }}>
                 <TransactionList
-                  transactions={filtered.slice(0, visibleCount)}
+                  transactions={filtered}
+                  limit={visibleCount}
                   groupByDay
-                  defaultExpandAll={catFilter !== 'all' || vehicleFilter !== 'all'}
-                  showBorrowings={catFilter === 'all' && typeFilter === 'all' && !searchQuery.trim()}
+                  defaultExpandAll={catFilter !== 'all' || vehicleFilter !== 'all' || filtered.length > VISIBLE_COUNT}
+                  showBorrowings={catFilter === 'all' && typeFilter === 'all' && !searchQuery.trim() && !dateFrom && !dateTo}
                 />
                 {filtered.length > visibleCount && (
-                  <div ref={sentinelRef} style={{ height: 1, marginTop: 8 }} />
-                )}
-                {filtered.length > visibleCount && (
-                  <p style={{ fontSize: 12, color: 'var(--text-4)', textAlign: 'center', padding: '8px 0' }}>
-                    Showing {visibleCount} of {filtered.length} · scroll for more
-                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '12px 0 4px' }}>
+                    <p style={{ fontSize: 12, color: 'var(--text-4)', margin: 0 }}>
+                      Showing {visibleCount} of {filtered.length}
+                    </p>
+                    <button
+                      onClick={() => setVisibleCount(c => c + VISIBLE_COUNT)}
+                      style={{
+                        fontSize: 13, fontWeight: 600, padding: '8px 24px',
+                        borderRadius: 999, border: '1px solid var(--border)',
+                        background: 'var(--surface-2)', color: 'var(--text-2)',
+                        cursor: 'pointer', fontFamily: 'inherit',
+                      }}
+                    >
+                      Show more
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
