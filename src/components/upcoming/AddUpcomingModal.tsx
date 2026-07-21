@@ -7,6 +7,7 @@ import { format, addMonths } from 'date-fns'
 import { addUpcoming, updateUpcoming } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
+import { useAppStore } from '@/store/appStore'
 import CategoryPicker from '@/components/transactions/CategoryPicker'
 import type { UpcomingExpense } from '@/types'
 import toast from 'react-hot-toast'
@@ -20,6 +21,7 @@ interface Props {
 export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
   const { user } = useAuth()
   const refresh = useRefreshData()
+  const { projects } = useAppStore()
 
   const defaultDate = format(addMonths(new Date(), 1), 'yyyy-MM') + '-01'
 
@@ -28,6 +30,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
   const [amount, setAmount]         = useState('')
   const [dueDate, setDueDate]       = useState(defaultDate)
   const [category, setCategory]     = useState<string>('Food & Dining')
+  const [projectId, setProjectId]   = useState('')
   const [notes, setNotes]           = useState('')
   const [isRecurring, setRecurring] = useState(false)
   const [saving, setSaving]         = useState(false)
@@ -42,6 +45,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
       setAmount(editItem ? String(editItem.amount) : '')
       setDueDate(editItem?.dueDate ?? defaultDate)
       setCategory(editItem?.category ?? (ft === 'income' ? 'Other Income' : 'Food & Dining'))
+      setProjectId(editItem?.projectId ?? '')
       setNotes(editItem?.notes ?? '')
       setRecurring(editItem?.isRecurring ?? false)
     }
@@ -50,6 +54,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
   function handleFlowTypeChange(ft: 'expense' | 'income') {
     setFlowType(ft)
     setCategory(ft === 'income' ? 'Other Income' : 'Food & Dining')
+    if (ft === 'income') setProjectId('')
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -63,6 +68,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
         amount: Number(amount),
         dueDate,
         category,
+        ...(projectId && flowType === 'expense' ? { projectId } : {}),
         notes,
         isRecurring,
       }
@@ -200,6 +206,16 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
                       type={isIncome ? 'income' : 'expense'}
                     />
                   </div>
+
+                  {!isIncome && projects.length > 0 && (
+                    <div>
+                      <label className="label">Link to Project (optional)</label>
+                      <select className="input" value={projectId} onChange={e => setProjectId(e.target.value)}>
+                        <option value="">None</option>
+                        {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <label className="label">Notes (optional)</label>

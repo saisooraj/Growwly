@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
 import { formatCurrencyFull, EMERGENCY_FUND_VEHICLE } from '@/lib/utils'
+import CategoryPicker from '@/components/transactions/CategoryPicker'
 import type { UpcomingExpense, UpcomingPayment } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -23,7 +24,7 @@ interface Props {
 
 export default function LogPaymentModal({ open, onClose, item, alreadyPaid, editPayment }: Props) {
   const { user } = useAuth()
-  const { emergencyFund } = useAppStore()
+  const { emergencyFund, projects } = useAppStore()
   const refresh  = useRefreshData()
 
   const isEditing = !!editPayment
@@ -32,6 +33,10 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
 
   const [amount, setAmount]       = useState('')
   const [date, setDate]           = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [category, setCategory]   = useState<string>(
+    item?.category ?? (item?.flowType === 'income' ? 'Other Income' : 'Other')
+  )
+  const [projectId, setProjectId] = useState(item?.projectId ?? '')
   const [notes, setNotes]         = useState('')
   const [alsoLog, setAlsoLog]     = useState(true)
   const [useEF, setUseEF]         = useState(false)
@@ -42,7 +47,8 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
   const canUseEF  = !isEditing && !isIncome && efBalance > 0
 
   useEffect(() => {
-    if (open) {
+    if (open && item) {
+      const defaultCategory = item.category ?? (item.flowType === 'income' ? 'Other Income' : 'Other')
       if (editPayment) {
         setAmount(String(editPayment.amount))
         setDate(editPayment.date)
@@ -55,8 +61,10 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
         setUseEF(false)
         setEfAmount('')
       }
+      setCategory(defaultCategory)
+      setProjectId(item.projectId ?? '')
     }
-  }, [open, editPayment, remaining])
+  }, [open, editPayment, remaining, item])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -82,10 +90,11 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
           linkedTransactionId = await addTransaction(user.uid, {
             type: isIncome ? 'income' : 'expense',
             amount: totalAmt,
-            category: item.category ?? (isIncome ? 'Other Income' : 'Other'),
+            category: category || (isIncome ? 'Other Income' : 'Other'),
             date,
             notes: (notes || (isIncome ? `Received: ${item.label}` : `Payment towards: ${item.label}`)) + efNote,
             isRecurring: false,
+            ...(!isIncome && projectId ? { projectId } : {}),
           })
         }
 
@@ -230,6 +239,29 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
                       required
                     />
                   </div>
+
+                  {/* Category — only shown when also logging as a transaction */}
+                  {!isEditing && alsoLog && (
+                    <div>
+                      <label className="label">Category</label>
+                      <CategoryPicker
+                        value={category}
+                        onChange={setCategory}
+                        type={isIncome ? 'income' : 'expense'}
+                      />
+                    </div>
+                  )}
+
+                  {/* Project — only for expenses with projects available */}
+                  {!isEditing && alsoLog && !isIncome && projects.length > 0 && (
+                    <div>
+                      <label className="label">Link to Project (optional)</label>
+                      <select className="input" value={projectId} onChange={e => setProjectId(e.target.value)}>
+                        <option value="">None</option>
+                        {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <label className="label">Notes (optional)</label>

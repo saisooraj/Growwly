@@ -165,6 +165,7 @@ export interface UpcomingExpense {
   amount: number
   dueDate: string       // YYYY-MM-DD
   category?: Category
+  projectId?: string
   notes?: string
   isRecurring?: boolean
   createdAt: string
