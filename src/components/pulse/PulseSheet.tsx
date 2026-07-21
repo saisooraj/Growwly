@@ -669,7 +669,16 @@ function LentSection({ alerts }: { alerts: FinancialPulse['borrowingAlerts'] }) 
   const [expanded, setExpanded] = useState(false)
   if (alerts.length === 0) return null
 
-  const total = alerts.reduce((s, a) => s + a.outstanding, 0)
+  // Aggregate by person: sum outstanding amounts, collect loan count
+  const byPerson = alerts.reduce<Record<string, { total: number; count: number }>>((acc, a) => {
+    if (!acc[a.person]) acc[a.person] = { total: 0, count: 0 }
+    acc[a.person].total += a.outstanding
+    acc[a.person].count += 1
+    return acc
+  }, {})
+  const people = Object.entries(byPerson).sort((a, b) => b[1].total - a[1].total)
+  const total = people.reduce((s, [, v]) => s + v.total, 0)
+  const peopleCount = people.length
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -685,7 +694,7 @@ function LentSection({ alerts }: { alerts: FinancialPulse['borrowingAlerts'] }) 
         }}
       >
         <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
-          {alerts.length} {alerts.length === 1 ? 'person owes' : 'people owe'} you
+          {peopleCount} {peopleCount === 1 ? 'person owes' : 'people owe'} you
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--good-ink)' }}>
@@ -702,26 +711,26 @@ function LentSection({ alerts }: { alerts: FinancialPulse['borrowingAlerts'] }) 
         </div>
       </button>
 
-      {/* Expanded rows */}
+      {/* Expanded rows — one per person */}
       {expanded && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
-          {alerts.map((a, i) => (
-            <div key={i} style={{
+          {people.map(([name, { total: personTotal, count }]) => (
+            <div key={name} style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '9px 12px', borderRadius: 10,
               background: 'var(--surface-2)',
               border: '1px solid var(--border)',
             }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{a.person}</div>
-                <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
-                  {a.dueDate
-                    ? `Due ${format(parseISO(a.dueDate), 'MMM d')}`
-                    : 'No due date'}
-                </div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{name}</div>
+                {count > 1 && (
+                  <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
+                    {count} loans
+                  </div>
+                )}
               </div>
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', flexShrink: 0 }}>
-                {formatCurrencyFull(a.outstanding)}
+                {formatCurrencyFull(personTotal)}
               </span>
             </div>
           ))}
