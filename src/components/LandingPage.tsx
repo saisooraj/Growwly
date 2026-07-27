@@ -64,8 +64,8 @@ const FEATURES: Feature[] = [
           <span style="position:relative;font-weight:800;font-size:11px;z-index:1">82</span>
         </div>
         <div style="flex:1;display:flex;flex-direction:column;gap:4px">
-          <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700"><span style="color:var(--lp-text-3)">Income</span><b style="color:var(--lp-good);font-family:monospace">₹1.4L</b></div>
-          <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700"><span style="color:var(--lp-text-3)">Spent</span><b style="font-family:monospace">₹78K</b></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700"><span style="color:var(--lp-text-3)">Income</span><b style="color:var(--lp-good);font-family:monospace">₹45K</b></div>
+          <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:700"><span style="color:var(--lp-text-3)">Spent</span><b style="font-family:monospace">₹32K</b></div>
         </div>
       </div>`,
   },
@@ -90,7 +90,7 @@ const FEATURES: Feature[] = [
             <div style="font-size:11.5px;font-weight:700;color:var(--lp-text)">Salary</div>
             <div style="font-size:10px;color:var(--lp-text-3)">Income</div>
           </div>
-          <b style="font-size:12px;font-family:monospace;color:var(--lp-good)">+₹1.1L</b>
+          <b style="font-size:12px;font-family:monospace;color:var(--lp-good)">+₹56K</b>
         </div>
         <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--lp-border)">
           <div style="width:28px;height:28px;border-radius:8px;background:oklch(0.94 0.04 245);flex-shrink:0"></div>
@@ -624,15 +624,15 @@ export default function LandingPage() {
                   <div className="lp-chip-col">
                     <div className="lp-chip">
                       <span style={{ color: 'var(--lp-text-3)' }}>Income</span>
-                      <b className="lp-mono" style={{ color: 'var(--lp-good)' }}>₹1.4L</b>
+                      <b className="lp-mono" style={{ color: 'var(--lp-good)' }}>₹45K</b>
                     </div>
                     <div className="lp-chip">
                       <span style={{ color: 'var(--lp-text-3)' }}>Expenses</span>
-                      <b className="lp-mono">₹78K</b>
+                      <b className="lp-mono">₹32K</b>
                     </div>
                     <div className="lp-chip">
                       <span style={{ color: 'var(--lp-text-3)' }}>Net</span>
-                      <b className="lp-mono" style={{ color: 'var(--lp-good)' }}>+₹59K</b>
+                      <b className="lp-mono" style={{ color: 'var(--lp-good)' }}>+₹13K</b>
                     </div>
                   </div>
                 </div>
