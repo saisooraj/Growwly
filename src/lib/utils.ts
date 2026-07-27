@@ -102,6 +102,11 @@ export function buildMonthlySummary(
     } else {
       totalExpenses += t.amount
       byCategory[t.category] = (byCategory[t.category] ?? 0) + t.amount
+      if (t.settledBorrowingId) {
+        // The debt holder paid for this expense (bank unchanged), so also credit as repayment
+        // received — the two cancel in cashNet, giving a net-zero effect on cashflow
+        repaymentReceived += t.amount
+      }
     }
   }
 
