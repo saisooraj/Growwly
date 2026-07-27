@@ -55,7 +55,7 @@ const FEATURES: Feature[] = [
       <div style="border-radius:14px;padding:12px;background:linear-gradient(150deg,oklch(0.7 0.14 158),oklch(0.46 0.13 160));color:#fff;margin-bottom:8px;position:relative;overflow:hidden">
         <div style="position:absolute;top:-20px;right:-10px;width:80px;height:80px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.25),transparent 70%)"></div>
         <div style="font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;opacity:.8;position:relative">Safe to spend today</div>
-        <div style="font-size:26px;font-weight:800;margin-top:3px;position:relative;font-family:monospace">₹18,420</div>
+        <div style="font-size:26px;font-weight:800;margin-top:3px;position:relative;font-family:monospace">₹8,500</div>
         <div style="font-size:11px;opacity:.85;font-weight:600;position:relative">On track · 12 days left</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
@@ -90,7 +90,7 @@ const FEATURES: Feature[] = [
             <div style="font-size:11.5px;font-weight:700;color:var(--lp-text)">Salary</div>
             <div style="font-size:10px;color:var(--lp-text-3)">Income</div>
           </div>
-          <b style="font-size:12px;font-family:monospace;color:var(--lp-good)">+₹56K</b>
+          <b style="font-size:12px;font-family:monospace;color:var(--lp-good)">+₹45K</b>
         </div>
         <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid var(--lp-border)">
           <div style="width:28px;height:28px;border-radius:8px;background:oklch(0.94 0.04 245);flex-shrink:0"></div>
@@ -614,7 +614,7 @@ export default function LandingPage() {
                 <div className="lp-mockup-notch" />
                 <div className="lp-safe-card">
                   <div className="lp-safe-eyebrow">Safe to Spend Today</div>
-                  <div className="lp-safe-amt">₹18,420</div>
+                  <div className="lp-safe-amt">₹8,500</div>
                   <div className="lp-safe-sub">On track · 12 days left</div>
                 </div>
                 <div className="lp-mockup-row">
