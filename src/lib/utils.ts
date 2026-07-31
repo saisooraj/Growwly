@@ -316,7 +316,6 @@ export const EXPENSE_CATEGORIES: Category[] = [
   'Construction',
   'Family',
   'Family Events',
-  'Borrowed / Loan',
   'Food with Her',
   'Treat',
   'Office Expense',
