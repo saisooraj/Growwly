@@ -3,7 +3,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
-import { buildMonthlySummary, formatCurrencyFull, getLast6Months } from '@/lib/utils'
+import { buildMonthlySummary, computeCarryForward, formatCurrencyFull, getLast6Months } from '@/lib/utils'
 import { useCountUp } from '@/hooks/useCountUp'
 
 const MASK = '₹ •••'
@@ -51,10 +51,8 @@ export default function ThisMonthCard() {
   const carryForward = useMemo(() => {
     const months = getLast6Months()
     const curIdx = months.indexOf(selectedMonth)
-    const prev   = curIdx > 0 ? months[curIdx - 1] : null
-    if (!prev) return 0
-    const prevSum = buildMonthlySummary(transactions, prev, settings, borrowings)
-    return Math.max(0, prevSum.cashNet)
+    if (curIdx <= 0) return 0
+    return computeCarryForward(months.slice(0, curIdx), transactions, settings, borrowings)
   }, [transactions, selectedMonth, settings, borrowings])
 
   const totalIn     = summary.totalIncome + carryForward

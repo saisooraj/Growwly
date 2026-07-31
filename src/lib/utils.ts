@@ -160,6 +160,23 @@ export function getLast6Months(): string[] {
   return months
 }
 
+// Chains carry forward across all months in the list, so that a month's surplus
+// includes the carry forward it itself received (e.g. July's real surplus ₹1,766
+// carries to August even though July's raw cashNet is negative).
+export function computeCarryForward(
+  months: string[],
+  transactions: Transaction[],
+  settings?: UserSettings | null,
+  borrowings?: Borrowing[] | null
+): number {
+  let cf = 0
+  for (const month of months) {
+    const sum = buildMonthlySummary(transactions, month, settings, borrowings)
+    cf = Math.max(0, sum.cashNet + cf)
+  }
+  return cf
+}
+
 export function getBudgetStatus(actual: number, planned: number): 'on-track' | 'warning' | 'over' {
   if (planned === 0) return 'on-track'
   const ratio = actual / planned

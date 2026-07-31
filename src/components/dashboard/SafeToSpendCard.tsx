@@ -4,7 +4,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { Pencil, Plus, Trash2, CheckCircle2, X } from 'lucide-react'
 import { addDays, format, startOfWeek } from 'date-fns'
 import { useAppStore } from '@/store/appStore'
-import { buildMonthlySummary, formatCurrencyFull, getTransactionsForWeek, getLast6Months, getMonthLabel } from '@/lib/utils'
+import { buildMonthlySummary, computeCarryForward, formatCurrencyFull, getTransactionsForWeek, getLast6Months, getMonthLabel } from '@/lib/utils'
 import { useCountUp } from '@/hooks/useCountUp'
 import { getCycleRange } from '@/lib/cycle'
 import { parseISO, differenceInCalendarDays } from 'date-fns'
@@ -251,12 +251,13 @@ export default function SafeToSpendCard() {
     const { end }  = getCycleRange(selectedMonth, settings)
     const daysLeft = Math.max(1, differenceInCalendarDays(parseISO(end), today) + 1)
 
-    // Carry forward: unspent balance from the previous salary cycle
+    // Carry forward: unspent balance from the previous salary cycle (chained)
     const months      = getLast6Months()
     const curIdx      = months.indexOf(selectedMonth)
     const prevMonth   = curIdx > 0 ? months[curIdx - 1] : null
-    const prevSummary = prevMonth ? buildMonthlySummary(transactions, prevMonth, settings, borrowings) : null
-    const carryForward = prevSummary ? Math.max(0, prevSummary.cashNet) : 0
+    const carryForward = curIdx > 0
+      ? computeCarryForward(months.slice(0, curIdx), transactions, settings, borrowings)
+      : 0
 
     const cashNet  = Math.max(summary.cashNet, 0) + carryForward
 

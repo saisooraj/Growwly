@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { ArrowUp, ArrowDown, ArrowDownRight, Handshake, Eye, EyeOff } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
-import { buildMonthlySummary, formatCurrencyFull, getLast6Months } from '@/lib/utils'
+import { buildMonthlySummary, computeCarryForward, formatCurrencyFull, getLast6Months } from '@/lib/utils'
 import { getCycleRange, formatCycleRange } from '@/lib/cycle'
 
 interface StatProps {
@@ -111,7 +111,7 @@ export default function SummaryCards() {
   const pendingBorrowCount = borrowings
     .filter(b => b.type === 'lent' && b.status !== 'repaid').length
 
-  const carryForward  = prev ? Math.max(0, prev.cashNet) : 0
+  const carryForward  = curIdx > 0 ? computeCarryForward(months.slice(0, curIdx), transactions, settings, borrowings) : 0
   const netCashflow   = cur.cashNet + carryForward
   const isDeficit     = netCashflow < 0
 

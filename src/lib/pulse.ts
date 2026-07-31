@@ -9,7 +9,7 @@ import type {
   PulseUpcoming, PulseAllocation, PulseSpendCategory,
   PulseGoal, PulseBorrowingAlert, MonthlySummary,
 } from '@/types'
-import { buildMonthlySummary, getTransactionsForMonth, EMERGENCY_FUND_VEHICLE, formatCurrencyFull } from './utils'
+import { buildMonthlySummary, computeCarryForward, getTransactionsForMonth, getLast6Months, EMERGENCY_FUND_VEHICLE, formatCurrencyFull } from './utils'
 
 export interface PulseSnapshot {
   transactions: Transaction[]
@@ -307,10 +307,16 @@ export function computePulse(
   const now = new Date()
   const month = snapshot.selectedMonth ?? format(now, 'yyyy-MM')
   const [y, m] = month.split('-').map(Number)
-  const prevMonth = format(new Date(y, m - 2, 1), 'yyyy-MM')
 
-  const curSummary  = buildMonthlySummary(transactions, month,     snapshot.settings, borrowings)
-  const prevSummary = buildMonthlySummary(transactions, prevMonth, snapshot.settings, borrowings)
+  const prevMonth   = format(new Date(y, m - 2, 1), 'yyyy-MM')
+  const curSummary  = buildMonthlySummary(transactions, month,      snapshot.settings, borrowings)
+  const prevSummary = buildMonthlySummary(transactions, prevMonth,  snapshot.settings, borrowings)
+
+  const allMonths = getLast6Months()
+  const curIdx    = allMonths.indexOf(month)
+  const carryForwardToMonth = curIdx > 0
+    ? computeCarryForward(allMonths.slice(0, curIdx), transactions, snapshot.settings, borrowings)
+    : 0
 
   const daysLeft    = Math.max(getDaysInMonth(now) - now.getDate(), 0)
   const thirtyDaysOut = addDays(now, 30)
@@ -344,7 +350,7 @@ export function computePulse(
     return remaining > 0 ? s + remaining : s
   }, 0)
 
-  const carryForward  = Math.max(0, prevSummary.cashNet)
+  const carryForward  = carryForwardToMonth
   const surplusNet    = curSummary.cashNet + carryForward   // matches Net cashflow everywhere
   // surplusNet already has savings deducted (via cashNet formula), so only subtract upcoming
   const freeCash      = Math.max(surplusNet - upcomingTotal, 0)
