@@ -418,6 +418,8 @@ export default function BorrowingsList({ onEdit }: Props) {
     .filter(b => b.type === 'lent' && b.status !== 'repaid')
     .reduce((s, b) => s + (b.amount - b.repaidAmount), 0)
 
+  const netBalance = totalLent - totalBorrowed
+
   // ── Group by person ──────────────────────────────────────────────────────────
 
   const personGroups: PersonGroup[] = useMemo(() => {
@@ -508,7 +510,7 @@ export default function BorrowingsList({ onEdit }: Props) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
 
       {/* ── Summary cards ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '4fr 4fr 2fr', gap: 12 }}>
         <div style={{
           padding: '16px 18px', borderRadius: 'var(--radius-lg)',
           background: 'linear-gradient(150deg, var(--brand-deep) 0%, var(--brand) 55%, var(--brand-2) 100%)',
@@ -537,6 +539,34 @@ export default function BorrowingsList({ onEdit }: Props) {
           </div>
           <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', marginTop: 5 }}>
             {personGroups.filter(g => g.activeBorrowed > 0).length} pending settlement{personGroups.filter(g => g.activeBorrowed > 0).length !== 1 ? 's' : ''}
+          </div>
+        </div>
+        <div style={{
+          padding: '16px 14px', borderRadius: 'var(--radius-lg)',
+          background: netBalance === 0
+            ? 'var(--surface-2)'
+            : netBalance > 0
+              ? 'linear-gradient(150deg, color-mix(in oklch, var(--good) 70%, black) 0%, var(--good) 55%, var(--good-2) 100%)'
+              : 'linear-gradient(150deg, color-mix(in oklch, var(--bad) 70%, black) 0%, var(--bad) 55%, var(--bad-2) 100%)',
+          boxShadow: netBalance === 0 ? 'none' : `0 4px 20px -6px color-mix(in oklch, ${netBalance > 0 ? 'var(--good)' : 'var(--bad)'} 45%, transparent)`,
+        }}>
+          <div style={{
+            fontSize: 10, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', marginBottom: 6,
+            color: netBalance === 0 ? 'var(--muted)' : 'rgba(255,255,255,0.7)',
+          }}>
+            Post Settle-Up
+          </div>
+          <div style={{
+            fontSize: 'clamp(16px,4.5vw,22px)', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1,
+            color: netBalance === 0 ? 'var(--text)' : '#fff',
+          }}>
+            {netBalance === 0 ? '—' : formatCurrencyFull(Math.abs(netBalance))}
+          </div>
+          <div style={{
+            fontSize: 10.5, marginTop: 5,
+            color: netBalance === 0 ? 'var(--muted)' : 'rgba(255,255,255,0.65)',
+          }}>
+            {netBalance === 0 ? 'Settled' : netBalance > 0 ? "You're ahead" : "You're behind"}
           </div>
         </div>
       </div>
