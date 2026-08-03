@@ -19,6 +19,7 @@ import {
   CATEGORY_COLORS,
   getLast6Months,
   getMonthLabel,
+  computeCarryForward,
 } from '@/lib/utils'
 import type { TransactionType } from '@/types'
 import { getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
@@ -60,9 +61,8 @@ function TransactionsInner() {
     const months  = getLast6Months()
     const curIdx  = months.indexOf(selectedMonth)
     const prev    = curIdx > 0 ? months[curIdx - 1] : null
-    const prevSum = prev ? buildMonthlySummary(transactions, prev, settings, borrowings) : null
     return {
-      carryForward:   prevSum ? Math.max(0, prevSum.cashNet) : 0,
+      carryForward:   curIdx > 0 ? computeCarryForward(months.slice(0, curIdx), transactions, settings, borrowings) : 0,
       prevMonthLabel: prev ? getMonthLabel(prev) : '',
     }
   }, [transactions, selectedMonth, settings, borrowings])
@@ -499,13 +499,15 @@ function TransactionsInner() {
                 <div style={{ height: 1, background: 'var(--hair)' }} />
 
                 <div>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', marginBottom: 6 }}>Net cashflow</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)' }}>Net cashflow</span>
+                    <button onClick={() => setShowNet(v => !v)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', display: 'flex' }}>
+                      {showNet ? <EyeOff size={12} /> : <Eye size={12} />}
+                    </button>
+                  </div>
                   <div className="display-num" style={{ fontSize: 26, color: (summary.cashNet + carryForward) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
                     {showNet ? `${(summary.cashNet + carryForward) >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(summary.cashNet + carryForward))}` : '₹ •••'}
                   </div>
-                  <button onClick={() => setShowNet(v => !v)} style={{ marginTop: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, padding: 0 }}>
-                    {showNet ? <><EyeOff size={11} /> Hide</> : <><Eye size={11} /> Show</>}
-                  </button>
                 </div>
               </div>
             </div>
