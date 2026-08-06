@@ -230,6 +230,8 @@ export interface PulseCashPosition {
   monthExpenses: number
   savingsContributed: number
   totalLent: number
+  lentOutstanding: number // portion of this cycle's new loans still unpaid (nets out same-cycle repayments)
+  repaymentPaid: number   // borrowed money you paid back this month (real cash outflow)
   upcomingTotal: number   // expense outflows still owed in next 30 days
   upcomingIncome: number  // income still pending to arrive in next 30 days
   carryForward: number    // previous cycle's positive cashNet
@@ -252,7 +254,7 @@ export interface PulseAllocation {
   label: string
   amount: number
   reason: string
-  type: 'ef' | 'project' | 'sip' | 'buffer' | 'discretionary' | 'repayment'
+  type: 'ef' | 'project' | 'sip' | 'buffer' | 'discretionary' | 'repayment' | 'custom'
 }
 
 export interface PulseSpendCategory {

@@ -56,6 +56,8 @@ function TransactionsInner() {
   useEffect(() => { setVisibleCount(VISIBLE_COUNT) }, [typeFilter, catFilter, vehicleFilter, searchQuery, selectedMonth, dateFrom, dateTo])
   const summary  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
   const monthTxs = getTransactionsForMonth(transactions, selectedMonth, settings)
+  // True cash leaving the account: category spend + money still out on new loans this cycle + borrowed money repaid
+  const moneyOutTotal = summary.totalExpenses + summary.lentOutstanding + summary.repaymentPaid
 
   const { carryForward, prevMonthLabel } = useMemo(() => {
     const months  = getLast6Months()
@@ -193,10 +195,20 @@ function TransactionsInner() {
             </div>
             {/* Expenses */}
             <div className="card-sm" style={{ padding: '12px 14px' }}>
-              <div className="h-eyebrow" style={{ marginBottom: 6 }}>Expenses</div>
+              <div className="h-eyebrow" style={{ marginBottom: 6 }}>Money out</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--bad-ink)', letterSpacing: '-0.015em', whiteSpace: 'nowrap' }}>
-                {mobileMasked ? <span style={{ letterSpacing: '0.05em', color: 'var(--text-4)' }}>••••</span> : formatCurrencyFull(summary.totalExpenses)}
+                {mobileMasked ? <span style={{ letterSpacing: '0.05em', color: 'var(--text-4)' }}>••••</span> : formatCurrencyFull(moneyOutTotal)}
               </div>
+              {!mobileMasked && summary.lentOutstanding > 0 && (
+                <div style={{ fontSize: 10, color: 'var(--info-ink)', fontWeight: 600, marginTop: 3 }}>
+                  {formatCurrencyFull(summary.lentOutstanding)} lent out
+                </div>
+              )}
+              {!mobileMasked && summary.repaymentPaid > 0 && (
+                <div style={{ fontSize: 10, color: 'var(--good-ink)', fontWeight: 600, marginTop: 3 }}>
+                  {formatCurrencyFull(summary.repaymentPaid)} loan repaid
+                </div>
+              )}
               {!mobileMasked && summary.savingsContributed > 0 && (
                 <div style={{ fontSize: 10, color: 'var(--brand-ink)', fontWeight: 600, marginTop: 3 }}>
                   + {formatCurrencyFull(summary.savingsContributed)} saved
@@ -480,8 +492,35 @@ function TransactionsInner() {
                     </button>
                   </div>
                   <div className="display-num" style={{ fontSize: 26, color: 'var(--text)' }}>
-                    {showExpenses ? formatCurrencyFull(summary.totalExpenses) : '₹ •••'}
+                    {showExpenses ? formatCurrencyFull(moneyOutTotal) : '₹ •••'}
                   </div>
+                  {showExpenses && summary.totalExpenses > 0 && (
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--bad-ink)', marginTop: 3 }}>
+                      {formatCurrencyFull(summary.totalExpenses)} spent
+                    </div>
+                  )}
+                  {showExpenses && summary.lentOutstanding > 0 && (
+                    <div style={{
+                      marginTop: 6, marginRight: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
+                      fontSize: 11, fontWeight: 600, color: 'var(--info-ink)',
+                      background: 'var(--info-soft)',
+                      border: '1px solid color-mix(in oklch, var(--info) 20%, transparent)',
+                      borderRadius: 6, padding: '2px 8px',
+                    }}>
+                      {formatCurrencyFull(summary.lentOutstanding)} lent out
+                    </div>
+                  )}
+                  {showExpenses && summary.repaymentPaid > 0 && (
+                    <div style={{
+                      marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
+                      fontSize: 11, fontWeight: 600, color: 'var(--good-ink)',
+                      background: 'var(--good-soft)',
+                      border: '1px solid color-mix(in oklch, var(--good) 20%, transparent)',
+                      borderRadius: 6, padding: '2px 8px',
+                    }}>
+                      {formatCurrencyFull(summary.repaymentPaid)} loan repaid
+                    </div>
+                  )}
                   {showExpenses && summary.savingsContributed > 0 && (
                     <div style={{
                       marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,

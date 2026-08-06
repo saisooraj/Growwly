@@ -127,7 +127,7 @@ function Row({ label, sub, value, color, indent = false }: {
 function CashSection({ cash }: { cash: FinancialPulse['cashPosition'] }) {
   const positive  = cash.surplusNet >= 0
   const totalIn   = cash.monthIncome + cash.carryForward
-  const totalOut  = cash.monthExpenses + cash.savingsContributed + cash.totalLent + cash.upcomingTotal
+  const totalOut  = cash.monthExpenses + cash.savingsContributed + cash.lentOutstanding + cash.repaymentPaid + cash.upcomingTotal
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -156,12 +156,15 @@ function CashSection({ cash }: { cash: FinancialPulse['cashPosition'] }) {
         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{formatCurrencyFull(totalOut)}</span>
       </div>
       {/* Out sub-rows */}
-      <Row label="spent" value={`− ${formatCurrencyFull(cash.monthExpenses)}`} color="var(--text-3)" indent />
+      <Row label="spent" value={`− ${formatCurrencyFull(cash.monthExpenses)}`} color="var(--bad-ink)" indent />
       {cash.savingsContributed > 0 && (
         <Row label="→ savings" value={`− ${formatCurrencyFull(cash.savingsContributed)}`} color="var(--brand-ink)" indent />
       )}
-      {cash.totalLent > 0 && (
-        <Row label="→ lent out" value={`− ${formatCurrencyFull(cash.totalLent)}`} color="var(--warn-ink)" indent />
+      {cash.lentOutstanding > 0 && (
+        <Row label="→ lent out" value={`− ${formatCurrencyFull(cash.lentOutstanding)}`} color="var(--info-ink)" indent />
+      )}
+      {cash.repaymentPaid > 0 && (
+        <Row label="→ loan repaid" value={`− ${formatCurrencyFull(cash.repaymentPaid)}`} color="var(--good-ink)" indent />
       )}
       {cash.upcomingTotal > 0 && (
         <Row label="reserved ahead" value={`− ${formatCurrencyFull(cash.upcomingTotal)}`} color="var(--warn-ink)" indent />
