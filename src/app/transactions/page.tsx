@@ -196,9 +196,14 @@ function TransactionsInner() {
             {/* Expenses */}
             <div className="card-sm" style={{ padding: '12px 14px' }}>
               <div className="h-eyebrow" style={{ marginBottom: 6 }}>Money out</div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--bad-ink)', letterSpacing: '-0.015em', whiteSpace: 'nowrap' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.015em', whiteSpace: 'nowrap' }}>
                 {mobileMasked ? <span style={{ letterSpacing: '0.05em', color: 'var(--text-4)' }}>••••</span> : formatCurrencyFull(moneyOutTotal)}
               </div>
+              {!mobileMasked && summary.totalExpenses > 0 && (
+                <div style={{ fontSize: 10, color: 'var(--bad-ink)', fontWeight: 600, marginTop: 3 }}>
+                  {formatCurrencyFull(summary.totalExpenses)} spent
+                </div>
+              )}
               {!mobileMasked && summary.lentOutstanding > 0 && (
                 <div style={{ fontSize: 10, color: 'var(--info-ink)', fontWeight: 600, marginTop: 3 }}>
                   {formatCurrencyFull(summary.lentOutstanding)} lent out
