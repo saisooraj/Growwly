@@ -64,6 +64,8 @@ export default function SettingsPage() {
 
   // Dashboard card order
   const [cardOrder, setCardOrder] = useState<string[]>(DEFAULT_CARD_ORDER)
+  const [orderDirty, setOrderDirty] = useState(false)
+  const [savingOrder, setSavingOrder] = useState(false)
 
   // Salary cycle
   const [cycleRule, setCycleRule]           = useState<SalaryCycleRule>('none')
@@ -87,7 +89,12 @@ export default function SettingsPage() {
       setShowHealthTab(settings.showHealthTab ?? false)
       setShowTasksTab(settings.showTasksTab ?? false)
       setAccentColor((settings.accentColor as typeof accentColor) ?? 'green')
-      setCardOrder(settings.dashboardCardOrder ?? DEFAULT_CARD_ORDER)
+      // A saved order predates newer blocks — append any default block missing
+      // from it so it shows up here and can be reordered (mirrors src/app/page.tsx).
+      const saved = settings.dashboardCardOrder
+      setCardOrder(saved
+        ? [...saved, ...DEFAULT_CARD_ORDER.filter(id => !saved.includes(id))]
+        : DEFAULT_CARD_ORDER)
     }
   }, [settings])
 
@@ -792,7 +799,7 @@ export default function SettingsPage() {
             <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Dashboard Order</h2>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
-            Reorder the sections on your home screen using the arrows.
+            Reorder the sections on your home screen using the arrows, then save.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {cardOrder.map((id, idx) => {
@@ -800,6 +807,7 @@ export default function SettingsPage() {
                 hero: 'Hero — Safe to Spend, This Month, Streak',
                 insights: 'Smart Insights',
                 charts: 'Charts — Category Pie + Monthly Bar',
+                savings: 'Savings Trend + Breakdown',
                 goals: 'Savings Goals',
                 transactions: 'Recent Transactions',
                 pulse: 'Monthly Pulse',
@@ -818,11 +826,11 @@ export default function SettingsPage() {
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button
                       disabled={idx === 0}
-                      onClick={async () => {
+                      onClick={() => {
                         const next = [...cardOrder]
                         ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
                         setCardOrder(next)
-                        await setUserSettings(user!.uid, { dashboardCardOrder: next })
+                        setOrderDirty(true)
                       }}
                       style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.3 : 1, display: 'flex' }}
                     >
@@ -830,11 +838,11 @@ export default function SettingsPage() {
                     </button>
                     <button
                       disabled={idx === cardOrder.length - 1}
-                      onClick={async () => {
+                      onClick={() => {
                         const next = [...cardOrder]
                         ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
                         setCardOrder(next)
-                        await setUserSettings(user!.uid, { dashboardCardOrder: next })
+                        setOrderDirty(true)
                       }}
                       style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', cursor: idx === cardOrder.length - 1 ? 'default' : 'pointer', opacity: idx === cardOrder.length - 1 ? 0.3 : 1, display: 'flex' }}
                     >
@@ -845,16 +853,43 @@ export default function SettingsPage() {
               )
             })}
           </div>
-          <button
-            onClick={async () => {
-              setCardOrder(DEFAULT_CARD_ORDER)
-              await setUserSettings(user!.uid, { dashboardCardOrder: DEFAULT_CARD_ORDER })
-              toast.success('Order reset')
-            }}
-            style={{ fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', alignSelf: 'flex-start', padding: 0 }}
-          >
-            Reset to default
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              onClick={() => {
+                setCardOrder(DEFAULT_CARD_ORDER)
+                setOrderDirty(true)
+              }}
+              style={{ fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            >
+              Reset to default
+            </button>
+            <button
+              onClick={async () => {
+                if (!user) return
+                setSavingOrder(true)
+                try {
+                  await setUserSettings(user.uid, { dashboardCardOrder: cardOrder })
+                  await refresh()
+                  setOrderDirty(false)
+                  toast.success('Dashboard order saved')
+                } catch {
+                  toast.error('Failed to save order')
+                } finally {
+                  setSavingOrder(false)
+                }
+              }}
+              disabled={!orderDirty || savingOrder}
+              className="btn-primary"
+              style={{
+                marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
+                padding: '7px 14px', fontSize: 13,
+                opacity: !orderDirty || savingOrder ? 0.5 : 1,
+                cursor: !orderDirty || savingOrder ? 'default' : 'pointer',
+              }}
+            >
+              {savingOrder ? 'Saving…' : 'Save order'}
+            </button>
+          </div>
         </div>
 
         {/* Streak Badges */}

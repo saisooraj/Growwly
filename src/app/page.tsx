@@ -15,6 +15,8 @@ import MoneyStreakCard   from '@/components/dashboard/MoneyStreakCard'
 import SmartInsights     from '@/components/dashboard/SmartInsights'
 import CategoryPieChart  from '@/components/dashboard/CategoryPieChart'
 import MonthlyBarChart   from '@/components/dashboard/MonthlyBarChart'
+import SavingsTrendChart from '@/components/dashboard/SavingsTrendChart'
+import SavingsBreakdown  from '@/components/dashboard/SavingsBreakdown'
 import DashboardGoals    from '@/components/dashboard/DashboardGoals'
 
 // ── Existing cards (preserved below the new design section) ─────────────────
@@ -79,7 +81,12 @@ export default function RootPage() {
 function DashboardPage() {
   const loading  = useAppStore((s) => s.loading)
   const settings = useAppStore((s) => s.settings)
-  const cardOrder = settings?.dashboardCardOrder ?? DEFAULT_CARD_ORDER
+  // A saved order predates newer blocks (e.g. 'goals', 'savings') — append any
+  // default block missing from it so new dashboard sections aren't silently hidden.
+  const savedOrder = settings?.dashboardCardOrder
+  const cardOrder = savedOrder
+    ? [...savedOrder, ...DEFAULT_CARD_ORDER.filter(id => !savedOrder.includes(id))]
+    : DEFAULT_CARD_ORDER
 
   const BLOCKS: Record<string, React.ReactNode> = {
     hero: (
@@ -100,6 +107,12 @@ function DashboardPage() {
         <CardErrorBoundary label="Category Chart"><CategoryPieChart /></CardErrorBoundary>
         <CardErrorBoundary label="Monthly Chart"><MonthlyBarChart /></CardErrorBoundary>
         <div className="hidden lg:block"><CardErrorBoundary label="Smart Insights"><SmartInsights /></CardErrorBoundary></div>
+      </div>
+    ),
+    savings: (
+      <div className="dash-charts">
+        <CardErrorBoundary label="Savings Trend"><SavingsTrendChart /></CardErrorBoundary>
+        <CardErrorBoundary label="Savings Breakdown"><SavingsBreakdown /></CardErrorBoundary>
       </div>
     ),
     goals: <CardErrorBoundary label="Goals"><DashboardGoals /></CardErrorBoundary>,
