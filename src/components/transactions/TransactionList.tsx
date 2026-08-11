@@ -173,19 +173,20 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
   const [open, setOpen] = useState(defaultOpen)
   useEffect(() => { setOpen(defaultOpen) }, [defaultOpen])
 
-  const { income, expenses } = useMemo(() => {
-    let income = 0, expenses = 0
+  const { income, expenses, saved } = useMemo(() => {
+    let income = 0, expenses = 0, saved = 0
     for (const tx of txs) {
       if (tx._borrowDir) continue  // borrowings don't count in P&L summary
       if (tx.type === 'income') income += tx.amount
       else if (tx.type === 'expense') expenses += tx.amount
       else {
-        const { dir } = getTransferDisplay(tx)
+        const { dir, isSavings } = getTransferDisplay(tx)
         if (dir === 'in') income += tx.amount
+        else if (isSavings) saved += tx.amount
         else expenses += tx.amount
       }
     }
-    return { income, expenses }
+    return { income, expenses, saved }
   }, [txs])
 
   return (
@@ -217,6 +218,11 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
           {expenses > 0 && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: 'var(--bad-ink)' }}>
               <ArrowUp size={11} />{formatCurrencyFull(expenses)}
+            </span>
+          )}
+          {saved > 0 && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: 'var(--warn-ink)' }}>
+              <ArrowUp size={11} />{formatCurrencyFull(saved)}
             </span>
           )}
         </div>
