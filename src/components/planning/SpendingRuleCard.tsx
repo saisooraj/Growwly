@@ -41,6 +41,7 @@ const BUCKET_META: Record<Bucket, { label: string; color: string; ink: string; s
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 const MASK = '₹ ••••'
+const EMBER_OFFSETS = [8, 30, 52, 74, 92]
 
 function BucketRow({
   bucket, pct, target, amount, items, totalIncome, expanded, onToggle, masked,
@@ -54,6 +55,9 @@ function BucketRow({
   const status = Math.abs(diff) <= 3 ? 'on-track' : diff > 3 ? 'over' : 'under'
   // For savings, exceeding target is an achievement (green), not overspending (red) like needs/wants.
   const isAchievement = bucket === 'savings' && status === 'over'
+  const isDanger = bucket !== 'savings' && status === 'over'
+  const isPulsing = isAchievement || isDanger
+  const glowColor = isAchievement ? 'var(--good-ink)' : 'var(--bad-ink)'
   const statusColor = status === 'on-track' || isAchievement ? 'var(--good-ink)' : status === 'over' ? 'var(--bad-ink)' : 'var(--warn-ink)'
   const statusLabel = status === 'on-track' ? 'On track' : status === 'over' ? `+${diff.toFixed(0)}% over` : `${Math.abs(diff).toFixed(0)}% under`
 
@@ -108,10 +112,36 @@ function BucketRow({
           height: '100%',
           width: `${target > 0 ? Math.min((pct / target) * 100, 100) : 0}%`,
           background: status === 'over' && !isAchievement ? statusColor : meta.color,
-          boxShadow: isAchievement ? '0 0 8px 1px var(--good-ink)' : 'none',
+          animation: isPulsing ? 'bucket-glow 1.8s ease-in-out infinite' : 'none',
+          ['--glow-color' as string]: glowColor,
           transition: 'width .5s cubic-bezier(.22,1,.36,1), box-shadow .3s ease',
-        }} />
+          position: 'relative',
+        }}>
+          {isPulsing && EMBER_OFFSETS.map((left, i) => (
+            <span key={i} style={{
+              position: 'absolute', bottom: 1, left: `${left}%`,
+              width: 3, height: 3, borderRadius: '50%',
+              background: glowColor, filter: 'blur(0.5px)',
+              animation: `bucket-ember 2.6s ease-in ${i * 0.5}s infinite`,
+              pointerEvents: 'none',
+            }} />
+          ))}
+        </div>
       </div>
+      {isPulsing && (
+        <style>{`
+          @keyframes bucket-glow {
+            0%, 100% { box-shadow: 0 0 6px 0px var(--glow-color), 0 0 2px 0px var(--glow-color); }
+            50%      { box-shadow: 0 0 14px 3px var(--glow-color), 0 0 5px 1px var(--glow-color); }
+          }
+          @keyframes bucket-ember {
+            0%   { transform: translateY(0) scale(.6); opacity: 0; }
+            15%  { opacity: .9; }
+            60%  { opacity: .5; }
+            100% { transform: translateY(-16px) scale(.2); opacity: 0; }
+          }
+        `}</style>
+      )}
 
       {/* Expanded category breakdown */}
       {expanded && (
