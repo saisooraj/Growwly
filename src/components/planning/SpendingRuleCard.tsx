@@ -52,7 +52,9 @@ function BucketRow({
   const meta = BUCKET_META[bucket]
   const diff = pct - target
   const status = Math.abs(diff) <= 3 ? 'on-track' : diff > 3 ? 'over' : 'under'
-  const statusColor = status === 'on-track' ? 'var(--good-ink)' : status === 'over' ? 'var(--bad-ink)' : 'var(--warn-ink)'
+  // For savings, exceeding target is an achievement (green), not overspending (red) like needs/wants.
+  const isAchievement = bucket === 'savings' && status === 'over'
+  const statusColor = status === 'on-track' || isAchievement ? 'var(--good-ink)' : status === 'over' ? 'var(--bad-ink)' : 'var(--warn-ink)'
   const statusLabel = status === 'on-track' ? 'On track' : status === 'over' ? `+${diff.toFixed(0)}% over` : `${Math.abs(diff).toFixed(0)}% under`
 
   const BucketIcon = bucket === 'needs' ? Home : bucket === 'wants' ? Sparkles : Leaf
@@ -84,7 +86,7 @@ function BucketRow({
             <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)' }}>{meta.label}</span>
             <span style={{
               fontSize: 11.5, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
-              background: status === 'on-track' ? 'var(--good-soft)' : status === 'over' ? 'var(--bad-soft)' : 'var(--warn-soft)',
+              background: status === 'on-track' || isAchievement ? 'var(--good-soft)' : status === 'over' ? 'var(--bad-soft)' : 'var(--warn-soft)',
               color: statusColor,
             }}>{statusLabel}</span>
           </div>
@@ -100,10 +102,15 @@ function BucketRow({
         <ChevronDown size={16} style={{ color: 'var(--text-4)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform .2s', flexShrink: 0 }} />
       </button>
 
-      {/* Progress bar */}
+      {/* Progress bar — width is progress toward target (100% = target reached) */}
       <div style={{ height: 5, background: 'var(--surface-3)', position: 'relative' }}>
-        <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: meta.color, transition: 'width .5s cubic-bezier(.22,1,.36,1)' }} />
-        <div style={{ position: 'absolute', top: 0, bottom: 0, width: 2, left: `${Math.min(target, 99)}%`, background: 'var(--border-strong)', transform: 'translateX(-50%)' }} />
+        <div style={{
+          height: '100%',
+          width: `${target > 0 ? Math.min((pct / target) * 100, 100) : 0}%`,
+          background: status === 'over' && !isAchievement ? statusColor : meta.color,
+          boxShadow: isAchievement ? '0 0 8px 1px var(--good-ink)' : 'none',
+          transition: 'width .5s cubic-bezier(.22,1,.36,1), box-shadow .3s ease',
+        }} />
       </div>
 
       {/* Expanded category breakdown */}
