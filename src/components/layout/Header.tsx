@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Sun, Moon, Bell, Plus, Search, Flame } from 
 import { useTheme } from 'next-themes'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
+import { AddEntryMenu } from '@/components/transactions/AddEntryMenu'
 import { getLast6Months, getMonthLabel, computeMoneyStreak } from '@/lib/utils'
 import { getCycleRange, formatCycleRange } from '@/lib/cycle'
 import { usePathname, useRouter } from 'next/navigation'
@@ -129,12 +130,13 @@ function SearchBar() {
 
 // ── Main header ──────────────────────────────────────────────────────────────
 
-export default function Header({ title, scrolled = false, onAdd }: { title?: string; scrolled?: boolean; onAdd?: () => void }) {
+export default function Header({ title, scrolled = false, onAdd, onScan }: { title?: string; scrolled?: boolean; onAdd?: () => void; onScan?: () => void }) {
   const pathname = usePathname()
   const { user } = useAuth()
   const { selectedMonth, setSelectedMonth, settings, transactions } = useAppStore()
   const tasks      = useAppStore(s => (s as any).tasks ?? [])
   const borrowings = useAppStore(s => s.borrowings)
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
 
   const moneyStreak = computeMoneyStreak(transactions, settings?.noSpendDays ?? [])
 
@@ -319,26 +321,34 @@ export default function Header({ title, scrolled = false, onAdd }: { title?: str
 
       {/* ── + Add button (desktop) ── */}
       {onAdd && (
-        <button
-          onClick={onAdd}
-          className="hidden lg:flex items-center gap-2"
-          style={{
-            padding: '9px 16px', borderRadius: 13, border: 'none',
-            background: 'linear-gradient(150deg, var(--brand-2), var(--brand))',
-            color: '#fff', cursor: 'pointer',
-            fontSize: 13.5, fontWeight: 700, letterSpacing: '-0.01em',
-            boxShadow: '0 4px 14px -4px var(--brand)',
-            transition: 'transform .12s ease, box-shadow .12s ease',
-            flexShrink: 0,
-          }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 8px 20px -6px var(--brand)' }}
-          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 4px 14px -4px var(--brand)' }}
-          onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.97)')}
-          onMouseUp={e => (e.currentTarget.style.transform = 'scale(1.04)')}
-        >
-          <Plus size={16} strokeWidth={2.8} />
-          Add
-        </button>
+        <AddEntryMenu
+          open={addMenuOpen}
+          onClose={() => setAddMenuOpen(false)}
+          onManual={onAdd}
+          onScan={onScan ?? onAdd}
+          anchor={
+            <button
+              onClick={() => (onScan ? setAddMenuOpen(o => !o) : onAdd())}
+              className="hidden lg:flex items-center gap-2"
+              style={{
+                padding: '9px 16px', borderRadius: 13, border: 'none',
+                background: 'linear-gradient(150deg, var(--brand-2), var(--brand))',
+                color: '#fff', cursor: 'pointer',
+                fontSize: 13.5, fontWeight: 700, letterSpacing: '-0.01em',
+                boxShadow: '0 4px 14px -4px var(--brand)',
+                transition: 'transform .12s ease, box-shadow .12s ease',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.04)'; e.currentTarget.style.boxShadow = '0 8px 20px -6px var(--brand)' }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 4px 14px -4px var(--brand)' }}
+              onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.97)')}
+              onMouseUp={e => (e.currentTarget.style.transform = 'scale(1.04)')}
+            >
+              <Plus size={16} strokeWidth={2.8} />
+              Add
+            </button>
+          }
+        />
       )}
     </header>
   )

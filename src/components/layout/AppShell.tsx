@@ -7,6 +7,7 @@ import MobileNav from './MobileNav'
 import FloatingActions from './FloatingActions'
 import AuthGuard from '@/components/ui/AuthGuard'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
+import BillScannerModal from '@/components/transactions/BillScannerModal'
 import BadgeCelebrationModal from '@/components/ui/BadgeCelebrationModal'
 import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
@@ -269,6 +270,7 @@ export default function AppShell({ title, children, fillPage }: Props) {
   const [busy, setBusy] = useState(false)
   const drag = useRef({ active: false, y0: 0 })
   const [addOpen, setAddOpen] = useState(false)
+  const [scanOpen, setScanOpen] = useState(false)
 
   // ── Accent color + dynamic favicon + theme-color ────────────────────────────
   useEffect(() => {
@@ -343,7 +345,7 @@ export default function AppShell({ title, children, fillPage }: Props) {
       <div className="app">
         <Sidebar />
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: '100vh' }}>
-          <Header title={title} scrolled={scrolled} onAdd={() => setAddOpen(true)} />
+          <Header title={title} scrolled={scrolled} onAdd={() => setAddOpen(true)} onScan={() => setScanOpen(true)} />
           <AdminAuthAlertBanner />
           <main
             ref={mainRef}
@@ -385,6 +387,7 @@ export default function AppShell({ title, children, fillPage }: Props) {
 
       {/* Global add-transaction modal — lives outside the scroll/transform tree */}
       <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />
+      <BillScannerModal open={scanOpen} onClose={() => setScanOpen(false)} />
 
       {/* Badge celebration — shown once per newly earned badge */}
       <BadgeCelebrationModal

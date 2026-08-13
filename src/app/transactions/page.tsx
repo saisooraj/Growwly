@@ -3,10 +3,13 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useMemo, useEffect, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Download, Plus, SlidersHorizontal, Eye, EyeOff, Search, X, PiggyBank, CalendarRange } from 'lucide-react'
+import toast from 'react-hot-toast'
 import AppShell from '@/components/layout/AppShell'
 import TransactionList from '@/components/transactions/TransactionList'
+import BillScannerModal from '@/components/transactions/BillScannerModal'
+import { getPendingSharedImage, clearPendingSharedImage } from '@/lib/shareTargetDb'
 import { useAppStore } from '@/store/appStore'
 import {
   buildMonthlySummary,
@@ -36,6 +39,28 @@ const TYPE_OPTS: { id: FilterType; label: string }[] = [
 
 function TransactionsInner() {
   const searchParams = useSearchParams()
+  const router = useRouter()
+  const [pendingShareBlob, setPendingShareBlob] = useState<Blob | null>(null)
+
+  useEffect(() => {
+    const scanParam = searchParams.get('scan')
+    if (scanParam === 'shared') {
+      getPendingSharedImage().then(record => {
+        if (record) {
+          setPendingShareBlob(record.blob)
+          clearPendingSharedImage()
+        } else {
+          toast.error('Shared image not found — please try again')
+        }
+        router.replace('/transactions')
+      })
+    } else if (scanParam === 'share-failed') {
+      toast.error("Couldn't read the shared image")
+      router.replace('/transactions')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const [typeFilter, setTypeFilter] = useState<FilterType>((searchParams.get('type') as FilterType) ?? 'all')
   const [catFilter, setCatFilter]   = useState<string>(searchParams.get('cat') ?? 'all')
   const [vehicleFilter, setVehicleFilter] = useState<string>(searchParams.get('vehicle') ?? 'all')
@@ -582,6 +607,12 @@ function TransactionsInner() {
           </div>
         </div>
       </div>
+
+      <BillScannerModal
+        open={!!pendingShareBlob}
+        initialBlob={pendingShareBlob}
+        onClose={() => setPendingShareBlob(null)}
+      />
 
     </AppShell>
   )

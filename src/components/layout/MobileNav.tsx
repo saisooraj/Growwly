@@ -13,6 +13,8 @@ import {
 import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
+import BillScannerModal from '@/components/transactions/BillScannerModal'
+import { AddEntryMenu } from '@/components/transactions/AddEntryMenu'
 
 // ── Main nav tabs (always visible) ────────────────────────────────────────────
 const MAIN_NAV = [
@@ -218,6 +220,8 @@ export default function MobileNav() {
   const settings = useAppStore(s => s.settings)
   const refresh = useRefreshData()
   const [addOpen, setAddOpen] = useState(false)
+  const [scanOpen, setScanOpen] = useState(false)
+  const [addMenuOpen, setAddMenuOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
 
   const moreActive = !['/', '/transactions', '/networth'].includes(pathname)
@@ -263,24 +267,34 @@ export default function MobileNav() {
 
           {/* FAB */}
           <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-            <button
-              onClick={() => setAddOpen(true)}
-              style={{
-                width: 52, height: 52, borderRadius: 17, border: 'none',
-                background: 'linear-gradient(150deg, var(--brand-2), var(--brand))',
-                color: '#fff', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                marginTop: -24,
-                boxShadow: '0 8px 20px -5px var(--brand), 0 2px 6px rgba(0,0,0,.18)',
-                transition: 'transform .14s cubic-bezier(.2,.8,.2,1)',
-                WebkitTapHighlightColor: 'transparent',
-              }}
-              onPointerDown={e => (e.currentTarget.style.transform = 'scale(0.92)')}
-              onPointerUp={e => (e.currentTarget.style.transform = 'scale(1)')}
-              onPointerLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-            >
-              <Plus size={26} strokeWidth={2.6} />
-            </button>
+            <AddEntryMenu
+              open={addMenuOpen}
+              onClose={() => setAddMenuOpen(false)}
+              onManual={() => setAddOpen(true)}
+              onScan={() => setScanOpen(true)}
+              placement="up"
+              variant="icons"
+              anchor={
+                <button
+                  onClick={() => setAddMenuOpen(o => !o)}
+                  style={{
+                    width: 52, height: 52, borderRadius: 17, border: 'none',
+                    background: 'linear-gradient(150deg, var(--brand-2), var(--brand))',
+                    color: '#fff', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    marginTop: -24,
+                    boxShadow: '0 8px 20px -5px var(--brand), 0 2px 6px rgba(0,0,0,.18)',
+                    transition: 'transform .14s cubic-bezier(.2,.8,.2,1)',
+                    WebkitTapHighlightColor: 'transparent',
+                  }}
+                  onPointerDown={e => (e.currentTarget.style.transform = 'scale(0.92)')}
+                  onPointerUp={e => (e.currentTarget.style.transform = 'scale(1)')}
+                  onPointerLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                >
+                  <Plus size={26} strokeWidth={2.6} />
+                </button>
+              }
+            />
           </div>
 
           {/* Net Worth */}
@@ -323,6 +337,11 @@ export default function MobileNav() {
       <AddTransactionModal
         open={addOpen}
         onClose={() => { setAddOpen(false); refresh() }}
+      />
+
+      <BillScannerModal
+        open={scanOpen}
+        onClose={() => { setScanOpen(false); refresh() }}
       />
 
       <MoreSheet

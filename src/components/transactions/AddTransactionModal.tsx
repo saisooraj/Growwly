@@ -18,12 +18,21 @@ import toast from 'react-hot-toast'
 type Tab = 'expense' | 'income' | 'transfer' | 'savings'
 type SavingsKind = 'savings_contribution' | 'savings_withdrawal'
 
+interface InitialPrefill {
+  amount?: number
+  category?: string
+  date?: string
+  notes?: string
+  source?: 'scan' | 'share-target'
+}
+
 interface Props {
   open: boolean
   onClose: () => void
   editTx?: Transaction | null
   initialTab?: Tab
   initialSavingsVehicle?: string
+  initialPrefill?: InitialPrefill | null
 }
 
 type SplitMode = 'equal' | 'percentage' | 'manual'
@@ -68,7 +77,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
   )
 }
 
-export default function AddTransactionModal({ open, onClose, editTx, initialTab, initialSavingsVehicle }: Props) {
+export default function AddTransactionModal({ open, onClose, editTx, initialTab, initialSavingsVehicle, initialPrefill }: Props) {
   const { user } = useAuth()
   const refresh = useRefreshData()
   const { projects, budgets, transactions, borrowings, contacts, settings, emergencyFund, savingsGoals, setSavingsGoals } = useAppStore()
@@ -81,10 +90,10 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     editTx?.transferKind === 'savings_withdrawal' || editTx?.transferKind === 'ef_withdrawal' ? 'savings_withdrawal' : 'savings_contribution'
   )
   const [savingsVehicle, setSavingsVehicle] = useState<string>(editTx?.savingsVehicle ?? EMERGENCY_FUND_VEHICLE)
-  const [amount, setAmount]             = useState(editTx ? String(editTx.amount) : '')
-  const [category, setCategory]         = useState<string>(editTx?.category ?? 'Food & Dining')
-  const [date, setDate]                 = useState(editTx?.date ?? format(new Date(), 'yyyy-MM-dd'))
-  const [notes, setNotes]               = useState(editTx?.notes ?? '')
+  const [amount, setAmount]             = useState(editTx ? String(editTx.amount) : initialPrefill?.amount != null ? String(initialPrefill.amount) : '')
+  const [category, setCategory]         = useState<string>(editTx?.category ?? initialPrefill?.category ?? 'Food & Dining')
+  const [date, setDate]                 = useState(editTx?.date ?? initialPrefill?.date ?? format(new Date(), 'yyyy-MM-dd'))
+  const [notes, setNotes]               = useState(editTx?.notes ?? initialPrefill?.notes ?? '')
   const [suggestedCat, setSuggestedCat] = useState<string | null>(null)
   const [projectId, setProjectId]       = useState(editTx?.projectId ?? '')
   const [isRecurring, setIsRecurring]   = useState(editTx?.isRecurring ?? false)
@@ -171,10 +180,10 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       setTransferKind(editTx?.transferKind ?? 'loan_repayment_received')
       setSavingsKind(editTx?.transferKind === 'savings_withdrawal' || editTx?.transferKind === 'ef_withdrawal' ? 'savings_withdrawal' : 'savings_contribution')
       setSavingsVehicle(editTx?.savingsVehicle ?? initialSavingsVehicle ?? EMERGENCY_FUND_VEHICLE)
-      setAmount(editTx ? String(editTx.amount) : '')
-      setCategory(editTx?.category ?? 'Food & Dining')
-      setDate(editTx?.date ?? format(new Date(), 'yyyy-MM-dd'))
-      setNotes(editTx?.notes ?? '')
+      setAmount(editTx ? String(editTx.amount) : initialPrefill?.amount != null ? String(initialPrefill.amount) : '')
+      setCategory(editTx?.category ?? initialPrefill?.category ?? 'Food & Dining')
+      setDate(editTx?.date ?? initialPrefill?.date ?? format(new Date(), 'yyyy-MM-dd'))
+      setNotes(editTx?.notes ?? initialPrefill?.notes ?? '')
       setProjectId(editTx?.projectId ?? '')
       setIsRecurring(editTx?.isRecurring ?? false)
       setSplitEnabled(false)
@@ -187,7 +196,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       setSettledBorrowingId(editTx?.settledBorrowingId ?? '')
       setSettledPerson(editTx?.settledPerson ?? '')
     }
-  }, [open, editTx])
+  }, [open, editTx, initialPrefill])
 
   // Auto-link Gold/Construction → project
   useEffect(() => {
@@ -356,6 +365,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
         ...(txType === 'expense' && settledBorrowingId
           ? { settledBorrowingId, settledPerson }
           : txType === 'expense' ? { settledBorrowingId: '', settledPerson: '' } : {}),
+        ...(!editTx && initialPrefill?.source ? { source: initialPrefill.source } : {}),
       }
 
       // Collect affected project IDs upfront so we can recompute after refresh

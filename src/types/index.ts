@@ -31,6 +31,7 @@ export interface Transaction {
   loanPerson?: string        // person name for loan transfers (used to reverse greedy allocation on delete)
   settledBorrowingId?: string // if set, this expense partially or fully offsets a "lent" borrowing
   settledPerson?: string      // denormalized person name for the settled borrowing
+  source?: 'scan' | 'share-target' // set when created via the bill scanner; absent means manual entry
 }
 
 export interface SavingsGoal {
