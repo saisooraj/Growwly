@@ -13,6 +13,15 @@ const CURRENCY_RE = /(?:₹|\$|\bRs\.?\s*|\bINR\b\s*|\bUSD\b\s*)\s*([\d,]+(?:\.\
 const LABELED_BARE_RE = /\b(grand total|net amount|transaction amount|amount paid|total|paid|debited|amount)\b\s*[:\-]?\s*([\d,]+(?:\.\d{1,2})?)\b/i
 const POSITIVE_LABEL_RE = /\b(grand total|net amount|transaction amount|amount paid|total|paid|debited|amount)\b/i
 const NEGATIVE_LABEL_RE = /\b(sub\s*total|discount|off|cashback|deliver(y|ies)?|packing|item total|tax(es)?|gst|cgst|sgst|convenience fee|service fee)\b/i
+// Payment-app screenshots (GPay/PhonePe/UPI) show the amount as a large standalone line with
+// no "Amount:" label — and Tesseract's English model frequently misreads the ₹ glyph as a
+// stray character (seen in practice as "3" or "%") since it isn't in the eng training set.
+// A line that's nothing but one stray leading character plus a plausible amount is almost
+// always that misread hero amount. Capped at 7 digits and skipped right after an "ID"/
+// "reference" label so it can't grab a transaction/reference number sitting on its own line.
+const ISOLATED_AMOUNT_RE = /^[^\d\n]?([\d,]+(?:\.\d{1,2})?)$/
+const ID_LABEL_RE = /\b(id|reference|ref\s*no|ref#)\b/i
+const MAX_ISOLATED_DIGITS = 7
 
 interface Candidate {
   value: number
@@ -43,7 +52,8 @@ export function extractAmount(text: string): number | null {
   const candidates: Candidate[] = []
   const lines = text.split('\n')
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
     const lower = line.toLowerCase()
     const isNegative = NEGATIVE_LABEL_RE.test(lower)
     const isPositive = POSITIVE_LABEL_RE.test(lower)
@@ -64,6 +74,13 @@ export function extractAmount(text: string): number | null {
       if (labeled) {
         const value = parseAmountToken(labeled[2])
         if (value != null) candidates.push({ value, tier: isNegative ? 2 : 0 })
+      } else if (i === 0 || !ID_LABEL_RE.test(lines[i - 1])) {
+        const isolated = line.trim().match(ISOLATED_AMOUNT_RE)
+        const digitCount = isolated?.[1].replace(/[.,]/g, '').length ?? 0
+        if (isolated && digitCount >= 2 && digitCount <= MAX_ISOLATED_DIGITS) {
+          const value = parseAmountToken(isolated[1])
+          if (value != null) candidates.push({ value, tier: isNegative ? 2 : 1 })
+        }
       }
     }
   }
