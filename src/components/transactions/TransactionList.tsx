@@ -151,6 +151,22 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
             {tx.notes}
           </div>
         )}
+        {tx.tags && tx.tags.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+            {tx.tags.map(tag => (
+              <span
+                key={tag}
+                style={{
+                  fontSize: 10, fontWeight: 500, padding: '1px 6px', borderRadius: 20,
+                  border: '1px solid var(--border)', color: 'var(--text-3)', background: 'var(--surface-2)',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                #{tag}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <div style={{ textAlign: 'right', flexShrink: 0 }}>

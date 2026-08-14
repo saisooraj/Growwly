@@ -12,6 +12,7 @@ import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTran
 import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import { useAppStore } from '@/store/appStore'
 import CategoryPicker from '@/components/transactions/CategoryPicker'
+import TagPicker from '@/components/transactions/TagPicker'
 import type { Transaction, TransactionType, TransferKind } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -94,6 +95,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   const [category, setCategory]         = useState<string>(editTx?.category ?? initialPrefill?.category ?? 'Food & Dining')
   const [date, setDate]                 = useState(editTx?.date ?? initialPrefill?.date ?? format(new Date(), 'yyyy-MM-dd'))
   const [notes, setNotes]               = useState(editTx?.notes ?? initialPrefill?.notes ?? '')
+  const [tags, setTags]                 = useState<string[]>(editTx?.tags ?? [])
   const [suggestedCat, setSuggestedCat] = useState<string | null>(null)
   const [projectId, setProjectId]       = useState(editTx?.projectId ?? '')
   const [isRecurring, setIsRecurring]   = useState(editTx?.isRecurring ?? false)
@@ -353,6 +355,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
         amount: effectiveAmount,
         date,
         notes,
+        tags,
         isRecurring,
         ...(isRecurring ? { recurringDay: new Date(date).getDate() } : {}),
         ...(activeTab === 'savings'
@@ -366,6 +369,13 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           ? { settledBorrowingId, settledPerson }
           : txType === 'expense' ? { settledBorrowingId: '', settledPerson: '' } : {}),
         ...(!editTx && initialPrefill?.source ? { source: initialPrefill.source } : {}),
+      }
+
+      // Persist any newly-typed tags for reuse next time
+      const existingTags = settings?.customTags ?? []
+      const newTags = tags.filter(t => !existingTags.includes(t))
+      if (newTags.length > 0) {
+        await setUserSettings(user.uid, { customTags: [...existingTags, ...newTags] })
       }
 
       // Collect affected project IDs upfront so we can recompute after refresh
@@ -1230,6 +1240,12 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                       <CategoryPicker value={category} onChange={v => { setCategory(v); setSuggestedCat(null) }} type={txType === 'income' ? 'income' : 'expense'} />
                     </div>
                   )}
+
+                  {/* Tags — free-form labels, independent of category (e.g. "Christmas") */}
+                  <div>
+                    <label className="label">Tags (optional)</label>
+                    <TagPicker value={tags} onChange={setTags} />
+                  </div>
 
                   {/* ── Debt settlement (expense only) ── */}
                   {activeTab === 'expense' && settleableBorrowings.length > 0 && (

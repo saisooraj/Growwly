@@ -63,6 +63,7 @@ function TransactionsInner() {
 
   const [typeFilter, setTypeFilter] = useState<FilterType>((searchParams.get('type') as FilterType) ?? 'all')
   const [catFilter, setCatFilter]   = useState<string>(searchParams.get('cat') ?? 'all')
+  const [tagFilter, setTagFilter]   = useState<string>(searchParams.get('tag') ?? 'all')
   const [vehicleFilter, setVehicleFilter] = useState<string>(searchParams.get('vehicle') ?? 'all')
   const [searchQuery, setSearchQuery]   = useState<string>(searchParams.get('search') ?? '')
   const [dateFrom, setDateFrom] = useState<string>('')
@@ -78,7 +79,7 @@ function TransactionsInner() {
   const [visibleCount, setVisibleCount] = useState(VISIBLE_COUNT)
 
   // Reset visible count when filters change
-  useEffect(() => { setVisibleCount(VISIBLE_COUNT) }, [typeFilter, catFilter, vehicleFilter, searchQuery, selectedMonth, dateFrom, dateTo])
+  useEffect(() => { setVisibleCount(VISIBLE_COUNT) }, [typeFilter, catFilter, tagFilter, vehicleFilter, searchQuery, selectedMonth, dateFrom, dateTo])
   const summary  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
   const monthTxs = getTransactionsForMonth(transactions, selectedMonth, settings)
   // True cash leaving the account: category spend + money still out on new loans this cycle + borrowed money repaid
@@ -112,6 +113,7 @@ function TransactionsInner() {
         if (typeFilter !== 'all' && typeFilter !== 'transfer' && t.type !== typeFilter) return false
         if (catFilter !== 'all' && t.category !== catFilter) return false
       }
+      if (tagFilter !== 'all' && !(t.tags ?? []).includes(tagFilter)) return false
       if (q) {
         const catDisplay = getCategoryDisplayName(t.category ?? '').toLowerCase()
         const notes      = (t.notes ?? '').toLowerCase()
@@ -119,18 +121,43 @@ function TransactionsInner() {
         const amount     = String(t.amount)
         const kind       = (t.transferKind ?? '').replace(/_/g, ' ').toLowerCase()
         const vehicle    = (t.savingsVehicle ?? '').toLowerCase()
+        const tags       = (t.tags ?? []).join(' ').toLowerCase()
         if (
           !notes.includes(q) &&
           !category.includes(q) &&
           !catDisplay.includes(q) &&
           !amount.includes(q) &&
           !kind.includes(q) &&
-          !vehicle.includes(q)
+          !vehicle.includes(q) &&
+          !tags.includes(q)
         ) return false
       }
       return true
     })
-  }, [monthTxs, transactions, typeFilter, catFilter, vehicleFilter, searchQuery, dateFrom, dateTo])
+  }, [monthTxs, transactions, typeFilter, catFilter, tagFilter, vehicleFilter, searchQuery, dateFrom, dateTo])
+
+  // Spend/income total for the current category/tag/date filters, within the filtered view
+  const hasActiveFilter = catFilter !== 'all' || tagFilter !== 'all' || !!dateFrom || !!dateTo
+  const filterSummary = useMemo(() => {
+    if (!hasActiveFilter) return null
+    let expense = 0, income = 0
+    for (const t of filtered) {
+      if (t.type === 'expense') expense += t.amount
+      else if (t.type === 'income') income += t.amount
+    }
+    const badges: string[] = []
+    if (catFilter !== 'all') badges.push(getCategoryDisplayName(catFilter))
+    if (tagFilter !== 'all') badges.push(`#${tagFilter}`)
+    if (dateFrom || dateTo) badges.push(`${dateFrom || '…'} → ${dateTo || '…'}`)
+    return { count: filtered.length, expense, income, net: income - expense, badges }
+  }, [filtered, hasActiveFilter, catFilter, tagFilter, dateFrom, dateTo])
+
+  // All tags in use (from transactions + saved custom tags), for the filter dropdown
+  const allTags = useMemo(() => {
+    const set = new Set<string>(settings?.customTags ?? [])
+    for (const t of transactions) for (const tag of t.tags ?? []) set.add(tag)
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [transactions, settings])
 
 
   // Savings aggregates (selected month, respecting the vehicle sub-filter)
@@ -164,8 +191,8 @@ function TransactionsInner() {
 
   function exportCSV() {
     const rows = [
-      ['Date', 'Type', 'Category', 'Transfer Kind', 'Amount', 'Notes'],
-      ...monthTxs.map(t => [t.date, t.type, t.category, t.transferKind ?? '', String(t.amount), t.notes]),
+      ['Date', 'Type', 'Category', 'Transfer Kind', 'Amount', 'Tags', 'Notes'],
+      ...monthTxs.map(t => [t.date, t.type, t.category, t.transferKind ?? '', String(t.amount), (t.tags ?? []).join('; '), t.notes]),
     ]
     const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -358,6 +385,24 @@ function TransactionsInner() {
                     ))}
                   </select>
                 )}
+                {allTags.length > 0 && (
+                  <select
+                    value={tagFilter}
+                    onChange={e => setTagFilter(e.target.value)}
+                    style={{
+                      fontSize: 13, padding: '7px 10px',
+                      background: tagFilter !== 'all' ? 'var(--brand-soft)' : 'var(--surface-2)',
+                      border: `1px solid ${tagFilter !== 'all' ? 'var(--brand)' : 'var(--border)'}`,
+                      borderRadius: 10, color: tagFilter !== 'all' ? 'var(--brand-ink)' : 'var(--text-2)',
+                      outline: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    <option value="all">All Tags</option>
+                    {allTags.map(tag => (
+                      <option key={tag} value={tag}>#{tag}</option>
+                    ))}
+                  </select>
+                )}
 
                 {/* Compact date range — right side */}
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -432,6 +477,50 @@ function TransactionsInner() {
                       <div style={{ fontSize: 15, fontWeight: 700, color: s.color }}>{s.value}</div>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Filtered-range summary — shows whenever a category, tag, or date filter narrows the list */}
+            {filterSummary && (
+              <div className="card-sm" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span className="h-eyebrow">Filtered</span>
+                  {filterSummary.badges.map(b => (
+                    <span
+                      key={b}
+                      style={{
+                        fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
+                        background: 'var(--brand-soft)', color: 'var(--brand-ink)',
+                        border: '1px solid color-mix(in oklch, var(--brand) 25%, transparent)',
+                      }}
+                    >
+                      {b}
+                    </span>
+                  ))}
+                  <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>
+                    {filterSummary.count} transaction{filterSummary.count !== 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Spent</div>
+                    <div className="display-num" style={{ fontSize: 20, color: 'var(--bad-ink)' }}>{formatCurrencyFull(filterSummary.expense)}</div>
+                  </div>
+                  {filterSummary.income > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Income</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--good-ink)' }}>+{formatCurrencyFull(filterSummary.income)}</div>
+                    </div>
+                  )}
+                  {filterSummary.income > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Net</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: filterSummary.net >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
+                        {filterSummary.net >= 0 ? '+' : '−'}{formatCurrencyFull(Math.abs(filterSummary.net))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

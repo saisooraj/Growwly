@@ -281,6 +281,24 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
                     </Row>
                   )}
 
+                  {tx.tags && tx.tags.length > 0 && (
+                    <Row icon={<span style={{ fontSize: 13, fontWeight: 700 }}>#</span>} label="Tags">
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                        {tx.tags.map(tag => (
+                          <span
+                            key={tag}
+                            style={{
+                              fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 20,
+                              border: '1px solid var(--border)', color: 'var(--text-2)', background: 'var(--surface-2)',
+                            }}
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    </Row>
+                  )}
+
                   {project && (
                     <Row icon={<Folder size={14} />} label="Project">
                       {project.name}

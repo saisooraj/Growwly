@@ -22,6 +22,7 @@ export interface Transaction {
   date: string // ISO date string YYYY-MM-DD
   notes: string
   createdAt: string
+  tags?: string[]          // free-form labels, e.g. "Christmas" — independent of category, many-to-many
   projectId?: string
   isRecurring?: boolean
   recurringDay?: number // day-of-month to repeat (1–31)
@@ -128,6 +129,7 @@ export interface UserSettings {
   spendingRule?: { needs: number; wants: number; savings: number }
   categoryBuckets?: { needs: string[]; savings: string[] }
   customCategories?: string[]                     // user-defined categories saved for reuse
+  customTags?: string[]                            // user-defined transaction tags saved for reuse
   customSavingsVehicles?: string[]                // user-defined savings vehicles saved for reuse
   savingsOpeningBalances?: Record<string, number> // prior balance per vehicle before tracking started
   noSpendDays?: string[]                           // YYYY-MM-DD dates user marked as no-spend (counts for streak)
