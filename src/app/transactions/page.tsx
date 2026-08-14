@@ -538,8 +538,8 @@ function TransactionsInner() {
                   transactions={filtered}
                   limit={visibleCount}
                   groupByDay
-                  defaultExpandAll={catFilter !== 'all' || vehicleFilter !== 'all' || filtered.length > VISIBLE_COUNT}
-                  showBorrowings={catFilter === 'all' && typeFilter === 'all' && !searchQuery.trim() && !dateFrom && !dateTo}
+                  defaultExpandAll={catFilter !== 'all' || tagFilter !== 'all' || vehicleFilter !== 'all' || filtered.length > VISIBLE_COUNT}
+                  showBorrowings={catFilter === 'all' && typeFilter === 'all' && tagFilter === 'all' && !searchQuery.trim() && !dateFrom && !dateTo}
                 />
                 {filtered.length > visibleCount && (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '12px 0 4px' }}>
