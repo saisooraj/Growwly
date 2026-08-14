@@ -186,6 +186,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       setCategory(editTx?.category ?? initialPrefill?.category ?? 'Food & Dining')
       setDate(editTx?.date ?? initialPrefill?.date ?? format(new Date(), 'yyyy-MM-dd'))
       setNotes(editTx?.notes ?? initialPrefill?.notes ?? '')
+      setTags(editTx?.tags ?? [])
       setProjectId(editTx?.projectId ?? '')
       setIsRecurring(editTx?.isRecurring ?? false)
       setSplitEnabled(false)
