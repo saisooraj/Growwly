@@ -29,6 +29,13 @@ import { getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIco
 
 type FilterType = TransactionType | 'all' | 'savings'
 
+const TAG_COLOR_PALETTE = ['#f97316', '#6366f1', '#22c55e', '#ec4899', '#0ea5e9', '#f59e0b', '#a855f7', '#14b8a6']
+function colorForTag(tag: string): string {
+  let hash = 0
+  for (let i = 0; i < tag.length; i++) hash = (hash * 31 + tag.charCodeAt(i)) >>> 0
+  return TAG_COLOR_PALETTE[hash % TAG_COLOR_PALETTE.length]
+}
+
 const TYPE_OPTS: { id: FilterType; label: string }[] = [
   { id: 'all',      label: 'All' },
   { id: 'expense',  label: 'Expenses' },
@@ -211,7 +218,18 @@ function TransactionsInner() {
   )
   const topCatsTotal = topCats.reduce((s, [, v]) => s + v, 0) || 1
 
-
+  // Top tags for sidebar (expense spend grouped by tag, current month)
+  const topTags = useMemo(() => {
+    const byTag: Record<string, number> = {}
+    for (const t of monthTxs) {
+      if (t.type !== 'expense') continue
+      for (const tag of t.tags ?? []) byTag[tag] = (byTag[tag] ?? 0) + t.amount
+    }
+    return Object.entries(byTag)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5)
+  }, [monthTxs])
+  const topTagsTotal = topTags.reduce((s, [, v]) => s + v, 0) || 1
 
   return (
     <AppShell title="Transactions">
@@ -682,6 +700,30 @@ function TransactionsInner() {
                       <div key={cat}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                           <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>{getCategoryDisplayName(cat)}</span>
+                          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{formatCurrencyFull(amt)}</span>
+                        </div>
+                        <div style={{ height: 4, background: 'var(--surface-2)', borderRadius: 999, overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${barPct}%`, background: color, borderRadius: 999 }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Tags spent summary */}
+            {topTags.length > 0 && typeFilter !== 'income' && typeFilter !== 'savings' && (
+              <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <span className="h-eyebrow">Top tags</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {topTags.map(([tag, amt]) => {
+                    const barPct = (amt / topTagsTotal) * 100
+                    const color = colorForTag(tag)
+                    return (
+                      <div key={tag}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>#{tag}</span>
                           <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{formatCurrencyFull(amt)}</span>
                         </div>
                         <div style={{ height: 4, background: 'var(--surface-2)', borderRadius: 999, overflow: 'hidden' }}>
