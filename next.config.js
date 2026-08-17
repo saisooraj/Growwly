@@ -4,24 +4,6 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
   customWorkerSrc: 'src/worker',
-  // OCR assets are several MB and only needed by the bill scanner — exclude them
-  // from the eager install-time precache and instead cache them at runtime the
-  // first time the scanner is actually used, so offline/repeat scans still work.
-  publicExcludes: ['!tesseract/**/*'],
-  extendDefaultRuntimeCaching: true,
-  workboxOptions: {
-    runtimeCaching: [
-      {
-        urlPattern: /\/tesseract\/.*/i,
-        handler: 'CacheFirst',
-        options: {
-          cacheName: 'tesseract-assets',
-          expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 90 },
-          cacheableResponse: { statuses: [0, 200] },
-        },
-      },
-    ],
-  },
 })
 
 const securityHeaders = [

@@ -8,9 +8,7 @@ import { useAppStore } from '@/store/appStore'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { ProgressBar } from '@/components/ui/ProgressBar'
-import { recognizeReceipt, terminateOcrWorker } from '@/lib/ocr/tesseractClient'
-import { parseReceiptText } from '@/lib/ocr/receiptParser'
-import { suggestCategoryFromText } from '@/lib/ocr/categoryKeywordMap'
+import { resizeForUpload } from '@/lib/ocr/resizeImage'
 import { findPossibleDuplicate } from '@/lib/ocr/duplicateCheck'
 import type { Transaction } from '@/types'
 
@@ -36,7 +34,6 @@ export default function BillScannerModal({ open, onClose, initialBlob }: Props) 
   const transactions = useAppStore(s => s.transactions)
 
   const [step, setStep] = useState<Step>('choose')
-  const [progress, setProgress] = useState(0)
   const [prefill, setPrefill] = useState<Prefill | null>(null)
   const [initialTab, setInitialTab] = useState<'expense' | 'income'>('expense')
   const [manualFallback, setManualFallback] = useState(false)
@@ -48,7 +45,6 @@ export default function BillScannerModal({ open, onClose, initialBlob }: Props) 
 
   function reset() {
     setStep('choose')
-    setProgress(0)
     setPrefill(null)
     setInitialTab('expense')
     setManualFallback(false)
@@ -59,7 +55,6 @@ export default function BillScannerModal({ open, onClose, initialBlob }: Props) 
   useEffect(() => {
     if (!open) {
       reset()
-      terminateOcrWorker()
       return
     }
     if (initialBlob) runOcr(initialBlob, 'share-target')
@@ -94,26 +89,28 @@ export default function BillScannerModal({ open, onClose, initialBlob }: Props) 
 
   async function runOcr(blob: Blob, source: 'scan' | 'share-target') {
     setStep('ocr')
-    setProgress(0)
     try {
-      const text = await recognizeReceipt(blob, setProgress)
-      if (process.env.NODE_ENV === 'development') console.log('[BillScanner] OCR text:\n' + text)
-      const parsed = parseReceiptText(text)
-      const category = suggestCategoryFromText(parsed.merchant, text, parsed.type)
+      const upload = await resizeForUpload(blob)
+      const formData = new FormData()
+      formData.append('image', upload, 'receipt.jpg')
+
+      const res = await fetch('/api/chat/scan-receipt', { method: 'POST', body: formData })
+      if (!res.ok) throw new Error('scan failed')
+      const result: { amount: number | null; merchant: string | null; date: string | null; category: string; type: 'expense' | 'income' } = await res.json()
 
       setPrefill({
-        amount: parsed.amount ?? undefined,
-        category,
-        date: parsed.date ?? undefined,
-        notes: parsed.merchant ?? undefined,
+        amount: result.amount ?? undefined,
+        category: result.category,
+        date: result.date ?? undefined,
+        notes: result.merchant ?? undefined,
         source,
       })
-      setInitialTab(parsed.type)
+      setInitialTab(result.type)
       setManualFallback(false)
 
       setDuplicate(
-        parsed.amount != null && parsed.date != null
-          ? findPossibleDuplicate({ amount: parsed.amount, category, date: parsed.date, merchant: parsed.merchant }, transactions)
+        result.amount != null && result.date != null
+          ? findPossibleDuplicate({ amount: result.amount, category: result.category, date: result.date, merchant: result.merchant }, transactions)
           : null
       )
       setDuplicateAcknowledged(false)
@@ -228,7 +225,7 @@ export default function BillScannerModal({ open, onClose, initialBlob }: Props) 
 
                     {step === 'ocr' && (
                       <div style={{ padding: '12px 0 4px' }}>
-                        <ProgressBar progress={progress} label="Reading image…" />
+                        <ProgressBar indeterminate label="Reading image…" />
                       </div>
                     )}
 
