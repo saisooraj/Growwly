@@ -1,66 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '@/lib/utils'
 
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
-// Only vision-capable model on Groq as of writing — a Preview-tier model, not Production.
-// If Groq deprecates/renames it, this route starts failing and the scanner falls back to
-// "Enter Manually" (see BillScannerModal's failed step) rather than crashing anything.
-const VISION_MODEL = 'qwen/qwen3.6-27b'
+// Free-tier vision models can be slow (rate-limited/low priority) — give the request room,
+// but Vercel Hobby caps function duration at 60s regardless of this value.
+export const maxDuration = 45
+
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
+const REQUEST_TIMEOUT_MS = 40_000
+// Free-tier vision model on OpenRouter (no credit card, 50 req/day / 20 req/min as of writing).
+// If this particular model is deprecated, swap the id — OpenRouter lists current :free vision
+// models at https://openrouter.ai/models?modality=text%2Bimage-%3Etext&max_price=0
+const VISION_MODEL = 'nvidia/nemotron-nano-12b-v2-vl:free'
 const MAX_UPLOAD_SIZE = 4_000_000
 
-interface ScanResult {
-  amount: number | null
-  merchant: string | null
-  date: string | null
-  category: string
-  type: 'expense' | 'income'
-}
-
-const VALID_CATEGORIES = new Set<string>([...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES])
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-
-function buildPrompt(): string {
-  return `You are reading a photo of a bill, receipt, or payment confirmation screenshot for a personal finance app.
-
-Extract these fields and respond with ONLY a JSON object, nothing else:
-{
-  "amount": <the final payable/paid amount as a plain number, no currency symbols or commas — the TOTAL actually paid, not a subtotal, tax line, or discount line. null if you can't confidently identify it>,
-  "merchant": <the merchant, store, or person name, e.g. "Swiggy" or "Sai Sooraj". null if not identifiable — never invent one>,
-  "date": <the transaction date in YYYY-MM-DD format. null if no date is visible — never guess today's date>,
-  "category": <pick the single best-fitting category from this exact list, copied verbatim: ${[...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES].join(', ')}>,
-  "type": <"expense" if money was paid, debited, or sent; "income" if money was received or credited. Default to "expense" if unclear>
-}`
-}
-
-function normalizeResult(raw: unknown): ScanResult {
-  const r = (raw ?? {}) as Record<string, unknown>
-  const type: 'expense' | 'income' = r.type === 'income' ? 'income' : 'expense'
-  const amount = typeof r.amount === 'number' && Number.isFinite(r.amount) && r.amount > 0 ? r.amount : null
-  const merchant = typeof r.merchant === 'string' && r.merchant.trim() ? r.merchant.trim().slice(0, 60) : null
-  const date = typeof r.date === 'string' && DATE_RE.test(r.date) ? r.date : null
-  const category = typeof r.category === 'string' && VALID_CATEGORIES.has(r.category)
-    ? r.category
-    : type === 'income' ? 'Other Income' : 'Other'
-
-  return { amount, merchant, date, category, type }
-}
-
-function extractJson(content: string): unknown {
-  try {
-    return JSON.parse(content)
-  } catch {
-    const match = content.match(/\{[\s\S]*\}/)
-    if (!match) return null
-    try {
-      return JSON.parse(match[0])
-    } catch {
-      return null
-    }
-  }
-}
+const PROMPT = 'Extract all text from this image thoroughly. Do NOT miss any words, headings, ' +
+  'amounts, dates, or text near the edges — this is a bill, receipt, or payment confirmation ' +
+  'screenshot. Maintain the original reading order. Respond with only the transcribed text, ' +
+  'nothing else.'
 
 export async function POST(req: NextRequest) {
-  const key = process.env.GROQ_API_KEY
+  const key = process.env.OPENROUTER_API_KEY
   if (!key) return NextResponse.json({ error: 'OCR not configured' }, { status: 500 })
 
   try {
@@ -73,37 +31,62 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer())
     const dataUrl = `data:${file.type};base64,${buffer.toString('base64')}`
 
-    const res = await fetch(GROQ_API_URL, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: VISION_MODEL,
-        temperature: 0.1,
-        max_tokens: 500,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: buildPrompt() },
-              { type: 'image_url', image_url: { url: dataUrl } },
-            ],
-          },
-        ],
-      }),
-    })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
-    if (!res.ok) return NextResponse.json({ error: `Groq ${res.status}` }, { status: 502 })
+    let res: Response
+    try {
+      res = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: VISION_MODEL,
+          temperature: 0.1,
+          max_tokens: 2000,
+          // This model is a "reasoning" model — without this, it can spend the whole token
+          // budget on internal reasoning and leave message.content empty. We just need a
+          // direct transcription, not deliberation.
+          reasoning: { effort: 'none' },
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: PROMPT },
+                { type: 'image_url', image_url: { url: dataUrl } },
+              ],
+            },
+          ],
+        }),
+      })
+    } finally {
+      clearTimeout(timeout)
+    }
+
+    if (!res.ok) {
+      const body = await res.text()
+      console.error(`[scan-receipt] OpenRouter ${res.status}: ${body.slice(0, 500)}`)
+      return NextResponse.json({ error: `OpenRouter ${res.status}`, detail: body.slice(0, 300) }, { status: 502 })
+    }
 
     const data = await res.json()
-    const content = data.choices?.[0]?.message?.content
-    if (!content) return NextResponse.json({ error: 'Empty response' }, { status: 502 })
+    const text = data.choices?.[0]?.message?.content
+    if (!text || typeof text !== 'string') {
+      const detail = JSON.stringify(data).slice(0, 500)
+      console.error('[scan-receipt] Empty/malformed OpenRouter response:', detail)
+      return NextResponse.json({ error: 'Empty response', detail }, { status: 502 })
+    }
 
-    const parsed = extractJson(content)
-    if (!parsed) return NextResponse.json({ error: 'Unparseable response' }, { status: 502 })
-
-    return NextResponse.json(normalizeResult(parsed))
-  } catch {
+    return NextResponse.json({ text })
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      console.error('[scan-receipt] Timed out waiting for OpenRouter')
+      return NextResponse.json({ error: 'Timed out' }, { status: 504 })
+    }
+    console.error('[scan-receipt] Scan failed:', err)
     return NextResponse.json({ error: 'Scan failed' }, { status: 500 })
   }
 }

@@ -328,9 +328,7 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
           onScan={onScan ?? onAdd}
           anchor={
             <button
-              // Scanner temporarily disabled from the UI — see MobileNav.tsx for the matching change.
-              // Re-enable by restoring: onScan ? setAddMenuOpen(o => !o) : onAdd()
-              onClick={() => onAdd()}
+              onClick={() => (onScan ? setAddMenuOpen(o => !o) : onAdd())}
               className="hidden lg:flex items-center gap-2"
               style={{
                 padding: '9px 16px', borderRadius: 13, border: 'none',

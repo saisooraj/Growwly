@@ -9,6 +9,8 @@ import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { resizeForUpload } from '@/lib/ocr/resizeImage'
+import { parseReceiptText } from '@/lib/ocr/receiptParser'
+import { suggestCategoryFromText } from '@/lib/ocr/categoryKeywordMap'
 import { findPossibleDuplicate } from '@/lib/ocr/duplicateCheck'
 import type { Transaction } from '@/types'
 
@@ -94,23 +96,37 @@ export default function BillScannerModal({ open, onClose, initialBlob }: Props) 
       const formData = new FormData()
       formData.append('image', upload, 'receipt.jpg')
 
-      const res = await fetch('/api/chat/scan-receipt', { method: 'POST', body: formData })
-      if (!res.ok) throw new Error('scan failed')
-      const result: { amount: number | null; merchant: string | null; date: string | null; category: string; type: 'expense' | 'income' } = await res.json()
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 45_000)
+      let res: Response
+      try {
+        res = await fetch('/api/chat/scan-receipt', { method: 'POST', body: formData, signal: controller.signal })
+      } finally {
+        clearTimeout(timeout)
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => null)
+        console.error('[BillScanner] scan-receipt failed:', res.status, body)
+        throw new Error('scan failed')
+      }
+      const { text }: { text: string } = await res.json()
+
+      const parsed = parseReceiptText(text)
+      const category = suggestCategoryFromText(parsed.merchant, text, parsed.type)
 
       setPrefill({
-        amount: result.amount ?? undefined,
-        category: result.category,
-        date: result.date ?? undefined,
-        notes: result.merchant ?? undefined,
+        amount: parsed.amount ?? undefined,
+        category,
+        date: parsed.date ?? undefined,
+        notes: parsed.merchant ?? undefined,
         source,
       })
-      setInitialTab(result.type)
+      setInitialTab(parsed.type)
       setManualFallback(false)
 
       setDuplicate(
-        result.amount != null && result.date != null
-          ? findPossibleDuplicate({ amount: result.amount, category: result.category, date: result.date, merchant: result.merchant }, transactions)
+        parsed.amount != null && parsed.date != null
+          ? findPossibleDuplicate({ amount: parsed.amount, category, date: parsed.date, merchant: parsed.merchant }, transactions)
           : null
       )
       setDuplicateAcknowledged(false)
