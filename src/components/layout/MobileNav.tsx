@@ -276,7 +276,9 @@ export default function MobileNav() {
               variant="icons"
               anchor={
                 <button
-                  onClick={() => setAddMenuOpen(o => !o)}
+                  // Scanner temporarily disabled from the UI — see Header.tsx for the matching change.
+                  // Re-enable by restoring: setAddMenuOpen(o => !o)
+                  onClick={() => setAddOpen(true)}
                   style={{
                     width: 52, height: 52, borderRadius: 17, border: 'none',
                     background: 'linear-gradient(150deg, var(--brand-2), var(--brand))',
