@@ -2,12 +2,15 @@
 
 import { Fragment, useEffect, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown, Minus, Download } from 'lucide-react'
 import { IconChartBar, IconTrophy, IconCoin } from '@tabler/icons-react'
 import { useAppStore } from '@/store/appStore'
-import { buildMonthlySummary, formatCurrencyFull, getLast6Months } from '@/lib/utils'
+import { useAuth } from '@/context/AuthContext'
+import { buildMonthlySummary, formatCurrencyFull, downloadJSON } from '@/lib/utils'
+import { exportAllUserData } from '@/lib/firestore'
 import { getCategoryDisplayName } from '@/lib/categoryIcons'
 import { format, subMonths, parseISO } from 'date-fns'
+import toast from 'react-hot-toast'
 
 const STORAGE_KEY = 'recap_seen_month'
 
@@ -27,8 +30,10 @@ function StatTile({ label, value, color }: { label: string; value: string; color
 
 export default function MonthlyRecap() {
   const { transactions, emergencyFund, borrowings } = useAppStore()
+  const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [slide, setSlide] = useState(0)
+  const [exporting, setExporting] = useState(false)
 
   const prevMonth = getPrevMonth()
   const currMonth = format(new Date(), 'yyyy-MM')
@@ -45,6 +50,20 @@ export default function MonthlyRecap() {
   }, [transactions])
 
   function close() { localStorage.setItem(STORAGE_KEY, currMonth); setOpen(false) }
+
+  async function handleExport() {
+    if (!user) return
+    setExporting(true)
+    try {
+      const data = await exportAllUserData(user.uid)
+      downloadJSON(data, `growwly-backup-${new Date().toISOString().split('T')[0]}.json`)
+      toast.success('Data exported successfully')
+    } catch {
+      toast.error('Export failed')
+    } finally {
+      setExporting(false)
+    }
+  }
 
   const prevLabel  = format(parseISO(`${prevMonth}-01`), 'MMMM yyyy')
   const topCategory = Object.entries(prevSummary.byCategory).sort(([, a], [, b]) => b - a)[0]
@@ -234,14 +253,26 @@ export default function MonthlyRecap() {
                       Next →
                     </button>
                   ) : (
-                    <button
-                      onClick={close}
-                      style={{ ...btnBase, padding: '9px 20px', borderRadius: 12, background: 'var(--brand)', color: '#fff', fontSize: 13, fontWeight: 700 }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--brand-deep)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'var(--brand)')}
-                    >
-                      Start {format(new Date(), 'MMMM')} fresh
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      <button
+                        onClick={handleExport}
+                        disabled={exporting}
+                        style={{ ...btnBase, width: 38, height: 38, borderRadius: 12, background: 'var(--surface-2)', color: 'var(--text-2)', flexShrink: 0, opacity: exporting ? 0.6 : 1 }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-3)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                        title="Export full backup as JSON"
+                      >
+                        <Download size={16} />
+                      </button>
+                      <button
+                        onClick={close}
+                        style={{ ...btnBase, padding: '9px 20px', borderRadius: 12, background: 'var(--brand)', color: '#fff', fontSize: 13, fontWeight: 700, flexShrink: 0 }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--brand-deep)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'var(--brand)')}
+                      >
+                        Start {format(new Date(), 'MMMM')} fresh
+                      </button>
+                    </div>
                   )}
 
                   <button
