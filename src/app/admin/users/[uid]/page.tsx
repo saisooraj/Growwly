@@ -5,17 +5,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useParams } from 'next/navigation'
 import { adminFetch } from '@/lib/adminApi'
-import { ArrowLeft, UserX, UserCheck, TrendingUp, TrendingDown } from 'lucide-react'
+import { ArrowLeft, UserX, UserCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
-
-interface Transaction {
-  id: string
-  type: string
-  amount: number
-  category: string
-  date: string
-  notes?: string
-}
 
 interface UserDetail {
   user: {
@@ -37,19 +28,12 @@ interface UserDetail {
     goals: number
     borrowings: number
     tasks: number
-    monthIncome: number
-    monthExpenses: number
   }
-  recentTransactions: Transaction[]
 }
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function fmtCurrency(n: number) {
-  return `₹${Math.round(n).toLocaleString('en-IN')}`
 }
 
 export default function UserDetailPage() {
@@ -100,7 +84,7 @@ export default function UserDetailPage() {
     )
   }
 
-  const { user, profile, stats, recentTransactions } = data
+  const { user, profile, stats } = data
 
   return (
     <div style={{ padding: 28, maxWidth: 900, margin: '0 auto' }}>
@@ -208,87 +192,6 @@ export default function UserDetailPage() {
         ))}
       </div>
 
-      {/* This month */}
-      <div style={{
-        background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 16, padding: '18px 22px', marginBottom: 20, boxShadow: 'var(--shadow-sm)',
-      }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 14 }}>
-          This Month
-        </div>
-        <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <TrendingUp size={20} style={{ color: 'var(--good)' }} strokeWidth={1.8} />
-            <div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--good)', letterSpacing: '-0.03em' }}>
-                {fmtCurrency(stats.monthIncome)}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 1 }}>Income</div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <TrendingDown size={20} style={{ color: 'var(--bad)' }} strokeWidth={1.8} />
-            <div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--bad)', letterSpacing: '-0.03em' }}>
-                {fmtCurrency(stats.monthExpenses)}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 1 }}>Expenses</div>
-            </div>
-          </div>
-          <div>
-            <div style={{
-              fontSize: 18, fontWeight: 800, letterSpacing: '-0.03em',
-              color: stats.monthIncome - stats.monthExpenses >= 0 ? 'var(--good)' : 'var(--bad)',
-            }}>
-              {fmtCurrency(stats.monthIncome - stats.monthExpenses)}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 1 }}>Net</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Recent transactions */}
-      <div style={{
-        background: 'var(--surface)', border: '1px solid var(--border)',
-        borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--shadow-sm)',
-      }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
-          Recent Transactions
-        </div>
-        {recentTransactions.length === 0 ? (
-          <div style={{ padding: '20px', color: 'var(--text-4)', fontSize: 13.5, textAlign: 'center' }}>No transactions yet</div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <tbody>
-              {recentTransactions.map((t, i) => (
-                <tr key={t.id} style={{ borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}>
-                  <td style={{ padding: '11px 20px', fontSize: 13, color: 'var(--text-3)' }}>{t.date}</td>
-                  <td style={{ padding: '11px 16px', fontSize: 13, color: 'var(--text)' }}>{t.category}</td>
-                  <td style={{ padding: '11px 16px', fontSize: 13, color: 'var(--text-2)' }}>{t.notes ?? '—'}</td>
-                  <td style={{ padding: '11px 20px', fontSize: 13.5, fontWeight: 700, textAlign: 'right',
-                    color: t.type === 'income' ? 'var(--good)' : t.type === 'expense' ? 'var(--bad)' : 'var(--text-2)',
-                  }}>
-                    {t.type === 'income' ? '+' : t.type === 'expense' ? '−' : ''}{fmtCurrency(t.amount)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        <div style={{
-          padding: '12px 20px', borderTop: '1px solid var(--border)',
-          display: 'flex', justifyContent: 'flex-end',
-        }}>
-          <Link
-            href={`/admin/data-explorer?uid=${uid}`}
-            style={{
-              fontSize: 12.5, color: 'var(--bad)', textDecoration: 'none', fontWeight: 600,
-            }}
-          >
-            View all data in Data Explorer →
-          </Link>
-        </div>
-      </div>
     </div>
   )
 }

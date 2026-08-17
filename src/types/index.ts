@@ -86,7 +86,7 @@ export interface Borrowing {
   date: string
   dueDate?: string
   repaidAmount: number
-  status: 'pending' | 'partial' | 'repaid'
+  status: 'pending' | 'partial' | 'repaid' | 'waived'
   createdAt: string
   // Optional loan/EMI fields — only shown when isLoan is true
   isLoan?: boolean
@@ -137,6 +137,8 @@ export interface UserSettings {
   showTasksTab?: boolean                          // show Tasks tab in navigation (default: false)
   accentColor?: 'green' | 'purple' | 'orange' | 'pink' | 'blue' | 'black'  // brand accent (default: green)
   seenBadges?: number[]                            // badge thresholds the user has already seen (cross-device)
+  seenAnnouncements?: string[]                     // announcement ids already shown — "id:platform" when the announcement is oncePerPlatform, else just "id" (cross-device)
+  featureUsage?: Record<string, { useCount: number; lastUsedAt: string }>  // per-feature usage counters, used to trigger nudges for unused features
   dashboardCardOrder?: string[]                   // ordered list of dashboard block IDs
   dailyLivingCost?: number                        // legacy — superseded by dailyLivingSchedules
   dailyLivingItems?: { label: string; amount: number }[]  // legacy
@@ -145,6 +147,73 @@ export interface UserSettings {
     items: { label: string; amount: number }[]
     total: number
   }[]
+  createdAt: string
+  updatedAt: string
+}
+
+// ── Announcements ─────────────────────────────────────────────────────────────
+// Admin-authored in-app messaging: onboarding tours and one-off feature spotlights.
+// Definitions live in the `announcements` collection (admin-SDK only); delivery
+// state (what a user has seen) lives on UserSettings.seenAnnouncements.
+
+export type AnnouncementType = 'onboarding_tour' | 'feature_spotlight'
+export type AnnouncementStatus = 'draft' | 'active' | 'archived'
+export type AnnouncementAudience = 'all' | 'new_users'
+export type AnnouncementPlatformTarget = 'mobile' | 'desktop'
+// 'app_load' (default): evaluated once per session, like the get-started tour.
+// 'salary_logged': evaluated right after the user adds a Salary-category income
+// transaction — the delivery mechanism for feature nudges tied to a real action.
+export type AnnouncementTrigger = 'app_load' | 'salary_logged'
+
+export interface AnnouncementStep {
+  iconKey: string
+  title: string
+  body: string
+}
+
+export interface Announcement {
+  id: string
+  type: AnnouncementType
+  status: AnnouncementStatus
+  priority: number                          // higher shows first when multiple are due
+  platforms: AnnouncementPlatformTarget[]   // empty = all platforms
+  audience: AnnouncementAudience
+  oncePerPlatform: boolean                  // true: shown once per platform; false: shown once, ever
+  startAt?: string                          // ISO — omitted means "always started"
+  endAt?: string                            // ISO — omitted means "never ends"
+  triggerPoint?: AnnouncementTrigger        // omitted = 'app_load'
+  featureKey?: string                       // e.g. 'salary_cycle' — matches a specific triggerPoint context
+  targetUserId?: string                     // when set, only this user gets it — overrides `audience` (used for feedback replies)
+  // onboarding_tour content
+  steps?: AnnouncementStep[]
+  // feature_spotlight content
+  title?: string
+  body?: string
+  iconKey?: string
+  ctaLabel?: string
+  ctaHref?: string
+  createdAt: string
+  updatedAt: string
+}
+
+// ── Feedback ─────────────────────────────────────────────────────────────────
+// User-submitted bug reports / feature requests / general feedback, triaged in
+// /admin/feedback. Once addressed, the admin can reply via a targeted Announcement
+// (Announcement.targetUserId) so the specific user sees it on next app load.
+
+export type FeedbackType = 'bug' | 'feature_request' | 'other'
+export type FeedbackStatus = 'new' | 'in_progress' | 'resolved' | 'wont_fix'
+
+export interface Feedback {
+  id: string
+  userId: string
+  userEmail: string | null
+  userName: string | null
+  type: FeedbackType
+  message: string
+  context?: string      // page/route the user was on when they submitted it
+  status: FeedbackStatus
+  adminNote?: string
   createdAt: string
   updatedAt: string
 }

@@ -114,6 +114,13 @@ service cloud.firestore {
       allow read, update: if isAuth() && request.auth.token.email == 'saisoorajpnair@gmail.com';
     }
 
+    // Announcement events — impression/click/dismiss analytics for in-app tours & nudges.
+    // Users can only log events for themselves; only admin can read the analytics.
+    match /announcement_events/{docId} {
+      allow create: if isAuth() && request.resource.data.userId == request.auth.uid;
+      allow read: if isAuth() && request.auth.token.email == 'saisoorajpnair@gmail.com';
+    }
+
     // Tasks
     match /tasks/{docId} {
       allow read, delete: if isAuth() && resource.data.userId == request.auth.uid;

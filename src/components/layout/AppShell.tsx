@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import MobileNav from './MobileNav'
@@ -9,6 +10,8 @@ import AuthGuard from '@/components/ui/AuthGuard'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import BillScannerModal from '@/components/transactions/BillScannerModal'
 import BadgeCelebrationModal from '@/components/ui/BadgeCelebrationModal'
+import OnboardingTourModal from '@/components/onboarding/OnboardingTourModal'
+import SpotlightModal from '@/components/announcements/SpotlightModal'
 import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
 import { computeLongestMoneyStreak } from '@/lib/utils'
@@ -19,6 +22,11 @@ import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { getUnreadAuthAlerts, markAllAlertsRead, type AuthAlertRecord } from '@/lib/authErrorLogger'
 import { setUserSettings } from '@/lib/firestore'
+import {
+  FALLBACK_TOUR, FALLBACK_SALARY_CYCLE_TIP, fetchActiveAnnouncements, getPlatform,
+  isAnnouncementDue, trackAnnouncementEvent,
+} from '@/lib/announcements'
+import type { Announcement } from '@/types'
 
 interface Props {
   title?: string
@@ -226,7 +234,116 @@ export default function AppShell({ title, children, fillPage }: Props) {
     setBadgeQueue(prev => prev.slice(1))
   }
 
-  const activeBadge = badgeQueue[0] ?? null
+  // ── Announcements: admin-authored tours & spotlights ────────────────────────
+  const [announcementQueue, setAnnouncementQueue] = useState<Announcement[]>([])
+  const announcementsChecked = useRef(false)
+  const lastImpressionId = useRef<string | null>(null)
+  const announcementPool = useRef<Announcement[]>([])   // everything active, for contextual triggers fired later
+  const salaryNudgeFired = useRef(false)
+  const prevTxIds = useRef<Set<string> | null>(null)     // null until first population, so we don't fire on load
+  const router = useRouter()
+
+  function announcementContext() {
+    const creationTime = user?.metadata?.creationTime
+    return {
+      platform: getPlatform(),
+      isNewUser: creationTime ? Date.now() - new Date(creationTime).getTime() < 7 * 24 * 60 * 60 * 1000 : false,
+      seenAnnouncements: settings?.seenAnnouncements ?? [],
+      userId: user?.uid ?? '',
+    }
+  }
+
+  useEffect(() => {
+    if (!initialized || announcementsChecked.current || !settings || !user) return
+    announcementsChecked.current = true
+    const ctx = announcementContext()
+
+    user.getIdToken()
+      .then(fetchActiveAnnouncements)
+      .then(list => {
+        // Nobody's created a real onboarding tour / salary-cycle tip yet — keep the built-ins alive.
+        const pool = [...list]
+        if (!pool.some(a => a.type === 'onboarding_tour')) pool.push(FALLBACK_TOUR)
+        if (!pool.some(a => a.triggerPoint === 'salary_logged' && a.featureKey === 'salary_cycle')) pool.push(FALLBACK_SALARY_CYCLE_TIP)
+        announcementPool.current = pool
+
+        const queue = pool
+          .filter(a => (a.triggerPoint ?? 'app_load') === 'app_load' && isAnnouncementDue(a, ctx))
+          .sort((a, b) => b.priority - a.priority)
+        setAnnouncementQueue(queue)
+      })
+      .catch(() => {
+        // API unreachable — fall back to the built-in tour/tip so nothing here breaks.
+        announcementPool.current = [FALLBACK_TOUR, FALLBACK_SALARY_CYCLE_TIP]
+        if (isAnnouncementDue(FALLBACK_TOUR, ctx)) setAnnouncementQueue([FALLBACK_TOUR])
+      })
+  }, [initialized, settings, user]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Salary-logged trigger: nudge about salary cycles right after a Salary
+  // transaction is added, if the user has never configured one. Works no matter
+  // which of the app's several "add transaction" entry points was used, since
+  // they all funnel through this same shared transactions list.
+  useEffect(() => {
+    if (!initialized) return
+    const currentIds = new Set(transactions.map(t => t.id))
+
+    if (prevTxIds.current === null) {
+      prevTxIds.current = currentIds
+      return
+    }
+    const previousIds = prevTxIds.current
+    prevTxIds.current = currentIds
+
+    if (salaryNudgeFired.current || !settings || !user) return
+    if ((settings.salaryCycleRule ?? 'none') !== 'none') return
+
+    const newSalaryTx = transactions.find(t => !previousIds.has(t.id) && t.type === 'income' && t.category === 'Salary')
+    if (!newSalaryTx) return
+
+    const candidate = announcementPool.current.find(a => a.triggerPoint === 'salary_logged' && a.featureKey === 'salary_cycle')
+    if (!candidate || !isAnnouncementDue(candidate, announcementContext())) return
+
+    salaryNudgeFired.current = true
+    setAnnouncementQueue(prev => [...prev, candidate])
+  }, [transactions, initialized, settings, user]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const activeAnnouncement = announcementQueue[0] ?? null
+
+  useEffect(() => {
+    if (!activeAnnouncement || !user || lastImpressionId.current === activeAnnouncement.id) return
+    lastImpressionId.current = activeAnnouncement.id
+    trackAnnouncementEvent({ announcementId: activeAnnouncement.id, type: 'impression', userId: user.uid, platform: getPlatform() })
+  }, [activeAnnouncement, user])
+
+  function closeAnnouncement(eventType: 'complete' | 'dismiss' | 'click') {
+    const current = announcementQueue[0]
+    if (!current) return
+    setAnnouncementQueue(prev => prev.slice(1))
+    if (!user || !settings) return
+
+    const platform = getPlatform()
+    const seenKey = current.oncePerPlatform ? `${current.id}:${platform}` : current.id
+    const seen = new Set(settings.seenAnnouncements ?? [])
+    seen.add(seenKey)
+    const seenAnnouncements = Array.from(seen)
+
+    // Optimistically update the store so re-renders don't re-show it
+    setSettings({ ...settings, seenAnnouncements })
+
+    // Persist to Firestore so all devices see the updated seen list
+    setUserSettings(user.uid, { seenAnnouncements }).catch(() => {
+      setSettings(settings)
+    })
+
+    trackAnnouncementEvent({ announcementId: current.id, type: eventType, userId: user.uid, platform })
+
+    if (eventType === 'click' && current.ctaHref) {
+      if (current.ctaHref.startsWith('http')) window.open(current.ctaHref, '_blank')
+      else router.push(current.ctaHref)
+    }
+  }
+
+  const activeBadge = activeAnnouncement ? null : (badgeQueue[0] ?? null)
   const txDates = transactions.map(t => t.date)
   const noSpendDays = settings?.noSpendDays ?? []
   const activeBadgeEarnedDate = activeBadge
@@ -395,6 +512,19 @@ export default function AppShell({ title, children, fillPage }: Props) {
         earnedDate={activeBadgeEarnedDate}
         queueLength={badgeQueue.length}
         onClose={dismissBadge}
+      />
+
+      {/* Admin-authored announcements — onboarding tours & feature spotlights */}
+      <OnboardingTourModal
+        open={activeAnnouncement?.type === 'onboarding_tour'}
+        steps={activeAnnouncement?.type === 'onboarding_tour' ? activeAnnouncement.steps ?? [] : []}
+        onFinish={() => closeAnnouncement('complete')}
+        onSkip={() => closeAnnouncement('dismiss')}
+      />
+      <SpotlightModal
+        announcement={activeAnnouncement?.type === 'feature_spotlight' ? activeAnnouncement : null}
+        onDismiss={() => closeAnnouncement('dismiss')}
+        onCta={() => closeAnnouncement('click')}
       />
       </div>
     </AuthGuard>

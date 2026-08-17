@@ -79,3 +79,12 @@ export async function verifyAdminToken(authHeader: string | null): Promise<strin
   if (decoded.email !== ADMIN_EMAIL) throw new Error('Forbidden')
   return decoded.uid
 }
+
+// Same shape as verifyAdminToken but for any signed-in user — used by endpoints
+// that serve admin-authored content (e.g. active announcements) to the regular app.
+export async function verifyUserToken(authHeader: string | null): Promise<string> {
+  if (!authHeader?.startsWith('Bearer ')) throw new Error('Unauthorized')
+  const token = authHeader.slice(7)
+  const decoded = await requireAuth().verifyIdToken(token)
+  return decoded.uid
+}

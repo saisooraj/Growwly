@@ -13,14 +13,15 @@ import { useRefreshData } from '@/hooks/useData'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { downloadJSON, getLast6Months, computeLongestMoneyStreak } from '@/lib/utils'
 import { getCycleRange, getLastWorkingDay, formatCycleRange } from '@/lib/cycle'
-import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, ChevronUp, ChevronDown, Trash2, AlertTriangle, Leaf } from 'lucide-react'
+import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, ChevronUp, ChevronDown, Trash2, AlertTriangle, Leaf, Bug, Lightbulb, MessageCircle, Send } from 'lucide-react'
 import { BADGES, getBadgeEarnedDate, type BadgeDef } from '@/lib/badges'
 import { IconLeaf, IconFlame } from '@tabler/icons-react'
 import LinkedAccounts from '@/components/auth/LinkedAccounts'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
 import { format, parseISO } from 'date-fns'
-import type { FinancialMode } from '@/types'
+import type { FinancialMode, FeedbackType } from '@/types'
+import { submitFeedback } from '@/lib/feedback'
 
 type SalaryCycleRule = 'none' | 'last-working-day' | 'fixed-day'
 
@@ -48,6 +49,15 @@ export default function SettingsPage() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [deleting, setDeleting] = useState(false)
+
+  // Account options (More menu) — step 'options' lists actions, 'danger' shows the Danger Zone
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const [accountMenuStep, setAccountMenuStep] = useState<'options' | 'danger'>('options')
+
+  // Feedback
+  const [feedbackType, setFeedbackType] = useState<FeedbackType>('bug')
+  const [feedbackMessage, setFeedbackMessage] = useState('')
+  const [sendingFeedback, setSendingFeedback] = useState(false)
 
   // Badge modal
   const [selectedBadge, setSelectedBadge] = useState<BadgeDef | null>(null)
@@ -220,6 +230,21 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleSendFeedback() {
+    if (!user || !feedbackMessage.trim()) return
+    setSendingFeedback(true)
+    try {
+      const idToken = await user.getIdToken()
+      await submitFeedback(idToken, { type: feedbackType, message: feedbackMessage.trim(), context: 'settings' })
+      setFeedbackMessage('')
+      toast.success("Thanks — we'll take a look")
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to send feedback')
+    } finally {
+      setSendingFeedback(false)
+    }
+  }
+
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     if (!user || !e.target.files?.[0]) return
     const file = e.target.files[0]
@@ -315,7 +340,18 @@ export default function SettingsPage() {
 
         {/* Account */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Account</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Account</h2>
+            <button
+              onClick={() => { setAccountMenuStep('options'); setAccountMenuOpen(true) }}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                fontSize: 12.5, fontWeight: 600, color: 'var(--text-3)',
+              }}
+            >
+              More, or wanna leave?
+            </button>
+          </div>
           {user && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, background: 'var(--surface-2)', borderRadius: 12 }}>
               {user.photoURL ? (
@@ -963,31 +999,54 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Danger Zone */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16, border: '1px solid color-mix(in oklch, var(--bad) 35%, var(--border))' }}>
+        {/* Feedback */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--bad-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--bad-ink)', flexShrink: 0 }}>
-              <AlertTriangle size={14} />
-            </div>
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--bad-ink)', margin: 0 }}>Danger Zone</h2>
+            <MessageCircle size={14} style={{ color: 'var(--brand)' }} />
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Feedback</h2>
+          </div>
+          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
+            Found a bug or have an idea? Tell us — if we act on it, we&apos;ll let you know right here in the app.
+          </p>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            {([
+              { value: 'bug', label: 'Bug', icon: Bug },
+              { value: 'feature_request', label: 'Feature request', icon: Lightbulb },
+              { value: 'other', label: 'Other', icon: MessageCircle },
+            ] as const).map(({ value, label, icon: Icon }) => (
+              <button
+                key={value}
+                onClick={() => setFeedbackType(value)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10,
+                  border: `1px solid ${feedbackType === value ? 'var(--brand)' : 'var(--border)'}`,
+                  background: feedbackType === value ? 'var(--brand-soft)' : 'var(--surface-2)',
+                  color: feedbackType === value ? 'var(--brand-ink)' : 'var(--text-2)',
+                  fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                <Icon size={13} /> {label}
+              </button>
+            ))}
           </div>
 
-          <div style={{ padding: '14px 16px', borderRadius: 12, background: 'var(--bad-soft)', border: '1px solid color-mix(in oklch, var(--bad) 25%, transparent)' }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--bad-ink)', margin: '0 0 6px' }}>Before you go…</p>
-            <p style={{ fontSize: 12.5, color: 'var(--text-2)', margin: 0, lineHeight: 1.65 }}>
-              Growwly holds your entire financial history — years of transactions, savings goals, net worth milestones, and spending patterns that help you make smarter decisions every day. Once deleted, this data cannot be recovered.
-            </p>
-            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '8px 0 0', lineHeight: 1.5 }}>
-              If you&apos;re taking a break, you can simply log out and return anytime. Consider <button onClick={handleExport} style={{ color: 'var(--brand)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, fontWeight: 600, textDecoration: 'underline' }}>exporting a backup</button> first.
-            </p>
-          </div>
+          <textarea
+            value={feedbackMessage}
+            onChange={e => setFeedbackMessage(e.target.value)}
+            rows={3}
+            placeholder={feedbackType === 'bug' ? "What went wrong, and what were you doing when it happened?" : feedbackType === 'feature_request' ? "What should Growwly do that it doesn't today?" : "Anything on your mind…"}
+            className="input"
+            style={{ resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
+          />
 
           <button
-            onClick={() => { setDeleteConfirmText(''); setDeleteModalOpen(true) }}
-            className="btn-danger"
-            style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6 }}
+            onClick={handleSendFeedback}
+            disabled={sendingFeedback || !feedbackMessage.trim()}
+            className="btn-primary"
+            style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, opacity: (sendingFeedback || !feedbackMessage.trim()) ? 0.6 : 1 }}
           >
-            <Trash2 size={14} /> Delete Account
+            <Send size={14} /> {sendingFeedback ? 'Sending…' : 'Send Feedback'}
           </button>
         </div>
 
@@ -1000,6 +1059,88 @@ export default function SettingsPage() {
         onConfirm={doImport}
         onClose={() => setPendingImport(null)}
       />
+
+      {/* Account options modal — "More, or wanna leave?" → options list → Danger Zone */}
+      {accountMenuOpen && createPortal((
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => setAccountMenuOpen(false)}
+        >
+          <div
+            style={{
+              background: 'var(--surface)',
+              border: accountMenuStep === 'danger' ? '1px solid color-mix(in oklch, var(--bad) 35%, var(--border))' : '1px solid var(--border)',
+              borderRadius: 'var(--radius-xl)', padding: 24, maxWidth: 400, width: '100%',
+              boxShadow: 'var(--shadow-lg)',
+              display: 'flex', flexDirection: 'column', gap: 16,
+              position: 'relative',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Close */}
+            <button
+              onClick={() => setAccountMenuOpen(false)}
+              style={{ position: 'absolute', top: 16, right: 16, padding: 6, borderRadius: 8, background: 'var(--surface-2)', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}
+            >
+              <X size={14} />
+            </button>
+
+            {accountMenuStep === 'options' ? (
+              <>
+                <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', margin: 0, letterSpacing: '-0.01em' }}>Account options</h2>
+                <div style={{ display: 'flex', flexDirection: 'column', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                  <button
+                    onClick={() => setAccountMenuStep('danger')}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '13px 14px',
+                      background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
+                    }}
+                  >
+                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--bad-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--bad-ink)', flexShrink: 0 }}>
+                      <Trash2 size={14} />
+                    </div>
+                    <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: 'var(--bad-ink)' }}>Delete Account</span>
+                    <ChevronDown size={14} style={{ color: 'var(--text-4)', transform: 'rotate(-90deg)' }} />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    onClick={() => setAccountMenuStep('options')}
+                    style={{ padding: 4, borderRadius: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}
+                  >
+                    <ChevronDown size={16} style={{ transform: 'rotate(90deg)' }} />
+                  </button>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--bad-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--bad-ink)', flexShrink: 0 }}>
+                    <AlertTriangle size={14} />
+                  </div>
+                  <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--bad-ink)', margin: 0 }}>Danger Zone</h2>
+                </div>
+
+                <div style={{ padding: '14px 16px', borderRadius: 12, background: 'var(--bad-soft)', border: '1px solid color-mix(in oklch, var(--bad) 25%, transparent)' }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--bad-ink)', margin: '0 0 6px' }}>Before you go…</p>
+                  <p style={{ fontSize: 12.5, color: 'var(--text-2)', margin: 0, lineHeight: 1.65 }}>
+                    Growwly holds your entire financial history — years of transactions, savings goals, net worth milestones, and spending patterns that help you make smarter decisions every day. Once deleted, this data cannot be recovered.
+                  </p>
+                  <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '8px 0 0', lineHeight: 1.5 }}>
+                    If you&apos;re taking a break, you can simply log out and return anytime. Consider <button onClick={handleExport} style={{ color: 'var(--brand)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, fontWeight: 600, textDecoration: 'underline' }}>exporting a backup</button> first.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => { setAccountMenuOpen(false); setDeleteConfirmText(''); setDeleteModalOpen(true) }}
+                  className="btn-danger"
+                  style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Trash2 size={14} /> Delete Account
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      ), document.body)}
 
       {/* Delete account confirmation modal */}
       {deleteModalOpen && createPortal((

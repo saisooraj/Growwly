@@ -5,8 +5,8 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import {
-  LayoutDashboard, Users, Database, Activity,
-  Flag, ClipboardList, Leaf, LogOut, Shield, ShieldAlert,
+  LayoutDashboard, Users, Activity,
+  Flag, ClipboardList, Leaf, LogOut, Shield, ShieldAlert, Megaphone, MessageSquare,
 } from 'lucide-react'
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? 'saisoorajpnair@gmail.com'
@@ -16,9 +16,10 @@ const INACTIVITY_MS = 60 * 60 * 1000
 const NAV = [
   { href: '/admin',              icon: LayoutDashboard, label: 'Overview'       },
   { href: '/admin/users',        icon: Users,           label: 'Users'          },
-  { href: '/admin/data-explorer',icon: Database,        label: 'Data Explorer'  },
   { href: '/admin/system',       icon: Activity,        label: 'System Health'  },
   { href: '/admin/feature-flags',icon: Flag,            label: 'Feature Flags'  },
+  { href: '/admin/announcements',icon: Megaphone,        label: 'Announcements'  },
+  { href: '/admin/feedback',     icon: MessageSquare,    label: 'Feedback'       },
   { href: '/admin/audit-log',    icon: ClipboardList,   label: 'Audit Log'      },
   { href: '/admin/auth-alerts',  icon: ShieldAlert,     label: 'Auth Alerts'    },
 ]

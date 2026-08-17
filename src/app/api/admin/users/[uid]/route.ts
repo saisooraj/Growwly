@@ -9,6 +9,9 @@ export async function GET(
     await verifyAdminToken(req.headers.get('Authorization'))
     const { uid } = params
 
+    // Counts only — this admin panel is for understanding app load and usage,
+    // not a user's actual financial data. Never fetch transaction content
+    // (amounts, categories, notes) here.
     const [authUser, profileSnap, txCount, goalCount, borrowingCount, taskCount] =
       await Promise.all([
         adminAuth.getUser(uid),
@@ -18,35 +21,6 @@ export async function GET(
         adminDb.collection('borrowings').where('userId', '==', uid).count().get(),
         adminDb.collection('tasks').where('userId', '==', uid).count().get(),
       ])
-
-    // Recent transactions (last 5)
-    const recentSnap = await adminDb
-      .collection('transactions')
-      .where('userId', '==', uid)
-      .orderBy('date', 'desc')
-      .limit(5)
-      .get()
-
-    const recentTransactions = recentSnap.docs.map((d: FirebaseFirestore.QueryDocumentSnapshot) => ({ id: d.id, ...d.data() }))
-
-    // Income/expense totals from current month
-    const monthStart = new Date()
-    monthStart.setDate(1)
-    monthStart.setHours(0, 0, 0, 0)
-    const monthStr = monthStart.toISOString().slice(0, 10)
-
-    const monthTxSnap = await adminDb
-      .collection('transactions')
-      .where('userId', '==', uid)
-      .where('date', '>=', monthStr)
-      .get()
-
-    let monthIncome = 0, monthExpenses = 0
-    for (const d of monthTxSnap.docs) {
-      const t = d.data()
-      if (t.type === 'income') monthIncome += t.amount
-      else if (t.type === 'expense') monthExpenses += t.amount
-    }
 
     return NextResponse.json({
       user: {
@@ -65,10 +39,7 @@ export async function GET(
         goals: goalCount.data().count,
         borrowings: borrowingCount.data().count,
         tasks: taskCount.data().count,
-        monthIncome,
-        monthExpenses,
       },
-      recentTransactions,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error'
