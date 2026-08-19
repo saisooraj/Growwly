@@ -20,7 +20,6 @@ import SavingsBreakdown  from '@/components/dashboard/SavingsBreakdown'
 import DashboardGoals    from '@/components/dashboard/DashboardGoals'
 
 // ── Existing cards (preserved below the new design section) ─────────────────
-import HealthCard           from '@/components/dashboard/HealthCard'
 import EmergencyFundCard    from '@/components/dashboard/EmergencyFundCard'
 import PulseCard            from '@/components/dashboard/PulseCard'
 import SummaryCards         from '@/components/dashboard/SummaryCards'
@@ -40,7 +39,7 @@ import { DEFAULT_CARD_ORDER } from '@/lib/dashboardConstants'
 function BorrowedStat() {
   const { borrowings } = useAppStore()
   const pending = borrowings
-    .filter(b => b.type === 'borrowed' && b.status !== 'repaid')
+    .filter(b => b.type === 'borrowed' && b.status !== 'repaid' && b.status !== 'waived')
     .reduce((s, b) => s + (b.amount - b.repaidAmount), 0)
 
   return (
@@ -130,12 +129,7 @@ function DashboardPage() {
     ),
     pulse:   <CardErrorBoundary label="Pulse"><PulseCard /></CardErrorBoundary>,
     summary: <CardErrorBoundary label="Summary"><SummaryCards /></CardErrorBoundary>,
-    'health-ef': (
-      <div className="dash-pair">
-        <CardErrorBoundary label="Health"><HealthCard /></CardErrorBoundary>
-        <CardErrorBoundary label="Emergency Fund"><EmergencyFundCard /></CardErrorBoundary>
-      </div>
-    ),
+    'health-ef': <CardErrorBoundary label="Emergency Fund"><EmergencyFundCard /></CardErrorBoundary>,
     weekly: (
       <div className="dash-bottom">
         <CardErrorBoundary label="Weekly Tracker"><WeeklyTracker /></CardErrorBoundary>

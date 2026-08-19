@@ -846,9 +846,9 @@ export default function SettingsPage() {
                 savings: 'Savings Trend + Breakdown',
                 goals: 'Savings Goals',
                 transactions: 'Recent Transactions',
-                pulse: 'Monthly Pulse',
+                pulse: 'Monthly Pulse & Financial Health',
                 summary: 'KPI Summary Cards',
-                'health-ef': 'Health & Emergency Fund',
+                'health-ef': 'Emergency Fund',
                 weekly: 'Weekly Tracker + Quick Actions',
                 upcoming: 'Upcoming Bills',
               }
