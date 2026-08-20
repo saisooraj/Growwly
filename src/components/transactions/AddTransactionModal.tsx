@@ -2,14 +2,14 @@
 
 import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { X, RefreshCw, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Split, UserPlus, Trash2, PiggyBank } from 'lucide-react'
+import { X, RefreshCw, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Split, UserPlus, Trash2, PiggyBank, RotateCcw } from 'lucide-react'
 import { IconMedal, IconCrane } from '@tabler/icons-react'
 import { format, parseISO } from 'date-fns'
-import { addTransaction, updateTransaction, updateProject, updateSavingsGoal, addBorrowing, updateBorrowing, setUserSettings, setEmergencyFund } from '@/lib/firestore'
+import { addTransaction, updateTransaction, deleteTransaction, updateProject, updateSavingsGoal, addBorrowing, updateBorrowing, setUserSettings, setEmergencyFund } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTransfer, buildMonthlySummary, EXPENSE_CATEGORIES, INCOME_CATEGORIES, computeProjectPaid, formatCurrencyFull } from '@/lib/utils'
-import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
+import { getSavingsVehicleMeta, getCategoryDisplayName } from '@/lib/categoryIcons'
 import { useAppStore } from '@/store/appStore'
 import CategoryPicker from '@/components/transactions/CategoryPicker'
 import TagPicker from '@/components/transactions/TagPicker'
@@ -34,6 +34,7 @@ interface Props {
   initialTab?: Tab
   initialSavingsVehicle?: string
   initialPrefill?: InitialPrefill | null
+  onViewOriginal?: (tx: Transaction) => void
 }
 
 type SplitMode = 'equal' | 'percentage' | 'manual'
@@ -55,6 +56,7 @@ const TYPE_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 
 function savingsTabFor(tx?: Transaction | null): Tab {
   if (!tx) return 'expense'
+  if (tx.type === 'refund') return 'expense'
   return isSavingsTransfer(tx) ? 'savings' : tx.type
 }
 
@@ -78,7 +80,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
   )
 }
 
-export default function AddTransactionModal({ open, onClose, editTx, initialTab, initialSavingsVehicle, initialPrefill }: Props) {
+export default function AddTransactionModal({ open, onClose, editTx, initialTab, initialSavingsVehicle, initialPrefill, onViewOriginal }: Props) {
   const { user } = useAuth()
   const refresh = useRefreshData()
   const { projects, budgets, transactions, borrowings, contacts, settings, emergencyFund, savingsGoals, setSavingsGoals } = useAppStore()
@@ -111,6 +113,13 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   const [settledBorrowingId, setSettledBorrowingId] = useState(editTx?.settledBorrowingId ?? '')
   const [settledPerson, setSettledPerson]           = useState(editTx?.settledPerson ?? '')
 
+  // Refund state (expense edit only — logging a refund against this expense)
+  const [refundAmount, setRefundAmount] = useState('')
+  const [refundDate, setRefundDate]     = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [refundNotes, setRefundNotes]   = useState('')
+  const [addingRefund, setAddingRefund] = useState(false)
+  const [showRefundForm, setShowRefundForm] = useState(false)
+
   // Split state
   const [splitEnabled, setSplitEnabled]   = useState(false)
   const [splitMode, setSplitMode]         = useState<SplitMode>('equal')
@@ -133,6 +142,20 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   const selectedSettlement = settledBorrowingId
     ? borrowings.find(b => b.id === settledBorrowingId)
     : null
+
+  // Refund editing: this modal instance is editing a refund transaction itself
+  const isRefundEdit = editTx?.type === 'refund'
+  const linkedOriginal = isRefundEdit ? transactions.find(t => t.id === editTx!.refundOf) : undefined
+
+  // Refunds already logged against this expense (when editing an expense)
+  const existingRefunds = useMemo(() =>
+    editTx && editTx.type === 'expense'
+      ? transactions.filter(t => t.type === 'refund' && t.refundOf === editTx.id).sort((a, b) => b.date.localeCompare(a.date))
+      : [],
+    [editTx, transactions]
+  )
+  const totalRefunded = existingRefunds.reduce((s, t) => s + t.amount, 0)
+  const remainingRefundable = editTx ? editTx.amount - totalRefunded : 0
 
   const isRepaymentKind = transferKind === 'loan_repayment_received' || transferKind === 'loan_repayment_paid'
   const loanPersonTrimmed = loanPerson.trim()
@@ -198,6 +221,10 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       setAllocation({})
       setSettledBorrowingId(editTx?.settledBorrowingId ?? '')
       setSettledPerson(editTx?.settledPerson ?? '')
+      setRefundAmount('')
+      setRefundDate(format(new Date(), 'yyyy-MM-dd'))
+      setRefundNotes('')
+      setShowRefundForm(false)
     }
   }, [open, editTx, initialPrefill])
 
@@ -621,6 +648,184 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     } finally {
       setSaving(false)
     }
+  }
+
+  // ── Refunds (logged inline against an existing expense) ────────────────────
+
+  async function logRefund() {
+    if (!user || !editTx) return
+    const amt = Number(refundAmount)
+    if (!amt || amt <= 0) return
+    if (amt > remainingRefundable) {
+      toast.error(`Refund can't exceed ${formatCurrencyFull(remainingRefundable)} remaining`)
+      return
+    }
+    setAddingRefund(true)
+    try {
+      await addTransaction(user.uid, {
+        type: 'refund',
+        refundOf: editTx.id,
+        category: editTx.category,
+        amount: amt,
+        date: refundDate,
+        notes: refundNotes,
+        tags: [],
+        isRecurring: false,
+        ...(editTx.projectId ? { projectId: editTx.projectId } : {}),
+      } as Omit<Transaction, 'id' | 'userId' | 'createdAt'>)
+      await refresh()
+      toast.success('Refund logged')
+      setRefundAmount('')
+      setRefundNotes('')
+      setShowRefundForm(false)
+    } catch {
+      toast.error('Failed to log refund')
+    } finally {
+      setAddingRefund(false)
+    }
+  }
+
+  async function removeRefund(id: string) {
+    try {
+      await deleteTransaction(id)
+      await refresh()
+      toast.success('Refund removed')
+    } catch {
+      toast.error('Failed to remove refund')
+    }
+  }
+
+  async function handleRefundSave(e: React.FormEvent) {
+    e.preventDefault()
+    if (!editTx || !linkedOriginal) return
+    const amt = Number(amount)
+    if (!amt || amt <= 0) return
+    const otherRefunds = transactions
+      .filter(t => t.type === 'refund' && t.refundOf === linkedOriginal.id && t.id !== editTx.id)
+      .reduce((s, t) => s + t.amount, 0)
+    const maxRefundable = linkedOriginal.amount - otherRefunds
+    if (amt > maxRefundable) {
+      toast.error(`Refund can't exceed ${formatCurrencyFull(maxRefundable)} remaining`)
+      return
+    }
+    setSaving(true)
+    try {
+      await updateTransaction(editTx.id, { amount: amt, date, notes })
+      await refresh()
+      toast.success('Refund updated')
+      onClose()
+    } catch {
+      toast.error('Something went wrong')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (isRefundEdit) {
+    return (
+      <Transition appear show={open} as={Fragment}>
+        <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={onClose}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
+            leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
+          >
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
+          </Transition.Child>
+
+          <div style={{ position: 'fixed', inset: 0, overflowY: 'auto' }}>
+            <div
+              style={{ display: 'flex', minHeight: '100%', alignItems: 'flex-end', justifyContent: 'center' }}
+              className="sm:items-center sm:p-4"
+            >
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 translate-y-full sm:translate-y-4 sm:opacity-0"
+                enterTo="opacity-100 translate-y-0"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 translate-y-0"
+                leaveTo="opacity-0 translate-y-full sm:translate-y-4 sm:opacity-0"
+              >
+                <Dialog.Panel
+                  className="rounded-t-3xl sm:rounded-3xl"
+                  style={{
+                    width: '100%', maxWidth: 440,
+                    background: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    boxShadow: 'var(--shadow-lg)',
+                    overflow: 'hidden',
+                    display: 'flex', flexDirection: 'column',
+                    maxHeight: '92dvh',
+                  }}
+                >
+                  <div className="sm:hidden" style={{ display: 'flex', justifyContent: 'center', paddingTop: 10, paddingBottom: 4, flexShrink: 0 }}>
+                    <div style={{ width: 36, height: 4, borderRadius: 999, background: 'var(--border-strong)', opacity: 0.6 }} />
+                  </div>
+
+                  <div style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0,
+                  }}>
+                    <Dialog.Title style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>Edit Refund</Dialog.Title>
+                    <button onClick={onClose} style={{ padding: 6, borderRadius: 8, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  <form id="edit-refund-form" onSubmit={handleRefundSave} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', flex: 1 }}>
+                    {linkedOriginal && (
+                      <button
+                        type="button"
+                        onClick={() => onViewOriginal?.(linkedOriginal)}
+                        style={{
+                          display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left',
+                          padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                          background: 'var(--surface-2)', border: '1px solid var(--border)',
+                        }}
+                      >
+                        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Refund of</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                          {getCategoryDisplayName(linkedOriginal.category)} · {formatCurrencyFull(linkedOriginal.amount)} on {format(parseISO(linkedOriginal.date), 'MMM d, yyyy')}
+                        </span>
+                        <span style={{ fontSize: 11.5, color: 'var(--brand-ink)', fontWeight: 500 }}>View original →</span>
+                      </button>
+                    )}
+
+                    <div>
+                      <label className="label">Refund amount</label>
+                      <input type="number" inputMode="decimal" className="input" value={amount} onChange={e => setAmount(e.target.value)} required min="0" step="0.01" />
+                    </div>
+                    <div>
+                      <label className="label">Date</label>
+                      <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} required />
+                    </div>
+                    <div>
+                      <label className="label">Notes (optional)</label>
+                      <input type="text" className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. Cancellation refund" />
+                    </div>
+                  </form>
+
+                  <div style={{ flexShrink: 0, padding: '12px 20px 20px', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
+                    <button
+                      type="submit"
+                      form="edit-refund-form"
+                      disabled={saving || !amount || Number(amount) <= 0}
+                      className="btn-primary"
+                      style={{ width: '100%', justifyContent: 'center', padding: '13px', fontSize: 14, opacity: saving ? 0.6 : 1 }}
+                    >
+                      {saving ? 'Saving...' : 'Update Refund'}
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+    )
   }
 
   const selectedKind = TRANSFER_KINDS.find(k => k.id === transferKind)
@@ -1284,6 +1489,92 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                             )}
                           </div>
                         </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Refunds (expense edit only) ── */}
+                  {activeTab === 'expense' && editTx && editTx.type === 'expense' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <label className="label">Refunds</label>
+
+                      {existingRefunds.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {existingRefunds.map(r => (
+                            <div key={r.id} style={{
+                              display: 'flex', alignItems: 'center', gap: 10,
+                              padding: '8px 10px', borderRadius: 10,
+                              background: 'var(--good-soft)', border: '1px solid color-mix(in oklch, var(--good) 25%, transparent)',
+                            }}>
+                              <div style={{ flex: 1, fontSize: 12, color: 'var(--good-ink)' }}>
+                                <strong>{formatCurrencyFull(r.amount)}</strong> refunded on {format(parseISO(r.date), 'MMM d, yyyy')}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeRefund(r.id)}
+                                style={{ padding: 4, borderRadius: 6, color: 'var(--bad-ink)', background: 'none', border: 'none', cursor: 'pointer' }}
+                                aria-label="Remove refund"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ))}
+                          <div style={{ fontSize: 12, color: 'var(--text-2)', padding: '2px 2px' }}>
+                            Refunded {formatCurrencyFull(totalRefunded)} · Net expense <strong style={{ color: 'var(--text)' }}>{formatCurrencyFull(Math.max(0, editTx.amount - totalRefunded))}</strong>
+                          </div>
+                        </div>
+                      )}
+
+                      {remainingRefundable > 0 && (
+                        showRefundForm ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <input
+                                type="number" inputMode="decimal" className="input" placeholder={`Up to ${formatCurrencyFull(remainingRefundable)}`}
+                                value={refundAmount} onChange={e => setRefundAmount(e.target.value)}
+                                min="0" max={remainingRefundable} step="0.01" autoFocus
+                                style={{ flex: 1, fontSize: 13 }}
+                              />
+                              <input
+                                type="date" className="input" value={refundDate} onChange={e => setRefundDate(e.target.value)}
+                                style={{ flex: 1, fontSize: 13 }}
+                              />
+                            </div>
+                            <input
+                              type="text" className="input" placeholder="Notes (optional)"
+                              value={refundNotes} onChange={e => setRefundNotes(e.target.value)}
+                              style={{ fontSize: 13 }}
+                            />
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button
+                                type="button"
+                                onClick={() => setShowRefundForm(false)}
+                                className="btn-secondary"
+                                style={{ justifyContent: 'center', padding: '9px', fontSize: 13 }}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                onClick={logRefund}
+                                disabled={addingRefund || !refundAmount || Number(refundAmount) <= 0}
+                                className="btn-primary"
+                                style={{ flex: 1, justifyContent: 'center', padding: '9px', fontSize: 13, opacity: addingRefund ? 0.6 : 1 }}
+                              >
+                                {addingRefund ? 'Logging...' : 'Log refund'}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setShowRefundForm(true)}
+                            className="btn-secondary"
+                            style={{ justifyContent: 'center', gap: 8, padding: '9px', fontSize: 13 }}
+                          >
+                            <RotateCcw size={14} /> Refund
+                          </button>
+                        )
                       )}
                     </div>
                   )}

@@ -99,6 +99,9 @@ export function buildMonthlySummary(
     }
     if (t.type === 'income') {
       totalIncome += t.amount
+    } else if (t.type === 'refund') {
+      totalExpenses -= t.amount
+      byCategory[t.category] = (byCategory[t.category] ?? 0) - t.amount
     } else {
       totalExpenses += t.amount
       byCategory[t.category] = (byCategory[t.category] ?? 0) + t.amount
@@ -400,11 +403,11 @@ export function computeLongestMoneyStreak(transactions: Transaction[], noSpendDa
   return longest
 }
 
-/** Sum of all expense + savings_contribution amounts for a given project. */
+/** Sum of all expense + savings_contribution amounts for a given project, net of refunds. */
 export function computeProjectPaid(transactions: Transaction[], projectId: string): number {
   return transactions
-    .filter(t => t.projectId === projectId && (t.type === 'expense' || isSavingsTransfer(t)))
-    .reduce((s, t) => s + t.amount, 0)
+    .filter(t => t.projectId === projectId && (t.type === 'expense' || t.type === 'refund' || isSavingsTransfer(t)))
+    .reduce((s, t) => s + (t.type === 'refund' ? -t.amount : t.amount), 0)
 }
 
 export function downloadJSON(data: unknown, filename: string) {

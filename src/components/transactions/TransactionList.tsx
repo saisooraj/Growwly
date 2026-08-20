@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react'
 import { format, parseISO, isToday, isYesterday } from 'date-fns'
-import { ArrowLeftRight, ChevronDown, ChevronRight, ArrowUp, ArrowDown, UserMinus, UserPlus } from 'lucide-react'
+import { ArrowLeftRight, ChevronDown, ChevronRight, ArrowUp, ArrowDown, UserMinus, UserPlus, RotateCcw } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { formatCurrencyFull, CATEGORY_COLORS, getTransactionsForMonth, getTransferDisplay } from '@/lib/utils'
 import { getCycleRange } from '@/lib/cycle'
@@ -20,7 +20,7 @@ interface Props {
 }
 
 // Synthetic row type — Transaction extended with borrowing metadata
-type ViewTx = Transaction & { _borrowDir?: 'lent' | 'borrowed'; _person?: string }
+type ViewTx = Transaction & { _borrowDir?: 'lent' | 'borrowed'; _person?: string; _refundedAmount?: number }
 
 // ── Borrowing → synthetic ViewTx ────────────────────────────────────────────
 
@@ -53,10 +53,17 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
   const isBorrowing = !!tx._borrowDir
   const isTransfer  = tx.type === 'transfer'
   const isIncome    = tx.type === 'income'
+  const isRefund    = tx.type === 'refund'
 
   let color: string, icon: React.ReactNode, label: string, amountColor: string, prefix: string
 
-  if (isBorrowing) {
+  if (isRefund) {
+    color       = 'var(--good)'
+    icon        = <RotateCcw size={17} style={{ color }} />
+    label       = `${getCategoryDisplayName(tx.category)} Refund`
+    amountColor = 'var(--good-ink)'
+    prefix      = '+'
+  } else if (isBorrowing) {
     const isLent = tx._borrowDir === 'lent'
     color       = isLent ? 'var(--warn)' : 'var(--info)'
     icon        = isLent
@@ -145,6 +152,15 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
           {tx.isRecurring && (
             <span className="pill" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0 }}>recurring</span>
           )}
+          {!!tx._refundedAmount && (
+            <span
+              className="pill"
+              style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3,
+                background: 'var(--good-soft)', color: 'var(--good-ink)', border: 'none' }}
+            >
+              <RotateCcw size={9} /> refunded {formatCurrencyFull(tx._refundedAmount)}
+            </span>
+          )}
         </div>
         {tx.notes && (
           <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -173,6 +189,11 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
         <div style={{ fontSize: 14.5, fontWeight: 700, color: amountColor, letterSpacing: '-0.01em', fontFamily: "'Geist Mono', monospace" }}>
           {prefix}{formatCurrencyFull(tx.amount)}
         </div>
+        {!!tx._refundedAmount && (
+          <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 1, fontFamily: "'Geist Mono', monospace" }}>
+            net {formatCurrencyFull(Math.max(0, tx.amount - tx._refundedAmount))}
+          </div>
+        )}
       </div>
     </button>
   )
@@ -195,6 +216,7 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
       if (tx._borrowDir) continue  // borrowings don't count in P&L summary
       if (tx.type === 'income') income += tx.amount
       else if (tx.type === 'expense') expenses += tx.amount
+      else if (tx.type === 'refund') expenses -= tx.amount
       else {
         const { dir, isSavings } = getTransferDisplay(tx)
         if (dir === 'in') income += tx.amount
@@ -259,12 +281,29 @@ export default function TransactionList({ filterMonth = false, limit, transactio
   const { transactions: storeTxs, borrowings, selectedMonth, settings } = useAppStore()
   const [selected, setSelected] = useState<Transaction | null>(null)
 
+  // Total refunded per original expense id, across all time (not just the visible range)
+  const refundedByOriginal = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const t of storeTxs) {
+      if (t.type === 'refund' && t.refundOf) {
+        map.set(t.refundOf, (map.get(t.refundOf) ?? 0) + t.amount)
+      }
+    }
+    return map
+  }, [storeTxs])
+
   const base: ViewTx[] = useMemo(() => {
     const txs: Transaction[] = txOverride ?? (filterMonth
       ? getTransactionsForMonth(storeTxs, selectedMonth, settings)
       : storeTxs)
 
-    if (!showBorrowings) return txs as ViewTx[]
+    const withRefunds: ViewTx[] = txs.map(t =>
+      t.type === 'expense' && refundedByOriginal.has(t.id)
+        ? { ...t, _refundedAmount: refundedByOriginal.get(t.id) }
+        : t
+    )
+
+    if (!showBorrowings) return withRefunds
 
     // Filter borrowings to the same date range
     const { start, end } = getCycleRange(selectedMonth, settings)
@@ -274,10 +313,10 @@ export default function TransactionList({ filterMonth = false, limit, transactio
 
     // Only hide loan_given transactions — they're represented by synthetic borrowing rows.
     // Repayment transactions are shown as real entries so users can delete them and reverse the borrowing.
-    const filteredTxs = txs.filter(t => !(t.type === 'transfer' && t.transferKind === 'loan_given'))
+    const filteredTxs = withRefunds.filter(t => !(t.type === 'transfer' && t.transferKind === 'loan_given'))
 
     return [...filteredTxs, ...borrowingRows]
-  }, [txOverride, storeTxs, borrowings, selectedMonth, settings, filterMonth, showBorrowings])
+  }, [txOverride, storeTxs, borrowings, selectedMonth, settings, filterMonth, showBorrowings, refundedByOriginal])
 
   const list  = [...base].sort((a, b) => {
     const dateDiff = b.date.localeCompare(a.date)
@@ -312,7 +351,7 @@ export default function TransactionList({ filterMonth = false, limit, transactio
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {shown.map(tx => <TxRow key={tx.id} tx={tx} onSelect={setSelected} />)}
         </div>
-        <TransactionDetailModal tx={selected} onClose={() => setSelected(null)} />
+        <TransactionDetailModal tx={selected} onClose={() => setSelected(null)} onNavigate={setSelected} />
       </>
     )
   }
@@ -330,7 +369,7 @@ export default function TransactionList({ filterMonth = false, limit, transactio
           />
         ))}
       </div>
-      <TransactionDetailModal tx={selected} onClose={() => setSelected(null)} />
+      <TransactionDetailModal tx={selected} onClose={() => setSelected(null)} onNavigate={setSelected} />
     </>
   )
 }

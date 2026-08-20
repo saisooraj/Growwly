@@ -320,10 +320,10 @@ export default function SafeToSpendCard() {
 
     const cashNet  = Math.max(summary.cashNet, 0) + carryForward
 
-    // Today's actual expense spend (from transactions)
+    // Today's actual expense spend (from transactions), net of same-day refunds
     const todaySpent = transactions
-      .filter(t => t.date === todayStr && t.type === 'expense')
-      .reduce((s, t) => s + t.amount, 0)
+      .filter(t => t.date === todayStr && (t.type === 'expense' || t.type === 'refund'))
+      .reduce((s, t) => s + (t.type === 'refund' ? -t.amount : t.amount), 0)
 
     function needForDay(date: Date): number {
       const dow = date.getDay()
@@ -408,9 +408,9 @@ export default function SafeToSpendCard() {
   const weekEnd = addDays(weekStart, 6)
 
   const weekTxsAll = getTransactionsForWeek(transactions, weekRef)
-  const weekTxs = weekTxsAll.filter(t => t.type === 'expense')
+  const weekTxs = weekTxsAll.filter(t => t.type === 'expense' || t.type === 'refund')
   const weekIncomeTxs = weekTxsAll.filter(t => t.type === 'income')
-  const weekTotal = weekTxs.reduce((s, t) => s + t.amount, 0)
+  const weekTotal = weekTxs.reduce((s, t) => s + (t.type === 'refund' ? -t.amount : t.amount), 0)
   const weekIncomeTotal = weekIncomeTxs.reduce((s, t) => s + t.amount, 0)
   const weekOver = weeklyBudget > 0 && weekTotal - weeklyBudget > 0
   const dailyIncome = Array.from({ length: 7 }, (_, i) => {
@@ -419,7 +419,7 @@ export default function SafeToSpendCard() {
   })
   const dailySpend = Array.from({ length: 7 }, (_, i) => {
     const dateStr = format(addDays(weekStart, i), 'yyyy-MM-dd')
-    return weekTxs.filter(t => t.date === dateStr).reduce((s, t) => s + t.amount, 0)
+    return weekTxs.filter(t => t.date === dateStr).reduce((s, t) => s + (t.type === 'refund' ? -t.amount : t.amount), 0)
   })
 
   // ── Derived display values ───────────────────────────────────────────────────

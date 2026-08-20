@@ -2,7 +2,7 @@
 
 import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { X, Edit2, Trash2, Calendar, FileText, Repeat, Folder, ArrowLeftRight } from 'lucide-react'
+import { X, Edit2, Trash2, Calendar, FileText, Repeat, Folder, ArrowLeftRight, RotateCcw, ArrowRight } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { deleteTransaction, deleteBorrowing, updateProject, updateSavingsGoal, updateBorrowing } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
@@ -17,18 +17,27 @@ import toast from 'react-hot-toast'
 interface Props {
   tx: Transaction | null
   onClose: () => void
+  onNavigate?: (tx: Transaction) => void
 }
 
-export default function TransactionDetailModal({ tx, onClose }: Props) {
+export default function TransactionDetailModal({ tx, onClose, onNavigate }: Props) {
   const refresh = useRefreshData()
-  const { projects, savingsGoals, setSavingsGoals } = useAppStore()
+  const { projects, savingsGoals, setSavingsGoals, transactions } = useAppStore()
   const [editOpen, setEditOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
 
   const open = !!tx
 
   // Synthetic borrowing rows have a fake id like "borrow-{borrowingId}"
   const isSyntheticBorrowing = tx?.id?.startsWith('borrow-')
+
+  const isRefund = tx?.type === 'refund'
+  const linkedOriginal = isRefund ? transactions.find(t => t.id === tx!.refundOf) : undefined
+  const linkedRefunds = tx && tx.type === 'expense'
+    ? transactions.filter(t => t.type === 'refund' && t.refundOf === tx.id)
+    : []
+  const totalRefunded = linkedRefunds.reduce((s, t) => s + t.amount, 0)
 
   async function doDelete() {
     if (!tx) return
@@ -46,9 +55,14 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
           setTransactions(transactions.filter(t => t.id !== linkedTx.id))
         }
       } else {
+        // Cascade-delete any linked refunds first — the undo toast only restores the parent expense
+        for (const r of linkedRefunds) {
+          await deleteTransaction(r.id)
+        }
         await deleteTransaction(tx.id)
         const { transactions, setTransactions, projects, setProjects } = useAppStore.getState()
-        const freshTxs = transactions.filter(t => t.id !== tx.id)
+        const deletedIds = new Set([tx.id, ...linkedRefunds.map(r => r.id)])
+        const freshTxs = transactions.filter(t => !deletedIds.has(t.id))
         setTransactions(freshTxs)
         // Recompute project.paid now that this transaction is gone
         if (tx.projectId) {
@@ -162,24 +176,32 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
   const isTransfer = tx.type === 'transfer'
   const isIncome   = tx.type === 'income'
   const transferDisp = isTransfer ? getTransferDisplay(tx) : null
-  const color = isTransfer
+  const color = isRefund
+    ? 'var(--good)'
+    : isTransfer
     ? (transferDisp?.isSavings ? getSavingsVehicleMeta(tx.savingsVehicle || 'Other Savings').color : 'var(--info)')
     : (CATEGORY_COLORS[tx.category] ?? '#94a3b8')
   const project = tx.projectId ? projects.find(p => p.id === tx.projectId) : null
 
-  const amountColor = isTransfer
+  const amountColor = isRefund
+    ? 'var(--good-ink)'
+    : isTransfer
     ? (transferDisp?.dir === 'in' ? 'var(--good)' : 'var(--text-2)')
     : isIncome ? 'var(--good-ink)' : 'var(--bad-ink)'
 
-  const prefix = isTransfer
+  const prefix = isRefund
+    ? '+'
+    : isTransfer
     ? (transferDisp?.dir === 'in' ? '+' : '−')
     : (isIncome ? '+' : '−')
 
-  const typeLabel = isTransfer
+  const typeLabel = isRefund
+    ? 'Refund'
+    : isTransfer
     ? (transferDisp?.label ?? 'Transfer')
     : isIncome ? 'Income' : 'Expense'
 
-  const typePillClass = isTransfer ? 'info' : isIncome ? 'good' : 'bad'
+  const typePillClass = isRefund ? 'good' : isTransfer ? 'info' : isIncome ? 'good' : 'bad'
 
   return (
     <>
@@ -220,7 +242,9 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
                       background: color + '20',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
-                      {isTransfer
+                      {isRefund
+                        ? <RotateCcw size={16} style={{ color }} />
+                        : isTransfer
                         ? (transferDisp?.isSavings
                             ? (() => { const m = getSavingsVehicleMeta(tx.savingsVehicle || 'Other Savings'); return <m.Icon size={16} color={m.color} stroke={1.5} /> })()
                             : <ArrowLeftRight size={16} style={{ color }} />)
@@ -229,7 +253,7 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
                     </div>
                     <div>
                       <Dialog.Title style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', lineHeight: 1.2 }}>
-                        {isTransfer ? (transferDisp?.label ?? 'Transfer') : getCategoryDisplayName(tx.category)}
+                        {isRefund ? `${getCategoryDisplayName(tx.category)} Refund` : isTransfer ? (transferDisp?.label ?? 'Transfer') : getCategoryDisplayName(tx.category)}
                       </Dialog.Title>
                       <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
                         {format(parseISO(tx.date), 'dd MMM yyyy')}
@@ -274,6 +298,51 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
                   <Row icon={<Calendar size={14} />} label="Date">
                     {format(parseISO(tx.date), 'EEEE, dd MMMM yyyy')}
                   </Row>
+
+                  {isRefund && (
+                    <Row icon={<RotateCcw size={14} />} label="Refund of">
+                      {linkedOriginal ? (
+                        <button
+                          onClick={() => onNavigate?.(linkedOriginal)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            fontSize: 13, color: 'var(--brand-ink)', fontWeight: 600,
+                            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                          }}
+                        >
+                          {getCategoryDisplayName(linkedOriginal.category)} · {formatCurrencyFull(linkedOriginal.amount)} on {format(parseISO(linkedOriginal.date), 'dd MMM yyyy')}
+                          <ArrowRight size={12} />
+                        </button>
+                      ) : (
+                        <span style={{ color: 'var(--text-3)' }}>Original transaction not found</span>
+                      )}
+                    </Row>
+                  )}
+
+                  {tx.type === 'expense' && totalRefunded > 0 && (
+                    <Row icon={<RotateCcw size={14} />} label="Refunds">
+                      <span>
+                        Refunded {formatCurrencyFull(totalRefunded)} · Net expense{' '}
+                        <strong>{formatCurrencyFull(Math.max(0, tx.amount - totalRefunded))}</strong>
+                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+                        {linkedRefunds.map(r => (
+                          <button
+                            key={r.id}
+                            onClick={() => onNavigate?.(r)}
+                            style={{
+                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                              fontSize: 12, color: 'var(--good-ink)', background: 'var(--good-soft)',
+                              border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer',
+                            }}
+                          >
+                            <span>{format(parseISO(r.date), 'dd MMM yyyy')}</span>
+                            <span style={{ fontWeight: 600 }}>+{formatCurrencyFull(r.amount)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </Row>
+                  )}
 
                   {tx.notes && (
                     <Row icon={<FileText size={14} />} label="Notes">
@@ -326,7 +395,7 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
                     <Edit2 size={14} /> Edit
                   </button>
                   <button
-                    onClick={doDelete}
+                    onClick={() => (linkedRefunds.length > 0 ? setDeleteConfirm(true) : doDelete())}
                     disabled={deleting}
                     className="btn-danger"
                     style={{ flex: 1, justifyContent: 'center', gap: 8 }}
@@ -345,7 +414,24 @@ export default function TransactionDetailModal({ tx, onClose }: Props) {
         open={editOpen}
         onClose={() => { setEditOpen(false); onClose() }}
         editTx={tx}
+        onViewOriginal={t => {
+          // Close both nested dialogs fully before reopening for the original —
+          // swapping `tx` while the edit dialog is still mounted confuses Headless UI's
+          // outside-click detection across the two portaled Dialogs and force-closes everything.
+          setEditOpen(false)
+          onClose()
+          setTimeout(() => onNavigate?.(t), 220)
+        }}
       />
+
+      {deleteConfirm && (
+        <ConfirmDialog
+          open
+          message={`This expense has ${formatCurrencyFull(totalRefunded)} in linked refunds (${linkedRefunds.length}). Deleting it will also delete ${linkedRefunds.length === 1 ? 'that refund' : 'those refunds'} — this can't be undone.`}
+          onConfirm={() => { setDeleteConfirm(false); doDelete() }}
+          onClose={() => setDeleteConfirm(false)}
+        />
+      )}
     </>
   )
 }

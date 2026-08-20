@@ -143,6 +143,20 @@ function TransactionsInner() {
     })
   }, [monthTxs, transactions, typeFilter, catFilter, tagFilter, vehicleFilter, searchQuery, dateFrom, dateTo])
 
+  // Any filter narrowing the list — used to show/hide the "Clear filters" affordance
+  const hasAnyFilter = typeFilter !== 'all' || catFilter !== 'all' || tagFilter !== 'all' || vehicleFilter !== 'all'
+    || !!searchQuery.trim() || !!dateFrom || !!dateTo
+
+  function clearAllFilters() {
+    setTypeFilter('all')
+    setCatFilter('all')
+    setTagFilter('all')
+    setVehicleFilter('all')
+    setSearchQuery('')
+    setDateFrom('')
+    setDateTo('')
+  }
+
   // Spend/income total for the current category/tag/date filters, within the filtered view
   const hasActiveFilter = catFilter !== 'all' || tagFilter !== 'all' || !!dateFrom || !!dateTo
   const filterSummary = useMemo(() => {
@@ -150,6 +164,7 @@ function TransactionsInner() {
     let expense = 0, income = 0
     for (const t of filtered) {
       if (t.type === 'expense') expense += t.amount
+      else if (t.type === 'refund') expense -= t.amount
       else if (t.type === 'income') income += t.amount
     }
     const badges: string[] = []
@@ -362,6 +377,11 @@ function TransactionsInner() {
                     </button>
                   ))}
                 </div>
+                {hasAnyFilter && (
+                  <button onClick={clearAllFilters} className="btn btn-sm btn-ghost" style={{ gap: 5, flexShrink: 0 }}>
+                    <X size={13} /> Clear
+                  </button>
+                )}
                 <button onClick={exportCSV} className="btn btn-sm btn-ghost" style={{ gap: 5, flexShrink: 0 }}>
                   <Download size={13} /> Export
                 </button>
@@ -519,6 +539,12 @@ function TransactionsInner() {
                   <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>
                     {filterSummary.count} transaction{filterSummary.count !== 1 ? 's' : ''}
                   </span>
+                  <button
+                    onClick={clearAllFilters}
+                    style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    <X size={11} /> Clear
+                  </button>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
                   <div>

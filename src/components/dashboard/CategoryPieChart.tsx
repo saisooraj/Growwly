@@ -53,8 +53,11 @@ export default function CategoryPieChart() {
   // Aggregate by category
   const byCategory: Record<string, number> = chartMonth === 'all'
     ? transactions
-        .filter(t => t.type === 'expense')
-        .reduce((acc, t) => { acc[t.category] = (acc[t.category] ?? 0) + t.amount; return acc }, {} as Record<string, number>)
+        .filter(t => t.type === 'expense' || t.type === 'refund')
+        .reduce((acc, t) => {
+          acc[t.category] = (acc[t.category] ?? 0) + (t.type === 'refund' ? -t.amount : t.amount)
+          return acc
+        }, {} as Record<string, number>)
     : buildMonthlySummary(transactions, chartMonth, settings, borrowings).byCategory
 
   const sorted = Object.entries(byCategory)

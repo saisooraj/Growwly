@@ -40,10 +40,16 @@ function get90DaysAgo(): string {
 
 function summarizeTxns(txns: Transaction[]) {
   const income = txns.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
-  const expenses = txns.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+  let expenses = 0
   const byCategory: Record<string, number> = {}
-  for (const t of txns.filter(t => t.type === 'expense')) {
-    byCategory[t.category] = (byCategory[t.category] ?? 0) + t.amount
+  for (const t of txns) {
+    if (t.type === 'expense') {
+      expenses += t.amount
+      byCategory[t.category] = (byCategory[t.category] ?? 0) + t.amount
+    } else if (t.type === 'refund') {
+      expenses -= t.amount
+      byCategory[t.category] = (byCategory[t.category] ?? 0) - t.amount
+    }
   }
   return { income, expenses, net: income - expenses, byCategory }
 }
