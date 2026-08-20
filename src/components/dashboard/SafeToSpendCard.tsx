@@ -676,7 +676,7 @@ export default function SafeToSpendCard() {
               }} />
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>
-              <span>₹0</span>
+              <span>{formatCurrencyFull(weekTotal)} spent</span>
               <Link href="/transactions" style={{ color: '#fff', fontWeight: 600, textDecoration: 'none', fontSize: 11 }}>
                 View all →
               </Link>
