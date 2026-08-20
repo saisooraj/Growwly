@@ -60,8 +60,8 @@ export default function AlertsPanel() {
   const weeklyBudget = settings?.weeklyBudget ?? 0
   if (weeklyBudget > 0) {
     const weekSpent = getTransactionsForWeek(transactions)
-      .filter(t => t.type === 'expense' || t.type === 'refund')
-      .reduce((s, t) => s + (t.type === 'refund' ? -t.amount : t.amount), 0)
+      .filter(t => t.type === 'expense')
+      .reduce((s, t) => s + t.amount, 0)
     if (weekSpent > weeklyBudget) {
       alerts.push({
         id: 'weekly-over',

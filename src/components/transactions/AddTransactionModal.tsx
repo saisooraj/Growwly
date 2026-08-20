@@ -5,7 +5,7 @@ import { Dialog, Transition } from '@headlessui/react'
 import { X, RefreshCw, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Split, UserPlus, Trash2, PiggyBank, RotateCcw } from 'lucide-react'
 import { IconMedal, IconCrane } from '@tabler/icons-react'
 import { format, parseISO } from 'date-fns'
-import { addTransaction, updateTransaction, deleteTransaction, updateProject, updateSavingsGoal, addBorrowing, updateBorrowing, setUserSettings, setEmergencyFund } from '@/lib/firestore'
+import { addTransaction, updateTransaction, deleteTransaction, updateProject, updateSavingsGoal, addBorrowing, updateBorrowing, setUserSettings, setEmergencyFund, getUserTransactions } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTransfer, buildMonthlySummary, EXPENSE_CATEGORIES, INCOME_CATEGORIES, computeProjectPaid, formatCurrencyFull } from '@/lib/utils'
@@ -656,12 +656,20 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     if (!user || !editTx) return
     const amt = Number(refundAmount)
     if (!amt || amt <= 0) return
-    if (amt > remainingRefundable) {
-      toast.error(`Refund can't exceed ${formatCurrencyFull(remainingRefundable)} remaining`)
-      return
-    }
     setAddingRefund(true)
     try {
+      // Re-check against a fresh read, not just the locally cached total — the local
+      // copy can be stale (another device, or a refund logged moments ago elsewhere),
+      // which would otherwise let two refunds silently add up to more than the expense.
+      const fresh = await getUserTransactions(user.uid)
+      const freshRefunded = fresh
+        .filter(t => t.type === 'refund' && t.refundOf === editTx.id)
+        .reduce((s, t) => s + t.amount, 0)
+      const freshRemaining = editTx.amount - freshRefunded
+      if (amt > freshRemaining) {
+        toast.error(`Refund can't exceed ${formatCurrencyFull(Math.max(0, freshRemaining))} remaining`)
+        return
+      }
       await addTransaction(user.uid, {
         type: 'refund',
         refundOf: editTx.id,
@@ -700,16 +708,19 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     if (!editTx || !linkedOriginal) return
     const amt = Number(amount)
     if (!amt || amt <= 0) return
-    const otherRefunds = transactions
-      .filter(t => t.type === 'refund' && t.refundOf === linkedOriginal.id && t.id !== editTx.id)
-      .reduce((s, t) => s + t.amount, 0)
-    const maxRefundable = linkedOriginal.amount - otherRefunds
-    if (amt > maxRefundable) {
-      toast.error(`Refund can't exceed ${formatCurrencyFull(maxRefundable)} remaining`)
-      return
-    }
     setSaving(true)
     try {
+      // Fresh check for the same staleness reason as logRefund above
+      const fresh = await getUserTransactions(editTx.userId)
+      const otherRefunds = fresh
+        .filter(t => t.type === 'refund' && t.refundOf === linkedOriginal.id && t.id !== editTx.id)
+        .reduce((s, t) => s + t.amount, 0)
+      const maxRefundable = linkedOriginal.amount - otherRefunds
+      if (amt > maxRefundable) {
+        toast.error(`Refund can't exceed ${formatCurrencyFull(Math.max(0, maxRefundable))} remaining`)
+        setSaving(false)
+        return
+      }
       await updateTransaction(editTx.id, { amount: amt, date, notes })
       await refresh()
       toast.success('Refund updated')
