@@ -210,13 +210,15 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
   const [open, setOpen] = useState(defaultOpen)
   useEffect(() => { setOpen(defaultOpen) }, [defaultOpen])
 
-  const { income, expenses, saved } = useMemo(() => {
-    let income = 0, expenses = 0, saved = 0
+  const { income, expenses, saved, refunded } = useMemo(() => {
+    let income = 0, expenses = 0, saved = 0, refunded = 0
     for (const tx of txs) {
       if (tx._borrowDir) continue  // borrowings don't count in P&L summary
       if (tx.type === 'income') income += tx.amount
       else if (tx.type === 'expense') expenses += tx.amount
-      else if (tx.type === 'refund') expenses -= tx.amount
+      // refunds aren't income and aren't a reduction of today's spend (often for
+      // a much older purchase) — shown as their own "money back" figure instead
+      else if (tx.type === 'refund') refunded += tx.amount
       else {
         const { dir, isSavings } = getTransferDisplay(tx)
         if (dir === 'in') income += tx.amount
@@ -224,7 +226,7 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
         else expenses += tx.amount
       }
     }
-    return { income, expenses, saved }
+    return { income, expenses, saved, refunded }
   }, [txs])
 
   return (
@@ -251,6 +253,11 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
           {income > 0 && (
             <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: 'var(--good-ink)' }}>
               <ArrowDown size={11} />{formatCurrencyFull(income)}
+            </span>
+          )}
+          {refunded > 0 && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: 'var(--good-ink)' }}>
+              <RotateCcw size={11} />{formatCurrencyFull(refunded)}
             </span>
           )}
           {expenses > 0 && (
