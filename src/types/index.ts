@@ -87,7 +87,7 @@ export interface Borrowing {
   date: string
   dueDate?: string
   repaidAmount: number
-  status: 'pending' | 'partial' | 'repaid' | 'waived'
+  status: 'pending' | 'partial' | 'repaid'
   createdAt: string
   // Optional loan/EMI fields — only shown when isLoan is true
   isLoan?: boolean

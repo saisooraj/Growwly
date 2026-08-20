@@ -38,7 +38,7 @@ import { DEFAULT_CARD_ORDER } from '@/lib/dashboardConstants'
 function BorrowedStat() {
   const { borrowings } = useAppStore()
   const pending = borrowings
-    .filter(b => b.type === 'borrowed' && b.status !== 'repaid' && b.status !== 'waived')
+    .filter(b => b.type === 'borrowed' && b.status !== 'repaid')
     .reduce((s, b) => s + (b.amount - b.repaidAmount), 0)
 
   return (
