@@ -11,6 +11,7 @@ import { CategoryIcon, getCategoryDisplayName, getSavingsVehicleMeta } from '@/l
 import { useAppStore } from '@/store/appStore'
 import type { Transaction } from '@/types'
 import AddTransactionModal from './AddTransactionModal'
+import AddBorrowingModal from '@/components/borrowings/AddBorrowingModal'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
 
@@ -22,7 +23,7 @@ interface Props {
 
 export default function TransactionDetailModal({ tx, onClose, onNavigate }: Props) {
   const refresh = useRefreshData()
-  const { projects, savingsGoals, setSavingsGoals, transactions } = useAppStore()
+  const { projects, savingsGoals, setSavingsGoals, borrowings, transactions } = useAppStore()
   const [editOpen, setEditOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
@@ -31,6 +32,9 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
 
   // Synthetic borrowing rows have a fake id like "borrow-{borrowingId}"
   const isSyntheticBorrowing = tx?.id?.startsWith('borrow-')
+  const linkedBorrowing = isSyntheticBorrowing
+    ? borrowings.find(b => b.id === tx!.id.replace('borrow-', ''))
+    : undefined
 
   const isRefund = tx?.type === 'refund'
   const linkedOriginal = isRefund ? transactions.find(t => t.id === tx!.refundOf) : undefined
@@ -410,19 +414,27 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
         </Dialog>
       </Transition>
 
-      <AddTransactionModal
-        open={editOpen}
-        onClose={() => { setEditOpen(false); onClose() }}
-        editTx={tx}
-        onViewOriginal={t => {
-          // Close both nested dialogs fully before reopening for the original —
-          // swapping `tx` while the edit dialog is still mounted confuses Headless UI's
-          // outside-click detection across the two portaled Dialogs and force-closes everything.
-          setEditOpen(false)
-          onClose()
-          setTimeout(() => onNavigate?.(t), 220)
-        }}
-      />
+      {isSyntheticBorrowing ? (
+        <AddBorrowingModal
+          open={editOpen}
+          onClose={() => { setEditOpen(false); onClose() }}
+          editBorrowing={linkedBorrowing ?? null}
+        />
+      ) : (
+        <AddTransactionModal
+          open={editOpen}
+          onClose={() => { setEditOpen(false); onClose() }}
+          editTx={tx}
+          onViewOriginal={t => {
+            // Close both nested dialogs fully before reopening for the original —
+            // swapping `tx` while the edit dialog is still mounted confuses Headless UI's
+            // outside-click detection across the two portaled Dialogs and force-closes everything.
+            setEditOpen(false)
+            onClose()
+            setTimeout(() => onNavigate?.(t), 220)
+          }}
+        />
+      )}
 
       {deleteConfirm && (
         <ConfirmDialog
