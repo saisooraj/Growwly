@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ChevronLeft, ChevronRight, Sun, Moon, Bell, Plus, Search, Flame } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Sun, Moon, Plus, Search, Flame } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
@@ -134,8 +134,6 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
   const pathname = usePathname()
   const { user } = useAuth()
   const { selectedMonth, setSelectedMonth, settings, transactions } = useAppStore()
-  const tasks      = useAppStore(s => (s as any).tasks ?? [])
-  const borrowings = useAppStore(s => s.borrowings)
   const [addMenuOpen, setAddMenuOpen] = useState(false)
 
   const moneyStreak = computeMoneyStreak(transactions, settings?.noSpendDays ?? [])
@@ -149,12 +147,6 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
   const firstName  = user?.displayName?.split(' ')[0] ?? 'there'
   const greeting   = getGreeting()
   const compactLabel = isHome ? `${greeting} ${firstName}` : meta.title
-
-  // Notification badge: overdue tasks OR pending borrowings
-  const overdueCount   = tasks.filter((t: any) => t.status !== 'done' && t.dueDate && new Date(t.dueDate) < new Date()).length
-  const pendingBorrows = borrowings.filter(b => b.status !== 'repaid').length
-  const hasBadge       = overdueCount > 0 || pendingBorrows > 0
-  const badgeCount     = overdueCount + pendingBorrows
 
   function prev() { if (canPrev) setSelectedMonth(months[currentIdx - 1]) }
   function next() { if (canNext) setSelectedMonth(months[currentIdx + 1]) }
@@ -194,10 +186,10 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
             </>
           ) : (
             <>
-              <h1 style={{ margin: 0, fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2, color: 'var(--text)' }}>
+              <h1 style={{ margin: 0, fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {meta.title}
               </h1>
-              <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 500, marginTop: 1 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 500, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {meta.sub}
               </div>
             </>
@@ -288,35 +280,6 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
       }}>
         <Flame size={14} />
         {moneyStreak}
-      </div>
-
-      {/* ── Bell with notification badge ── */}
-      <div style={{ position: 'relative', flexShrink: 0 }}>
-        <button
-          style={{
-            width: 36, height: 36, borderRadius: 11, border: '1px solid var(--border)',
-            background: hasBadge ? 'var(--bad-soft)' : 'var(--surface)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: hasBadge ? 'var(--bad-ink)' : 'var(--text-3)',
-            cursor: 'default', flexShrink: 0,
-            transition: 'background .2s, color .2s',
-          }}
-          title={hasBadge ? `${badgeCount} item${badgeCount !== 1 ? 's' : ''} need attention` : 'Notifications'}
-        >
-          <Bell size={15} />
-        </button>
-        {hasBadge && (
-          <span style={{
-            position: 'absolute', top: -3, right: -3,
-            width: 16, height: 16, borderRadius: '50%',
-            background: 'var(--bad)',
-            border: '2px solid var(--sidebar)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 9, fontWeight: 800, color: '#fff',
-          }}>
-            {badgeCount > 9 ? '9+' : badgeCount}
-          </span>
-        )}
       </div>
 
       {/* ── + Add button (desktop) ── */}

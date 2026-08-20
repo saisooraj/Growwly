@@ -70,7 +70,6 @@ function MoreSheet({
   const router = useRouter()
   const settings = useAppStore(s => s.settings)
   const tasks = useAppStore(s => s.tasks ?? [])
-  const borrowings = useAppStore(s => s.borrowings)
   const healthLogs = useAppStore(s => (s as any).healthLogs ?? [])
   const healthStreak: number = (useAppStore(s => (s as any).healthStreak) ?? 0)
   const isHighExpense = settings?.financialMode === 'high-expense'
@@ -95,7 +94,6 @@ function MoreSheet({
   if (!mounted) return null
 
   const pendingTasks = tasks.filter((t: any) => t.status !== 'done').length
-  const pendingBorrowings = borrowings.filter(b => b.status !== 'repaid').length
 
   const visibleSections = MORE_SECTIONS.filter(s => {
     if (!s.settingKey) return true
@@ -104,7 +102,6 @@ function MoreSheet({
 
   function badge(href: string): string | number | null {
     if (href === '/tasks') return pendingTasks > 0 ? pendingTasks : null
-    if (href === '/borrowings') return pendingBorrowings > 0 ? pendingBorrowings : null
     if (href === '/health') return healthStreak > 0 ? `🔥${healthStreak}` : null
     return null
   }

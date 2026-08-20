@@ -32,17 +32,14 @@ export default function Sidebar() {
   const { user, logout } = useAuth()
   const settings = useAppStore((s) => s.settings)
   const tasks = useAppStore(s => (s as any).tasks ?? [])
-  const borrowings = useAppStore(s => s.borrowings)
 
   const isHighExpense = settings?.financialMode === 'high-expense'
   const NAV = ALL_NAV.filter(item => !item.optional || (item.settingKey && settings?.[item.settingKey]))
 
   const pendingTasks = tasks.filter((t: any) => t.status !== 'done').length
-  const pendingBorrowings = borrowings.filter(b => b.status !== 'repaid').length
 
   function badge(href: string): number | null {
     if (href === '/tasks') return pendingTasks > 0 ? pendingTasks : null
-    if (href === '/borrowings') return pendingBorrowings > 0 ? pendingBorrowings : null
     return null
   }
 

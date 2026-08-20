@@ -1203,7 +1203,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                   {/* Description — moved above category so suggestion chip is immediately visible */}
                   <div>
                     <label className="label">
-                      {activeTab === 'savings' ? 'Note' : txType === 'transfer' ? 'Who / what for' : 'Description'}
+                      {activeTab === 'savings' ? 'Note' : 'Description'}
                     </label>
                     <input
                       type="text"
