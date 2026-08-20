@@ -502,7 +502,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 }
 .dash-bottom {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: var(--row-gap);
 }
 /* 2-col row: net worth | existing cards */

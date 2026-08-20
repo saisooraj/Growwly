@@ -849,7 +849,7 @@ export default function SettingsPage() {
                 pulse: 'Monthly Pulse & Financial Health',
                 summary: 'KPI Summary Cards',
                 'health-ef': 'Emergency Fund',
-                weekly: 'Weekly Tracker + Quick Actions',
+                weekly: 'Quick Actions + Borrowed',
                 upcoming: 'Upcoming Bills',
               }
               return (

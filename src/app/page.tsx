@@ -23,7 +23,6 @@ import DashboardGoals    from '@/components/dashboard/DashboardGoals'
 import EmergencyFundCard    from '@/components/dashboard/EmergencyFundCard'
 import PulseCard            from '@/components/dashboard/PulseCard'
 import SummaryCards         from '@/components/dashboard/SummaryCards'
-import WeeklyTracker        from '@/components/dashboard/WeeklyTracker'
 import QuickActions         from '@/components/dashboard/QuickActions'
 import MonthlyRecap         from '@/components/dashboard/MonthlyRecap'
 import UpcomingCard         from '@/components/dashboard/UpcomingCard'
@@ -132,7 +131,6 @@ function DashboardPage() {
     'health-ef': <CardErrorBoundary label="Emergency Fund"><EmergencyFundCard /></CardErrorBoundary>,
     weekly: (
       <div className="dash-bottom">
-        <CardErrorBoundary label="Weekly Tracker"><WeeklyTracker /></CardErrorBoundary>
         <CardErrorBoundary label="Quick Actions"><QuickActions /></CardErrorBoundary>
         <CardErrorBoundary label="Borrowed"><BorrowedStat /></CardErrorBoundary>
       </div>

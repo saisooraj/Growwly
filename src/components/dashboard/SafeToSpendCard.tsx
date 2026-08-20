@@ -1,16 +1,17 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { Pencil, Plus, Trash2, CheckCircle2, X } from 'lucide-react'
-import { addDays, format, startOfWeek } from 'date-fns'
+import { Pencil, Plus, Trash2, CheckCircle2, X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { addDays, addWeeks, format, isSameWeek, startOfWeek } from 'date-fns'
 import { useAppStore } from '@/store/appStore'
-import { buildMonthlySummary, computeCarryForward, formatCurrencyFull, getTransactionsForWeek, getLast6Months, getMonthLabel } from '@/lib/utils'
+import { buildMonthlySummary, computeCarryForward, formatCurrencyFull, getTransactionsForWeek, getLast6Months } from '@/lib/utils'
 import { useCountUp } from '@/hooks/useCountUp'
 import { getCycleRange } from '@/lib/cycle'
 import { parseISO, differenceInCalendarDays } from 'date-fns'
 import { setUserSettings } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
+import Link from 'next/link'
 import toast from 'react-hot-toast'
 
 // ── Hero week bars (white/translucent — used inside gradient card) ────────────
@@ -19,45 +20,94 @@ const HERO_DAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
 function getMondayFirstIdx(dow: number) { return dow === 0 ? 6 : dow - 1 }
 
 function HeroWeekBars({
-  data,
-  weekTotal,
+  expenseData,
+  incomeData,
+  showIncome,
   weeklyBudget,
   todayIdx,
+  weekStart,
 }: {
-  data: number[]
-  weekTotal: number
+  expenseData: number[]
+  incomeData: number[]
+  showIncome: boolean
   weeklyBudget: number
   todayIdx: number
+  weekStart: Date
 }) {
-  const max = Math.max(...data, weeklyBudget > 0 ? weeklyBudget / 7 * 1.4 : 1)
+  const dailyBudget = weeklyBudget > 0 ? weeklyBudget / 7 : 0
+  const max = Math.max(...expenseData, ...(showIncome ? incomeData : []), dailyBudget * 1.4, 1)
   const [grown, setGrown] = useState(false)
-  useEffect(() => { const t = setTimeout(() => setGrown(true), 120); return () => clearTimeout(t) }, [])
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
+  useEffect(() => {
+    setGrown(false)
+    const t = setTimeout(() => setGrown(true), 120)
+    return () => clearTimeout(t)
+  }, [expenseData, incomeData])
+
+  const barsAreaH = 44
 
   return (
-    <div>
-      {/* Label row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-          This week
-        </span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>
-          {formatCurrencyFull(weekTotal)}
-          {weeklyBudget > 0 && (
-            <span style={{ fontWeight: 500, opacity: 0.65 }}> / {formatCurrencyFull(weeklyBudget)}</span>
-          )}
-        </span>
-      </div>
-      {/* Bars */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 60 }}>
-        {data.map((v, i) => {
-          const barH = grown ? Math.max(4, (v / max) * 44) : 4
-          const isToday = i === todayIdx
-          const isEmpty = v === 0
-          return (
-            <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-              <div style={{ width: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: 44 }}>
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 60, position: 'relative' }}>
+      {expenseData.map((v, i) => {
+        const income = incomeData[i] ?? 0
+        const expH = grown ? Math.max(4, (v / max) * barsAreaH) : 4
+        const incH = grown ? Math.max(4, (income / max) * barsAreaH) : 4
+        const isToday = i === todayIdx
+        const isEmpty = v === 0 && (!showIncome || income === 0)
+        const isHovered = hoveredIdx === i
+        const dayDate = addDays(weekStart, i)
+
+        return (
+          <div
+            key={i}
+            onMouseEnter={() => setHoveredIdx(i)}
+            onMouseLeave={() => setHoveredIdx(null)}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, position: 'relative' }}
+          >
+            {/* Tooltip */}
+            {isHovered && (
+              <div style={{
+                position: 'absolute', bottom: barsAreaH + 18, zIndex: 10, pointerEvents: 'none',
+                ...(i >= expenseData.length - 2
+                  ? { right: 0 }
+                  : i <= 1
+                    ? { left: 0 }
+                    : { left: '50%', transform: 'translateX(-50%)' }),
+                background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10,
+                padding: '8px 11px', boxShadow: 'var(--elev-lg)', whiteSpace: 'nowrap',
+                display: 'flex', flexDirection: 'column', gap: 4,
+              }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>
+                  {format(dayDate, 'EEE, MMM d')}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 2, background: 'var(--chip-strong)', flexShrink: 0, display: 'inline-block' }} />
+                  <span style={{ color: 'var(--text-3)' }}>Spent</span>
+                  <span style={{ fontWeight: 700, color: 'var(--text)', marginLeft: 'auto', paddingLeft: 12 }}>
+                    {formatCurrencyFull(v)}
+                  </span>
+                </div>
+                {showIncome && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 2, background: 'var(--good)', flexShrink: 0, display: 'inline-block' }} />
+                    <span style={{ color: 'var(--text-3)' }}>Income</span>
+                    <span style={{ fontWeight: 700, color: 'var(--good-ink)', marginLeft: 'auto', paddingLeft: 12 }}>
+                      {formatCurrencyFull(income)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div style={{
+              width: '100%', display: 'flex', justifyContent: 'flex-end', gap: 3,
+              height: barsAreaH, borderRadius: 5,
+              background: isHovered ? 'rgba(255,255,255,0.10)' : 'transparent',
+              transition: 'background .12s',
+            }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
                 <div style={{
-                  height: barH, borderRadius: 5,
+                  height: expH, borderRadius: 5,
                   background: isEmpty
                     ? 'rgba(255,255,255,0.12)'
                     : isToday
@@ -66,16 +116,25 @@ function HeroWeekBars({
                   transition: `height .65s cubic-bezier(.22,1,.36,1) ${i * 45}ms`,
                 }} />
               </div>
-              <span style={{
-                fontSize: 10, fontWeight: 700,
-                color: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.5)',
-              }}>
-                {HERO_DAY_LABELS[i]}
-              </span>
+              {showIncome && (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                  <div style={{
+                    height: incH, borderRadius: 5,
+                    background: income === 0 ? 'rgba(255,255,255,0.12)' : 'rgba(120,255,190,0.85)',
+                    transition: `height .65s cubic-bezier(.22,1,.36,1) ${i * 45 + 30}ms`,
+                  }} />
+                </div>
+              )}
             </div>
-          )
-        })}
-      </div>
+            <span style={{
+              fontSize: 10, fontWeight: 700,
+              color: isToday ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.5)',
+            }}>
+              {HERO_DAY_LABELS[i]}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -244,7 +303,7 @@ export default function SafeToSpendCard() {
   const schedules: Schedule[] = settings?.dailyLivingSchedules ?? []
   const isConfigured = schedules.length > 0 && schedules.some(s => s.days.length > 0 && s.total > 0)
 
-  const { cashNet, carryForward, prevMonth, daysLeft, todayNeed, todayScheduleLabel, todaySpent, totalEssentials, buffer } = useMemo(() => {
+  const { cashNet, daysLeft, todayNeed, todayScheduleLabel, todaySpent, totalEssentials, buffer } = useMemo(() => {
     const summary  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
     const today    = new Date()
     const todayStr = today.toISOString().slice(0, 10)
@@ -287,7 +346,7 @@ export default function SafeToSpendCard() {
 
     const buffer = cashNet - totalEssentials
 
-    return { cashNet, carryForward, prevMonth, daysLeft, todayNeed, todayScheduleLabel, todaySpent, totalEssentials, buffer }
+    return { cashNet, daysLeft, todayNeed, todayScheduleLabel, todaySpent, totalEssentials, buffer }
   }, [transactions, selectedMonth, settings, borrowings, schedules])
 
   const isCovered   = buffer >= 0
@@ -329,18 +388,35 @@ export default function SafeToSpendCard() {
     finally { setSaving(false) }
   }
 
-  // ── Week data for hero bars ──────────────────────────────────────────────────
-  // Reference date = today capped at the cycle end, so past cycles show their last week.
+  // ── Week data for the weekly section ─────────────────────────────────────────
+  // Reference date = today capped at the cycle end, so past cycles show their last week;
+  // weekOffset lets the user browse other weeks from there.
 
   const weeklyBudget = settings?.weeklyBudget ?? 0
+  const [weekOffset, setWeekOffset] = useState(0)
+  const [showIncome, setShowIncome] = useState(false)
+
   const now = new Date()
-  const { start: cycleStart, end: cycleEnd } = getCycleRange(selectedMonth, settings)
-  const weekRef = parseISO(cycleEnd) < now ? parseISO(cycleEnd) : now
-  const todayMondayIdx = getMondayFirstIdx(weekRef.getDay())
+  const { end: cycleEnd } = getCycleRange(selectedMonth, settings)
+  const baseWeekRef = parseISO(cycleEnd) < now ? parseISO(cycleEnd) : now
+  const weekRef = addWeeks(baseWeekRef, weekOffset)
+
+  const isCurrentWeek = weekOffset === 0 && isSameWeek(weekRef, now, { weekStartsOn: 1 })
+  const todayMondayIdx = isCurrentWeek ? getMondayFirstIdx(now.getDay()) : -1
+
   const weekStart = startOfWeek(weekRef, { weekStartsOn: 1 })
-  const weekTxs = getTransactionsForWeek(transactions, weekRef)
-    .filter(t => t.type === 'expense' && t.date >= cycleStart && t.date <= cycleEnd)
+  const weekEnd = addDays(weekStart, 6)
+
+  const weekTxsAll = getTransactionsForWeek(transactions, weekRef)
+  const weekTxs = weekTxsAll.filter(t => t.type === 'expense')
+  const weekIncomeTxs = weekTxsAll.filter(t => t.type === 'income')
   const weekTotal = weekTxs.reduce((s, t) => s + t.amount, 0)
+  const weekIncomeTotal = weekIncomeTxs.reduce((s, t) => s + t.amount, 0)
+  const weekOver = weeklyBudget > 0 && weekTotal - weeklyBudget > 0
+  const dailyIncome = Array.from({ length: 7 }, (_, i) => {
+    const dateStr = format(addDays(weekStart, i), 'yyyy-MM-dd')
+    return weekIncomeTxs.filter(t => t.date === dateStr).reduce((s, t) => s + t.amount, 0)
+  })
   const dailySpend = Array.from({ length: 7 }, (_, i) => {
     const dateStr = format(addDays(weekStart, i), 'yyyy-MM-dd')
     return weekTxs.filter(t => t.date === dateStr).reduce((s, t) => s + t.amount, 0)
@@ -464,18 +540,6 @@ export default function SafeToSpendCard() {
             : `for the next ${daysLeft} day${daysLeft !== 1 ? 's' : ''} · ₹${todaySpent.toLocaleString('en-IN')} spent today`
           }
         </div>
-        {carryForward > 0 && prevMonth && (
-          <div style={{
-            marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 5,
-            fontSize: 11.5, fontWeight: 600,
-            color: 'rgba(255,255,255,0.8)',
-            background: 'rgba(255,255,255,0.14)',
-            border: '1px solid rgba(255,255,255,0.22)',
-            borderRadius: 7, padding: '3px 9px',
-          }}>
-            ↩ {formatCurrencyFull(carryForward)} carried from {getMonthLabel(prevMonth)}
-          </div>
-        )}
         {!isConfigured && (
           <button type="button" onClick={openEdit}
             style={{
@@ -492,13 +556,139 @@ export default function SafeToSpendCard() {
       {/* ── Divider ── */}
       <div style={{ height: 1, background: 'rgba(255,255,255,0.18)' }} />
 
-      {/* ── Week bars ── */}
-      <HeroWeekBars
-        data={dailySpend}
-        weekTotal={weekTotal}
-        weeklyBudget={weeklyBudget}
-        todayIdx={todayMondayIdx}
-      />
+      {/* ── Weekly section ── */}
+      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {/* Header: label + week nav (left), on-track pill + income toggle (right) */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <span style={{
+              fontSize: 10.5, fontWeight: 800, letterSpacing: '.1em',
+              textTransform: 'uppercase', color: 'rgba(255,255,255,0.65)',
+            }}>
+              This week
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4 }}>
+              <button
+                onClick={() => setWeekOffset(o => o - 1)}
+                aria-label="Previous week"
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', color: 'rgba(255,255,255,0.7)' }}
+              >
+                <ChevronLeft size={14} strokeWidth={2.5} />
+              </button>
+              <span style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.7)', minWidth: 92, textAlign: 'center' }}>
+                {format(weekStart, 'MMM d')} – {format(weekEnd, 'MMM d')}
+              </span>
+              <button
+                onClick={() => setWeekOffset(o => o + 1)}
+                aria-label="Next week"
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 2, display: 'flex', alignItems: 'center', color: 'rgba(255,255,255,0.7)' }}
+              >
+                <ChevronRight size={14} strokeWidth={2.5} />
+              </button>
+              {weekOffset !== 0 && (
+                <button
+                  onClick={() => setWeekOffset(0)}
+                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '2px 6px', fontSize: 10.5, fontWeight: 700, color: '#fff' }}
+                >
+                  Today
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+            {weeklyBudget > 0 && (
+              <span style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '3px 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 700,
+                background: 'rgba(255,255,255,0.18)', color: '#fff',
+                border: '1px solid rgba(255,255,255,0.28)',
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: weekOver ? 'rgba(255,180,100,1)' : '#fff', flexShrink: 0, display: 'inline-block' }} />
+                {weekOver ? `${formatCurrencyFull(weekTotal - weeklyBudget)} over` : 'On track'}
+              </span>
+            )}
+            <button
+              onClick={() => setShowIncome(s => !s)}
+              aria-pressed={showIncome}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, border: 'none', cursor: 'pointer',
+                background: 'transparent', padding: 0,
+              }}
+            >
+              <span style={{ fontSize: 10.5, fontWeight: 600, color: showIncome ? '#fff' : 'rgba(255,255,255,0.55)' }}>
+                Income
+              </span>
+              <span style={{
+                width: 26, height: 15, borderRadius: 999, position: 'relative', flexShrink: 0,
+                background: showIncome ? 'rgba(120,255,190,0.55)' : 'rgba(255,255,255,0.18)',
+                border: '1px solid rgba(255,255,255,0.28)',
+                transition: 'background .15s',
+              }}>
+                <span style={{
+                  position: 'absolute', top: 1, left: showIncome ? 12 : 1,
+                  width: 11, height: 11, borderRadius: 999, background: '#fff',
+                  transition: 'left .15s',
+                }} />
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Amount row */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: '#fff', fontFamily: "'Geist Mono', monospace" }}>
+              {formatCurrencyFull(weekTotal)}
+            </div>
+            {showIncome && weekIncomeTotal > 0 && (
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(120,255,190,0.9)' }}>
+                +{formatCurrencyFull(weekIncomeTotal)}
+              </div>
+            )}
+          </div>
+          {weeklyBudget > 0 && (
+            <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)' }}>
+              of {formatCurrencyFull(weeklyBudget)}
+            </div>
+          )}
+        </div>
+
+        {/* Bars */}
+        <HeroWeekBars
+          expenseData={dailySpend}
+          incomeData={dailyIncome}
+          showIncome={showIncome}
+          weeklyBudget={weeklyBudget}
+          todayIdx={todayMondayIdx}
+          weekStart={weekStart}
+        />
+
+        {/* Budget progress strip / set-budget CTA */}
+        {weeklyBudget > 0 ? (
+          <div>
+            <div style={{ height: 4, background: 'rgba(255,255,255,0.18)', borderRadius: 999, overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: 999,
+                width: `${Math.min((weekTotal / weeklyBudget) * 100, 100)}%`,
+                background: weekOver ? 'rgba(255,140,120,0.9)' : 'rgba(255,255,255,0.85)',
+                transition: 'width .5s cubic-bezier(.22,1,.36,1)',
+              }} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 11, color: 'rgba(255,255,255,0.55)' }}>
+              <span>₹0</span>
+              <Link href="/transactions" style={{ color: '#fff', fontWeight: 600, textDecoration: 'none', fontSize: 11 }}>
+                View all →
+              </Link>
+              <span>{formatCurrencyFull(weeklyBudget)} budget</span>
+            </div>
+          </div>
+        ) : (
+          <Link href="/settings" style={{ fontSize: 12.5, color: '#fff', textDecoration: 'none', fontWeight: 600 }}>
+            Set a weekly budget in Settings →
+          </Link>
+        )}
+      </div>
     </div>
   )
 }
