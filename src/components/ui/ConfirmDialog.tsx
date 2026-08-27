@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, CheckCircle } from 'lucide-react'
 
 interface Props {
   open: boolean
@@ -11,10 +11,12 @@ interface Props {
   confirmLabel?: string
   onConfirm: () => void
   onClose: () => void
-  extraAction?: { label: string; onAction: () => void }
+  extraAction?: { label: string; onAction: () => void; danger?: boolean }
+  /** 'danger' (default) = red alert styling; 'positive' = green confirm styling. */
+  tone?: 'danger' | 'positive'
 }
 
-export default function ConfirmDialog({ open, title, message, confirmLabel = 'Delete', onConfirm, onClose, extraAction }: Props) {
+export default function ConfirmDialog({ open, title, message, confirmLabel = 'Delete', onConfirm, onClose, extraAction, tone = 'danger' }: Props) {
   const confirmRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
@@ -31,6 +33,12 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = 'De
   }, [open, onClose])
 
   if (!open || typeof document === 'undefined') return null
+
+  const positive = tone === 'positive'
+  const Icon = positive ? CheckCircle : AlertTriangle
+  const iconBg = positive ? 'var(--good-soft)' : 'var(--bad-soft)'
+  const iconInk = positive ? 'var(--good-ink)' : 'var(--bad-ink)'
+  const confirmClass = positive ? 'btn-brand' : 'btn-danger'
 
   return createPortal(
     <div
@@ -53,10 +61,10 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = 'De
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
           <div style={{
             width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-            background: 'var(--bad-soft)',
+            background: iconBg,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <AlertTriangle size={16} style={{ color: 'var(--bad-ink)' }} />
+            <Icon size={16} style={{ color: iconInk }} />
           </div>
           <div style={{ paddingTop: 4 }}>
             {title && <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>{title}</p>}
@@ -67,8 +75,8 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = 'De
           <button className="btn" onClick={onClose}>Cancel</button>
           {extraAction && (
             <button
-              className="btn-danger"
-              style={{ opacity: 0.75 }}
+              className={extraAction.danger ? 'btn-danger' : 'btn'}
+              style={extraAction.danger ? { opacity: 0.75 } : undefined}
               onClick={() => { extraAction.onAction(); onClose() }}
             >
               {extraAction.label}
@@ -76,7 +84,7 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = 'De
           )}
           <button
             ref={confirmRef}
-            className="btn-danger"
+            className={confirmClass}
             onClick={() => { onConfirm(); onClose() }}
           >
             {confirmLabel}

@@ -405,7 +405,14 @@ export default function BorrowingsList({ onEdit }: Props) {
   const { user } = useAuth()
   const { borrowings } = useAppStore()
   const refresh = useRefreshData()
-  const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
+  const [confirm, setConfirm] = useState<{
+    title?: string
+    message: string
+    confirmLabel?: string
+    tone?: 'danger' | 'positive'
+    onConfirm: () => void
+    extraAction?: { label: string; onAction: () => void; danger?: boolean }
+  } | null>(null)
   const [filter, setFilter] = useState<FilterKind>('all')
 
   // ── Aggregate totals ─────────────────────────────────────────────────────────
@@ -475,6 +482,27 @@ export default function BorrowingsList({ onEdit }: Props) {
           toast.success('Deleted')
         } catch { toast.error('Failed') }
       },
+    })
+  }
+
+  function promptMarkRepaid(b: Borrowing) {
+    const outstanding = b.amount - b.repaidAmount
+    const isLent = b.type === 'lent'
+    const who = b.person
+    const message = isLent
+      ? `Close this record with ${who}? This treats the full ${formatCurrencyFull(b.amount)} as paid back to you and logs a ${formatCurrencyFull(outstanding)} repayment received today.`
+      : `Close this record with ${who}? This treats the full ${formatCurrencyFull(b.amount)} as settled and logs a ${formatCurrencyFull(outstanding)} repayment made today.`
+    setConfirm({
+      title: 'Mark as repaid',
+      message: outstanding > 0
+        ? `${message} To record a different amount, edit instead.`
+        : `Close this record with ${who}? The full amount is already accounted for, so no new transaction will be logged.`,
+      confirmLabel: 'Close record',
+      tone: 'positive',
+      onConfirm: () => { void markRepaid(b) },
+      extraAction: outstanding > 0
+        ? { label: 'Edit instead', onAction: () => onEdit(b) }
+        : undefined,
     })
   }
 
@@ -618,7 +646,7 @@ export default function BorrowingsList({ onEdit }: Props) {
               group={group}
               onEdit={onEdit}
               onDelete={handleDelete}
-              onMarkRepaid={markRepaid}
+              onMarkRepaid={promptMarkRepaid}
               defaultOpen={personGroups.length === 1}
             />
           ))}
@@ -626,7 +654,16 @@ export default function BorrowingsList({ onEdit }: Props) {
       )}
 
       {confirm && (
-        <ConfirmDialog open message={confirm.message} onConfirm={confirm.onConfirm} onClose={() => setConfirm(null)} />
+        <ConfirmDialog
+          open
+          title={confirm.title}
+          message={confirm.message}
+          confirmLabel={confirm.confirmLabel}
+          tone={confirm.tone}
+          extraAction={confirm.extraAction}
+          onConfirm={confirm.onConfirm}
+          onClose={() => setConfirm(null)}
+        />
       )}
     </div>
   )

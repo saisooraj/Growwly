@@ -362,6 +362,7 @@ export default function ContactsModal({ open, onClose }: Props) {
           extraAction={deleteTarget.hasBorrowings ? {
             label: 'Contact + all records',
             onAction: () => handleDelete(deleteTarget.contact, true),
+            danger: true,
           } : undefined}
         />
       )}
