@@ -30,17 +30,22 @@ export default function SavingsBreakdown() {
 
   const byVehicle = useMemo(() => {
     const monthTxs = getTransactionsForMonth(transactions, selectedMonth, settings)
-    const out: Record<string, number> = {}
+    const rows: Record<string, { contributed: number; withdrawn: number }> = {}
     for (const t of monthTxs) {
       if (!isSavingsTransfer(t)) continue
       const { label, dir } = getTransferDisplay(t)
-      if (dir !== 'out') continue
-      out[label] = (out[label] ?? 0) + t.amount
+      const row = rows[label] ?? { contributed: 0, withdrawn: 0 }
+      if (dir === 'out') row.contributed += t.amount
+      else row.withdrawn += t.amount
+      rows[label] = row
     }
-    return Object.entries(out).sort((a, b) => b[1] - a[1])
+    return Object.entries(rows)
+      .map(([label, v]) => ({ label, ...v, net: v.contributed - v.withdrawn }))
+      .filter(v => v.contributed > 0 || v.withdrawn > 0)
+      .sort((a, b) => Math.abs(b.net) - Math.abs(a.net))
   }, [transactions, selectedMonth, settings])
 
-  const maxVehicle = Math.max(...byVehicle.map(([, v]) => v), 1)
+  const maxVehicle = Math.max(...byVehicle.map(v => Math.abs(v.net)), 1)
   const spentPct = summary.totalIncome > 0
     ? Math.min(100, (summary.totalExpenses / summary.totalIncome) * 100)
     : 0
@@ -124,20 +129,30 @@ export default function SavingsBreakdown() {
             </Link>
           </div>
         ) : (
-          byVehicle.map(([vehicle, amount]) => (
-            <div key={vehicle} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
-                <span style={{ color: 'var(--text-2)', fontWeight: 500 }}>{vehicle}</span>
-                <span style={{ color: 'var(--text)', fontWeight: 700 }}>{fmt(amount)}</span>
+          byVehicle.map(({ label, contributed, withdrawn, net }) => {
+            const negative = net < 0
+            return (
+              <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                  <span style={{ color: 'var(--text-2)', fontWeight: 500 }}>{label}</span>
+                  <span style={{ color: negative ? 'var(--warn-ink)' : 'var(--text)', fontWeight: 700 }}>
+                    {masked ? MASK : `${negative ? '−' : ''}${formatCurrency(Math.abs(net))}`}
+                  </span>
+                </div>
+                {withdrawn > 0 && (
+                  <div style={{ fontSize: 10.5, color: 'var(--text-4)' }}>
+                    {fmt(contributed)} in · {fmt(withdrawn)} out
+                  </div>
+                )}
+                <div style={{ height: 6, borderRadius: 999, background: 'var(--surface-2)', overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${(Math.abs(net) / maxVehicle) * 100}%`, height: '100%',
+                    background: negative ? 'var(--warn)' : 'var(--brand)', borderRadius: 999,
+                  }} />
+                </div>
               </div>
-              <div style={{ height: 6, borderRadius: 999, background: 'var(--surface-2)', overflow: 'hidden' }}>
-                <div style={{
-                  width: `${(amount / maxVehicle) * 100}%`, height: '100%',
-                  background: 'var(--brand)', borderRadius: 999,
-                }} />
-              </div>
-            </div>
-          ))
+            )
+          })
         )}
       </div>
     </div>
