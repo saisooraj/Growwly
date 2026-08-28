@@ -54,15 +54,17 @@ function HealthRing({ score, label, size = 64, thickness = 7 }: { score: number;
 function SavingsSparkline() {
   const { transactions, settings } = useAppStore()
 
-  // Rate = cash actually moved into savings vehicles (EF, SIP, etc.) as a % of
-  // income — the standard "savings rate" definition. cashNet-based calcs treat a
-  // savings contribution as an outflow just like an expense, which makes the
-  // number go DOWN when you save more; savingsContributed is the field that
-  // exists specifically to track this, so use it directly.
+  // Rate = cash actually moved into savings vehicles (EF, SIP, etc.), net of
+  // anything withdrawn back to cash, as a % of income — the standard "savings
+  // rate" definition. cashNet-based calcs treat a savings contribution as an
+  // outflow just like an expense, which makes the number go DOWN when you save
+  // more; savingsContributed/Withdrawn are the fields that exist specifically to
+  // track this, so use them directly.
   const months = useMemo(() => {
     return getLast6Months().map(m => {
       const summary = buildMonthlySummary(transactions, m, settings)
-      const rate = summary.totalIncome > 0 ? (summary.savingsContributed / summary.totalIncome) * 100 : 0
+      const netSaved = summary.savingsContributed - summary.savingsWithdrawn
+      const rate = summary.totalIncome > 0 ? Math.max(0, netSaved / summary.totalIncome) * 100 : 0
       return { month: m, rate, label: format(parseISO(`${m}-01`), 'MMM') }
     })
   }, [transactions, settings])

@@ -232,11 +232,13 @@ export default function SpendingRuleCard() {
       byCategory[cat] = { amt, bucket: b }
     }
 
-    // Real savings movements (contributions to vehicles) count toward the
-    // Savings bucket — they're not expense categories anymore.
-    if (summary.savingsContributed > 0) {
-      byBucket.savings += summary.savingsContributed
-      byCategory[SAVINGS_TXN_LABEL] = { amt: summary.savingsContributed, bucket: 'savings' }
+    // Real savings movements count toward the Savings bucket — net of anything
+    // withdrawn back to cash this cycle, so a month where you dipped into savings
+    // doesn't show an inflated allocation.
+    const savingsNet = summary.savingsContributed - summary.savingsWithdrawn
+    if (savingsNet > 0) {
+      byBucket.savings += savingsNet
+      byCategory[SAVINGS_TXN_LABEL] = { amt: savingsNet, bucket: 'savings' }
     }
 
     return { byBucket, byCategory, totalIncome: income }

@@ -127,7 +127,8 @@ function Row({ label, sub, value, color, indent = false }: {
 function CashSection({ cash }: { cash: FinancialPulse['cashPosition'] }) {
   const positive  = cash.surplusNet >= 0
   const totalIn   = cash.monthIncome + cash.carryForward
-  const totalOut  = cash.monthExpenses + cash.savingsContributed + cash.lentOutstanding + cash.repaymentPaid + cash.upcomingTotal
+  const savingsNet = cash.savingsContributed - cash.savingsWithdrawn
+  const totalOut  = cash.monthExpenses + savingsNet + cash.lentOutstanding + cash.repaymentPaid + cash.upcomingTotal
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -157,8 +158,16 @@ function CashSection({ cash }: { cash: FinancialPulse['cashPosition'] }) {
       </div>
       {/* Out sub-rows */}
       <Row label="spent" value={`− ${formatCurrencyFull(cash.monthExpenses)}`} color="var(--bad-ink)" indent />
-      {cash.savingsContributed > 0 && (
-        <Row label="→ savings" value={`− ${formatCurrencyFull(cash.savingsContributed)}`} color="var(--brand-ink)" indent />
+      {savingsNet > 0 && (
+        <Row
+          label="→ savings"
+          sub={cash.savingsWithdrawn > 0
+            ? `${formatCurrencyFull(cash.savingsContributed)} in − ${formatCurrencyFull(cash.savingsWithdrawn)} out`
+            : undefined}
+          value={`− ${formatCurrencyFull(savingsNet)}`}
+          color="var(--brand-ink)"
+          indent
+        />
       )}
       {cash.lentOutstanding > 0 && (
         <Row label="→ lent out" value={`− ${formatCurrencyFull(cash.lentOutstanding)}`} color="var(--info-ink)" indent />
@@ -316,10 +325,10 @@ function AllocRow({ label, reason, amount, type, freeCash, isEditing, editVal, o
 
 type EditTarget = { type: 'orig'; idx: number; val: string } | { type: 'custom'; idx: number; val: string }
 
-function AllocationsSection({ allocations, freeCash, savingsContributed, upcomingIncome }: {
+function AllocationsSection({ allocations, freeCash, savingsNet, upcomingIncome }: {
   allocations: FinancialPulse['allocations']
   freeCash: number
-  savingsContributed: number
+  savingsNet: number
   upcomingIncome: number
 }) {
   const [skipped, setSkipped]           = useState<Set<number>>(new Set())
@@ -387,9 +396,9 @@ function AllocationsSection({ allocations, freeCash, savingsContributed, upcomin
         <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
           Suggested split of {formatCurrencyFull(freeCash)}
         </div>
-        {savingsContributed > 0 && (
+        {savingsNet > 0 && (
           <div style={{ fontSize: 11, color: 'var(--brand-ink)' }}>
-            ✓ {formatCurrencyFull(savingsContributed)} already saved this month · add more anytime
+            ✓ {formatCurrencyFull(savingsNet)} saved this month (net) · add more anytime
           </div>
         )}
       </div>
@@ -869,7 +878,7 @@ export default function PulseSheet({ open, onClose, pulse }: Props) {
                 <AllocationsSection
                   allocations={pulse.allocations}
                   freeCash={pulse.cashPosition.freeCash}
-                  savingsContributed={pulse.cashPosition.savingsContributed}
+                  savingsNet={pulse.cashPosition.savingsContributed - pulse.cashPosition.savingsWithdrawn}
                   upcomingIncome={pulse.cashPosition.upcomingIncome}
                 />
               </div>

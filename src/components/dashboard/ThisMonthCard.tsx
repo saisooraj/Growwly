@@ -145,8 +145,15 @@ export default function ThisMonthCard() {
             <span style={{ fontWeight: 600, color: 'var(--text-3)' }}>{formatCurrencyFull(summary.totalExpenses)}</span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, paddingLeft: 14 }}>
-            <span style={{ color: 'var(--text-4)' }}>→ savings</span>
-            <span style={{ fontWeight: 600, color: 'var(--brand-ink)' }}>{formatCurrencyFull(summary.savingsContributed)}</span>
+            <span style={{ color: 'var(--text-4)' }}>
+              → savings
+              {summary.savingsWithdrawn > 0 && (
+                <span style={{ marginLeft: 4 }}>
+                  ({formatCurrencyFull(summary.savingsContributed)} in − {formatCurrencyFull(summary.savingsWithdrawn)} out)
+                </span>
+              )}
+            </span>
+            <span style={{ fontWeight: 600, color: 'var(--brand-ink)' }}>{formatCurrencyFull(summary.savingsContributed - summary.savingsWithdrawn)}</span>
           </div>
         </>)}
       </div>

@@ -91,6 +91,8 @@ function TransactionsInner() {
   const monthTxs = getTransactionsForMonth(transactions, selectedMonth, settings)
   // True cash leaving the account: category spend + money still out on new loans this cycle + borrowed money repaid
   const moneyOutTotal = summary.totalExpenses + summary.lentOutstanding + summary.repaymentPaid
+  // Net cash parked in savings this cycle (contributions minus anything pulled back out)
+  const savingsNet = summary.savingsContributed - summary.savingsWithdrawn
 
   const { carryForward, prevMonthLabel } = useMemo(() => {
     const months  = getLast6Months()
@@ -301,7 +303,12 @@ function TransactionsInner() {
               )}
               {!mobileMasked && summary.savingsContributed > 0 && (
                 <div style={{ fontSize: 10, color: 'var(--brand-ink)', fontWeight: 600, marginTop: 3 }}>
-                  + {formatCurrencyFull(summary.savingsContributed)} saved
+                  + {formatCurrencyFull(savingsNet)} saved
+                  {summary.savingsWithdrawn > 0 && (
+                    <span style={{ color: 'var(--text-4)', fontWeight: 500 }}>
+                      {' '}({formatCurrencyFull(summary.savingsContributed)} in − {formatCurrencyFull(summary.savingsWithdrawn)} out)
+                    </span>
+                  )}
                 </div>
               )}
             </div>
@@ -686,14 +693,22 @@ function TransactionsInner() {
                   )}
                   {showExpenses && summary.savingsContributed > 0 && (
                     <div style={{
-                      marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
+                      marginTop: 6, display: 'inline-flex',
+                      alignItems: summary.savingsWithdrawn > 0 ? 'flex-start' : 'center', gap: 5,
                       fontSize: 11, fontWeight: 600, color: 'var(--brand-ink)',
                       background: 'var(--brand-soft)',
                       border: '1px solid color-mix(in oklch, var(--brand) 20%, transparent)',
-                      borderRadius: 6, padding: '2px 8px',
+                      borderRadius: 6, padding: '3px 8px', maxWidth: '100%',
                     }}>
-                      <PiggyBank size={10} />
-                      {formatCurrencyFull(summary.savingsContributed)} → savings
+                      <PiggyBank size={10} style={{ flexShrink: 0, marginTop: summary.savingsWithdrawn > 0 ? 2 : 0 }} />
+                      <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                        <span>{formatCurrencyFull(savingsNet)} → savings</span>
+                        {summary.savingsWithdrawn > 0 && (
+                          <span style={{ fontWeight: 500, color: 'color-mix(in oklch, var(--brand-ink) 60%, transparent)' }}>
+                            {formatCurrencyFull(summary.savingsContributed)} in − {formatCurrencyFull(summary.savingsWithdrawn)} out
+                          </span>
+                        )}
+                      </span>
                     </div>
                   )}
                 </div>

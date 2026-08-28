@@ -558,7 +558,7 @@ function FICalculator({ masked }: { masked: boolean }) {
 
   const { monthlySavings, fiCorpus, currentNetWorth, yearsToFI, savingsRate, progressPct } = useMemo(() => {
     const summary = buildMonthlySummary(transactions, selectedMonth, settings)
-    const monthlySavings  = summary.savingsContributed
+    const monthlySavings  = Math.max(0, summary.savingsContributed - summary.savingsWithdrawn)
     const fiCorpus        = summary.totalExpenses * 12 * 25
     const savingsRate     = summary.totalIncome > 0 ? (monthlySavings / summary.totalIncome) * 100 : 0
 

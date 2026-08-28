@@ -302,6 +302,7 @@ export interface PulseCashPosition {
   borrowedIncome: number  // portion of monthIncome that is borrowed
   monthExpenses: number
   savingsContributed: number
+  savingsWithdrawn: number   // cash pulled back out of savings this cycle
   totalLent: number
   lentOutstanding: number // portion of this cycle's new loans still unpaid (nets out same-cycle repayments)
   repaymentPaid: number   // borrowed money you paid back this month (real cash outflow)

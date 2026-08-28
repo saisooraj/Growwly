@@ -361,6 +361,7 @@ export function computePulse(
     borrowedIncome:     curSummary.totalBorrowed,
     monthExpenses:      curSummary.totalExpenses,
     savingsContributed: curSummary.savingsContributed,
+    savingsWithdrawn:   curSummary.savingsWithdrawn,
     totalLent:          curSummary.totalLent,
     lentOutstanding:    curSummary.lentOutstanding,
     repaymentPaid:      curSummary.repaymentPaid,
