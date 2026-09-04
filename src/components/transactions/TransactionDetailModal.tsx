@@ -136,6 +136,31 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
           }
           setBorrowings(updates)
         }
+
+        // Case 4: settled expense deleted → give the debt back to the "lent" records it paid down
+        if (tx.settledBorrowingId || tx.settledPerson) {
+          const { borrowings, setBorrowings } = useAppStore.getState()
+          const plan: Record<string, number> =
+            tx.settledAllocation && Object.keys(tx.settledAllocation).length
+              ? tx.settledAllocation
+              : tx.settledBorrowingId
+                ? { [tx.settledBorrowingId]: tx.settledAmount ?? tx.amount }
+                : {}
+          const updates = [...borrowings]
+          for (const [id, amt] of Object.entries(plan)) {
+            const b = borrowings.find(x => x.id === id)
+            if (!b || amt <= 0) continue
+            const newRepaid = Math.max(0, b.repaidAmount - amt)
+            const updated = {
+              repaidAmount: newRepaid,
+              status: (newRepaid <= 0 ? 'pending' : newRepaid >= b.amount ? 'repaid' : 'partial') as 'pending' | 'partial' | 'repaid',
+            }
+            await updateBorrowing(id, updated)
+            const idx = updates.findIndex(x => x.id === id)
+            if (idx !== -1) updates[idx] = { ...updates[idx], ...updated }
+          }
+          setBorrowings(updates)
+        }
       }
     } catch {
       toast.error('Failed to delete')

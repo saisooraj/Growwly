@@ -79,7 +79,8 @@ function RecordRow({ b, onEdit, onDelete, onMarkRepaid }: {
   const linkedTxs = useMemo(() =>
     transactions.filter(t =>
       (t.borrowingId === b.id && t.transferKind !== 'loan_given') ||
-      t.settledBorrowingId === b.id
+      t.settledBorrowingId === b.id ||
+      (t.settledAllocation ? t.settledAllocation[b.id] != null : false)
     ),
     [transactions, b.id]
   )
@@ -218,26 +219,31 @@ function RecordRow({ b, onEdit, onDelete, onMarkRepaid }: {
           <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-4)', letterSpacing: '0.06em', marginBottom: 2 }}>
             SETTLEMENTS
           </div>
-          {linkedTxs.map(t => (
+          {linkedTxs.map(t => {
+            const isSettlement = !!(t.settledBorrowingId || t.settledPerson || t.settledAllocation)
+            const shownAmount = isSettlement
+              ? (t.settledAllocation?.[b.id] ?? t.settledAmount ?? t.amount)
+              : t.amount
+            return (
             <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 1, minWidth: 0 }}>
-                {t.settledBorrowingId && (
+                {isSettlement && (
                   <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: 'var(--warn-soft)', color: 'var(--warn-ink)', flexShrink: 0 }}>
                     expense
                   </span>
                 )}
                 <span style={{ fontSize: 11.5, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {t.settledBorrowingId
+                  {isSettlement
                     ? (t.category ? `${t.category}${t.notes ? ` · ${t.notes}` : ''}` : t.notes || 'Expense')
                     : (t.notes || (b.type === 'lent' ? 'Repayment received' : 'Repayment made'))
                   }
                 </span>
               </div>
               <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--good-ink)', flexShrink: 0 }}>
-                {formatCurrencyFull(t.amount)} · {format(parseISO(t.date), 'dd MMM')}
+                {formatCurrencyFull(shownAmount)} · {format(parseISO(t.date), 'dd MMM')}
               </span>
             </div>
-          ))}
+          )})}
         </div>
       )}
     </div>

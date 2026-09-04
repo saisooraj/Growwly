@@ -109,9 +109,8 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   // Allocation plan: borrowingId → amount to apply (editable, defaults to greedy)
   const [allocation, setAllocation] = useState<Record<string, number>>({})
 
-  // Debt settlement state (expense only)
-  const [settledBorrowingId, setSettledBorrowingId] = useState(editTx?.settledBorrowingId ?? '')
-  const [settledPerson, setSettledPerson]           = useState(editTx?.settledPerson ?? '')
+  // Debt settlement state (expense only) — settles against a person's *total* "lent" balance
+  const [settledPerson, setSettledPerson] = useState(editTx?.settledPerson ?? '')
 
   // Refund state (expense edit only — logging a refund against this expense)
   const [refundAmount, setRefundAmount] = useState('')
@@ -132,16 +131,65 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     ...borrowings.map(b => b.person),
   ])).sort()
 
-  // Borrowings the user can settle an expense against (they lent money, person owes them)
-  const settleableBorrowings = useMemo(() =>
-    borrowings
-      .filter(b => b.type === 'lent' && b.status !== 'repaid')
-      .sort((a, b) => a.person.localeCompare(b.person) || a.date.localeCompare(b.date)),
-    [borrowings]
+  // When editing a settled expense, the allocation it already applied — reversed before
+  // recomputing so outstanding balances read as they were *before* this expense.
+  const editSettlePlan = useMemo<Record<string, number>>(() => {
+    if (!editTx) return {}
+    if (editTx.settledAllocation && Object.keys(editTx.settledAllocation).length) return editTx.settledAllocation
+    if (editTx.settledBorrowingId) return { [editTx.settledBorrowingId]: editTx.settledAmount ?? editTx.amount }
+    return {}
+  }, [editTx])
+
+  // People the user can settle an expense against (they lent money, person owes them),
+  // with the total still outstanding across all of that person's "lent" records.
+  const settleablePeople = useMemo(() => {
+    const byPerson: Record<string, number> = {}
+    for (const b of borrowings) {
+      if (b.type !== 'lent') continue
+      const effRepaid = Math.max(0, b.repaidAmount - (editSettlePlan[b.id] ?? 0))
+      const outstanding = b.amount - effRepaid
+      if (outstanding > 0) byPerson[b.person] = (byPerson[b.person] ?? 0) + outstanding
+    }
+    return Object.entries(byPerson)
+      .map(([person, outstanding]) => ({ person, outstanding }))
+      .sort((a, b) => a.person.localeCompare(b.person))
+  }, [borrowings, editSettlePlan])
+
+  // That person's outstanding "lent" records, oldest first, with this expense's own
+  // prior contribution reversed so a re-save doesn't under-allocate.
+  const settleRecords = useMemo(() => {
+    if (!settledPerson) return []
+    return borrowings
+      .filter(b => b.type === 'lent' && b.person.toLowerCase() === settledPerson.toLowerCase())
+      .map(b => ({ ...b, repaidAmount: Math.max(0, b.repaidAmount - (editSettlePlan[b.id] ?? 0)) }))
+      .filter(b => b.amount - b.repaidAmount > 0)
+      .sort((a, b) => a.date.localeCompare(b.date))
+  }, [borrowings, settledPerson, editSettlePlan])
+
+  const settleOutstanding = useMemo(
+    () => settleRecords.reduce((s, b) => s + (b.amount - b.repaidAmount), 0),
+    [settleRecords]
   )
-  const selectedSettlement = settledBorrowingId
-    ? borrowings.find(b => b.id === settledBorrowingId)
-    : null
+
+  // Greedy allocation of `budget` across those records (oldest first).
+  const buildSettlePlan = useCallback((budget: number) => {
+    let remaining = budget
+    const plan: Record<string, number> = {}
+    for (const b of settleRecords) {
+      if (remaining <= 0) break
+      const apply = Math.min(b.amount - b.repaidAmount, remaining)
+      if (apply > 0) { plan[b.id] = apply; remaining -= apply }
+    }
+    return plan
+  }, [settleRecords])
+
+  // Preview plan for the entered amount (submit recomputes against the post-split share).
+  const settlePlan = useMemo(() => buildSettlePlan(Number(amount) || 0), [buildSettlePlan, amount])
+
+  const settleApplied = useMemo(
+    () => Object.values(settlePlan).reduce((s, v) => s + v, 0),
+    [settlePlan]
+  )
 
   // Refund editing: this modal instance is editing a refund transaction itself
   const isRefundEdit = editTx?.type === 'refund'
@@ -219,7 +267,6 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       setLoanPerson('')
       setPersonDropdownOpen(false)
       setAllocation({})
-      setSettledBorrowingId(editTx?.settledBorrowingId ?? '')
       setSettledPerson(editTx?.settledPerson ?? '')
       setRefundAmount('')
       setRefundDate(format(new Date(), 'yyyy-MM-dd'))
@@ -378,6 +425,13 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           })()
         : Number(amount)
 
+      // Settlement allocation for this save — capped at the amount that actually
+      // leaves the user's pocket (the post-split share).
+      const finalSettlePlan = txType === 'expense' && settledPerson
+        ? buildSettlePlan(Math.min(Number(amount) || 0, effectiveAmount))
+        : {}
+      const finalSettleApplied = Object.values(finalSettlePlan).reduce((s, v) => s + v, 0)
+
       const payload: Partial<Transaction> = {
         type: txType,
         amount: effectiveAmount,
@@ -393,9 +447,16 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
             : { category }),
         ...(projectId && (txType === 'expense' || activeTab === 'savings') ? { projectId } : {}),
         ...(txType === 'transfer' && loanPerson.trim() ? { loanPerson: loanPerson.trim() } : {}),
-        ...(txType === 'expense' && settledBorrowingId
-          ? { settledBorrowingId, settledPerson }
-          : txType === 'expense' ? { settledBorrowingId: '', settledPerson: '' } : {}),
+        ...(txType === 'expense' && settledPerson && finalSettleApplied > 0
+          ? {
+              settledPerson,
+              settledBorrowingId: Object.keys(finalSettlePlan)[0] ?? '',
+              settledAllocation: finalSettlePlan,
+              settledAmount: finalSettleApplied,
+            }
+          : txType === 'expense'
+            ? { settledBorrowingId: '', settledPerson: '', settledAllocation: {}, settledAmount: 0 }
+            : {}),
         ...(!editTx && initialPrefill?.source ? { source: initialPrefill.source } : {}),
       }
 
@@ -426,33 +487,21 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
         } else {
           await updateTransaction(editTx.id, payload)
 
-          // Reconcile settlement changes on edit
+          // Reconcile settlement changes on edit: net the old allocation out and the
+          // new one in, per borrowing record, in a single pass.
           if (txType === 'expense') {
-            const oldSettledId = editTx.settledBorrowingId ?? ''
-            if (oldSettledId !== settledBorrowingId || (oldSettledId && editTx.amount !== effectiveAmount)) {
-              // Reverse old settlement
-              if (oldSettledId) {
-                const oldB = borrowings.find(x => x.id === oldSettledId)
-                if (oldB) {
-                  const reversed = Math.max(0, oldB.repaidAmount - editTx.amount)
-                  await updateBorrowing(oldSettledId, {
-                    repaidAmount: reversed,
-                    status: reversed === 0 ? 'pending' : reversed < oldB.amount ? 'partial' : 'repaid',
-                  })
-                }
-              }
-              // Apply new settlement
-              if (settledBorrowingId) {
-                const newB = borrowings.find(x => x.id === settledBorrowingId)
-                if (newB) {
-                  const base = oldSettledId === settledBorrowingId ? Math.max(0, newB.repaidAmount - editTx.amount) : newB.repaidAmount
-                  const newRepaid = Math.min(base + effectiveAmount, newB.amount)
-                  await updateBorrowing(settledBorrowingId, {
-                    repaidAmount: newRepaid,
-                    status: newRepaid >= newB.amount ? 'repaid' : 'partial',
-                  })
-                }
-              }
+            const delta: Record<string, number> = {}
+            for (const [id, amt] of Object.entries(editSettlePlan))    delta[id] = (delta[id] ?? 0) - amt
+            for (const [id, amt] of Object.entries(finalSettlePlan))   delta[id] = (delta[id] ?? 0) + amt
+            for (const [id, d] of Object.entries(delta)) {
+              if (!d) continue
+              const b = borrowings.find(x => x.id === id)
+              if (!b) continue
+              const newRepaid = Math.max(0, Math.min(b.repaidAmount + d, b.amount))
+              await updateBorrowing(id, {
+                repaidAmount: newRepaid,
+                status: newRepaid <= 0 ? 'pending' : newRepaid >= b.amount ? 'repaid' : 'partial',
+              })
             }
           }
 
@@ -539,12 +588,15 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           }
         }
 
-        // ── Debt settlement: reduce the linked borrowing's repaidAmount ──────────
-        if (txType === 'expense' && settledBorrowingId) {
-          const b = borrowings.find(x => x.id === settledBorrowingId)
-          if (b) {
-            const newRepaid = Math.min(b.repaidAmount + effectiveAmount, b.amount)
-            await updateBorrowing(settledBorrowingId, {
+        // ── Debt settlement: spread the amount greedily across the person's ──────
+        //    outstanding "lent" records (oldest first), like a loan repayment.
+        if (txType === 'expense' && settledPerson) {
+          for (const [bId, applyAmt] of Object.entries(finalSettlePlan)) {
+            if (applyAmt <= 0) continue
+            const b = borrowings.find(x => x.id === bId)
+            if (!b) continue
+            const newRepaid = Math.min(b.repaidAmount + applyAmt, b.amount)
+            await updateBorrowing(bId, {
               repaidAmount: newRepaid,
               status: newRepaid >= b.amount ? 'repaid' : 'partial',
             })
@@ -1465,38 +1517,41 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                   </div>
 
                   {/* ── Debt settlement (expense only) ── */}
-                  {activeTab === 'expense' && settleableBorrowings.length > 0 && (
+                  {activeTab === 'expense' && (settleablePeople.length > 0 || settledPerson) && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <label className="label">Settle a debt (optional)</label>
                       <select
                         className="input"
-                        value={settledBorrowingId}
-                        onChange={e => {
-                          const bId = e.target.value
-                          setSettledBorrowingId(bId)
-                          const b = borrowings.find(x => x.id === bId)
-                          setSettledPerson(b?.person ?? '')
-                        }}
+                        value={settledPerson}
+                        onChange={e => setSettledPerson(e.target.value)}
                         style={{ fontSize: 13 }}
                       >
                         <option value="">None — log as regular expense</option>
-                        {settleableBorrowings.map(b => (
-                          <option key={b.id} value={b.id}>
-                            {b.person} · {b.description || 'Loan'} · {formatCurrencyFull(b.amount - b.repaidAmount)} left
+                        {settleablePeople.map(p => (
+                          <option key={p.person} value={p.person}>
+                            {p.person} · {formatCurrencyFull(p.outstanding)} owed to you
                           </option>
                         ))}
+                        {settledPerson && !settleablePeople.some(p => p.person === settledPerson) && (
+                          <option value={settledPerson}>{settledPerson}</option>
+                        )}
                       </select>
-                      {selectedSettlement && Number(amount) > 0 && (
+                      {settledPerson && Number(amount) > 0 && (
                         <div style={{
                           display: 'flex', alignItems: 'center', gap: 10,
                           padding: '10px 12px', borderRadius: 10,
                           background: 'var(--good-soft)', border: '1px solid color-mix(in oklch, var(--good) 25%, transparent)',
                         }}>
                           <div style={{ flex: 1, fontSize: 12, color: 'var(--good-ink)', lineHeight: 1.4 }}>
-                            <strong>{formatCurrencyFull(Math.min(Number(amount), selectedSettlement.amount - selectedSettlement.repaidAmount))}</strong>
-                            {' '}will be deducted from <strong>{selectedSettlement.person}</strong>&apos;s balance
-                            {Number(amount) >= selectedSettlement.amount - selectedSettlement.repaidAmount && (
+                            <strong>{formatCurrencyFull(settleApplied)}</strong>
+                            {' '}will come off <strong>{settledPerson}</strong>&apos;s total balance
+                            {settleApplied >= settleOutstanding && settleOutstanding > 0 && (
                               <span style={{ marginLeft: 6, fontWeight: 700, color: 'var(--good-ink)' }}>· Fully settled ✓</span>
+                            )}
+                            {Number(amount) > settleApplied && (
+                              <span style={{ marginLeft: 6, color: 'var(--text-3)' }}>
+                                · remaining {formatCurrencyFull(Number(amount) - settleApplied)} logged as a regular expense
+                              </span>
                             )}
                           </div>
                         </div>

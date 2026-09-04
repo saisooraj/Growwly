@@ -30,8 +30,10 @@ export interface Transaction {
   savingsVehicle?: string  // for savings transfers: which vehicle (Emergency Fund, SIP, Stocks…)
   borrowingId?: string       // optional link to a single Borrowing record
   loanPerson?: string        // person name for loan transfers (used to reverse greedy allocation on delete)
-  settledBorrowingId?: string // if set, this expense partially or fully offsets a "lent" borrowing
-  settledPerson?: string      // denormalized person name for the settled borrowing
+  settledBorrowingId?: string // primary "lent" borrowing this expense offsets (first record in the allocation; kept for back-links)
+  settledPerson?: string      // person whose total "lent" balance this expense settles against
+  settledAllocation?: Record<string, number> // borrowingId → amount applied, spread greedily across that person's outstanding "lent" records
+  settledAmount?: number      // total actually applied to debt (≤ amount); any remainder is a plain expense
   refundOf?: string           // if set (type 'refund'), the id of the expense this refunds
   source?: 'scan' | 'share-target' // set when created via the bill scanner; absent means manual entry
 }

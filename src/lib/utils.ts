@@ -105,10 +105,11 @@ export function buildMonthlySummary(
     } else {
       totalExpenses += t.amount
       byCategory[t.category] = (byCategory[t.category] ?? 0) + t.amount
-      if (t.settledBorrowingId) {
-        // The debt holder paid for this expense (bank unchanged), so also credit as repayment
-        // received — the two cancel in cashNet, giving a net-zero effect on cashflow
-        repaymentReceived += t.amount
+      if (t.settledBorrowingId || t.settledPerson) {
+        // The debt holder paid for this expense (bank unchanged), so also credit the
+        // portion that settled debt as repayment received — the two cancel in cashNet,
+        // giving a net-zero effect on cashflow. Any remainder stays a plain expense.
+        repaymentReceived += t.settledAmount ?? t.amount
       }
     }
   }
