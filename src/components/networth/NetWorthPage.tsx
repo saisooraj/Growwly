@@ -17,6 +17,7 @@ import toast from 'react-hot-toast'
 import AssetModal from './AssetModal'
 import LiabilityModal from './LiabilityModal'
 import MyAssetsSection from './MyAssetsSection'
+import MutualFundProjection from './MutualFundProjection'
 
 // ── EMI / Loan calculations ────────────────────────────────────────────────────
 
@@ -330,6 +331,9 @@ export default function NetWorthPage() {
         onEdit={a => setAssetModal({ open: true, item: a })}
         onDelete={handleDeleteAsset}
       />
+
+      {/* Mutual fund wealth projection (renders only when MF holdings exist) */}
+      <MutualFundProjection assets={assets} masked={masked} />
 
       {/* Emergency Fund */}
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
