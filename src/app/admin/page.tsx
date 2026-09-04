@@ -122,7 +122,7 @@ export default function AdminOverviewPage() {
 
           {/* Activity row */}
           <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+            display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
             gap: 14, marginBottom: 28,
           }}>
             {[

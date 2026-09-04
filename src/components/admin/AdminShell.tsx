@@ -2,11 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import {
   LayoutDashboard, Users, Activity,
   Flag, ClipboardList, Leaf, LogOut, Shield, ShieldAlert, Megaphone, MessageSquare,
+  Menu, X,
 } from 'lucide-react'
 
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL ?? 'saisoorajpnair@gmail.com'
@@ -29,6 +30,10 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
   const router = useRouter()
   const { user, loading, logout } = useAuth()
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+
+  // Close the mobile drawer whenever the route changes
+  useEffect(() => { setMobileNavOpen(false) }, [pathname])
 
   const handleSignOut = useCallback(async () => {
     // Revoke the HttpOnly session cookie server-side first
@@ -76,13 +81,32 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
+      <style>{ADMIN_SHELL_CSS}</style>
+
+      {/* Mobile drawer backdrop */}
+      {mobileNavOpen && (
+        <div className="gw-admin-backdrop" onClick={() => setMobileNavOpen(false)} />
+      )}
+
       {/* Sidebar */}
-      <aside style={{
-        width: 232, flexShrink: 0, height: '100vh', position: 'sticky', top: 0,
-        background: 'var(--surface)', borderRight: '1px solid var(--border)',
-        display: 'flex', flexDirection: 'column', padding: '18px 12px 16px',
-        gap: 8, overflowY: 'auto',
-      }}>
+      <aside
+        className={`gw-admin-sidebar${mobileNavOpen ? ' open' : ''}`}
+        style={{
+          flexShrink: 0,
+          background: 'var(--surface)', borderRight: '1px solid var(--border)',
+          display: 'flex', flexDirection: 'column', padding: '18px 12px 16px',
+          gap: 8, overflowY: 'auto',
+        }}
+      >
+        {/* Close button — mobile only */}
+        <button
+          className="gw-admin-drawer-close"
+          onClick={() => setMobileNavOpen(false)}
+          aria-label="Close menu"
+        >
+          <X size={18} strokeWidth={2} />
+        </button>
+
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2px 8px 12px' }}>
           <div style={{
@@ -105,6 +129,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
         {/* Back to app */}
         <Link
           href="/"
+          onClick={() => setMobileNavOpen(false)}
           style={{
             display: 'flex', alignItems: 'center', gap: 9,
             padding: '8px 10px', borderRadius: 10, textDecoration: 'none',
@@ -133,6 +158,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
                   textDecoration: 'none', transition: 'background .12s, color .12s',
                   position: 'relative',
                 }}
+                onClick={() => setMobileNavOpen(false)}
                 onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)' }}
                 onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
               >
@@ -190,9 +216,107 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       </aside>
 
       {/* Main content */}
-      <main style={{ flex: 1, minWidth: 0, overflowY: 'auto', minHeight: '100vh' }}>
+      <main className="gw-admin-main" style={{ flex: 1, minWidth: 0, overflowY: 'auto', minHeight: '100vh' }}>
+        {/* Mobile top bar */}
+        <div className="gw-admin-topbar">
+          <button
+            onClick={() => setMobileNavOpen(true)}
+            aria-label="Open menu"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-2)', padding: 6, borderRadius: 8,
+              display: 'flex', alignItems: 'center',
+            }}
+          >
+            <Menu size={20} strokeWidth={2} />
+          </button>
+          <div style={{
+            width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+            background: 'linear-gradient(140deg, var(--bad-2), var(--bad))',
+            color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Shield size={14} strokeWidth={2.2} />
+          </div>
+          <span style={{ fontSize: 14, fontWeight: 800, letterSpacing: '-0.03em', color: 'var(--text)' }}>
+            Admin
+          </span>
+        </div>
         {children}
       </main>
     </div>
   )
 }
+
+const ADMIN_SHELL_CSS = `
+.gw-admin-sidebar {
+  width: 232px;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+}
+.gw-admin-topbar { display: none; }
+.gw-admin-backdrop { display: none; }
+.gw-admin-drawer-close { display: none; }
+
+@media (max-width: 900px) {
+  .gw-admin-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    box-shadow: var(--elev-lg);
+  }
+  .gw-admin-sidebar.open {
+    transform: translateX(0);
+  }
+  .gw-admin-drawer-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 8px;
+    background: var(--surface-2);
+    color: var(--text-3);
+    cursor: pointer;
+  }
+  .gw-admin-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(0, 0, 0, 0.45);
+  }
+  .gw-admin-topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 9px 12px;
+  }
+  .gw-admin-main > div:not(.gw-admin-topbar) {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+    max-width: 100% !important;
+  }
+  .gw-admin-main table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .gw-admin-main table th,
+  .gw-admin-main table td {
+    white-space: nowrap;
+  }
+}
+`

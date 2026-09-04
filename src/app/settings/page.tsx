@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import AppShell from '@/components/layout/AppShell'
 import { DEFAULT_CARD_ORDER } from '@/lib/dashboardConstants'
@@ -27,7 +28,29 @@ type SalaryCycleRule = 'none' | 'last-working-day' | 'fixed-day'
 
 export default function SettingsPage() {
   const { user, logout } = useAuth()
+  const router = useRouter()
   const { settings, transactions } = useAppStore()
+
+  // Admin easter egg — tap the account card 5× to open the admin console
+  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL
+  const isAdmin = !!adminEmail && user?.email === adminEmail
+  const adminTapCount = useRef(0)
+  const adminTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function handleAccountCardTap() {
+    if (!isAdmin) return
+    adminTapCount.current += 1
+    if (adminTapTimer.current) clearTimeout(adminTapTimer.current)
+    if (adminTapCount.current >= 5) {
+      adminTapCount.current = 0
+      toast.success('Opening admin console…')
+      router.push('/admin')
+      return
+    }
+    adminTapTimer.current = setTimeout(() => { adminTapCount.current = 0 }, 1500)
+  }
+
+  useEffect(() => () => { if (adminTapTimer.current) clearTimeout(adminTapTimer.current) }, [])
   const longestMoneyStreak = computeLongestMoneyStreak(transactions, settings?.noSpendDays ?? [])
   const refresh = useRefreshData()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -353,7 +376,10 @@ export default function SettingsPage() {
             </button>
           </div>
           {user && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, background: 'var(--surface-2)', borderRadius: 12 }}>
+            <div
+              onClick={handleAccountCardTap}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, background: 'var(--surface-2)', borderRadius: 12, userSelect: 'none' }}
+            >
               {user.photoURL ? (
                 <img src={user.photoURL} alt={user.displayName ?? ''} style={{ width: 40, height: 40, borderRadius: '50%' }} />
               ) : (
