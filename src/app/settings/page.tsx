@@ -210,6 +210,15 @@ export default function SettingsPage() {
     } catch { toast.error('Failed to save accent') }
   }
 
+  async function saveMode(next: FinancialMode) {
+    if (!user) return
+    setMode(next)
+    try {
+      await setUserSettings(user.uid, { financialMode: next })
+      await refresh()
+    } catch { toast.error('Failed to save mode') }
+  }
+
   async function saveTabSettings(field: 'showHealthTab' | 'showTasksTab', value: boolean) {
     if (!user) return
     setSavingTabs(true)
@@ -480,7 +489,7 @@ export default function SettingsPage() {
             ]).map((opt) => (
               <button
                 key={opt.value}
-                onClick={() => setMode(opt.value)}
+                onClick={() => saveMode(opt.value)}
                 style={{
                   textAlign: 'left', padding: 12, borderRadius: 12,
                   border: `2px solid ${mode === opt.value ? 'var(--brand)' : 'var(--border)'}`,
