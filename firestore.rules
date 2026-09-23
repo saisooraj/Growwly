@@ -50,6 +50,12 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
+    // iPhone quick-add tokens (doc id = SHA-256 of the token).
+    // Written and read only by the Admin SDK in /api/ios-shortcut/* — never by clients.
+    match /iosTokens/{tokenHash} {
+      allow read, write: if false;
+    }
+
     // Upcoming Expenses
     match /upcoming/{docId} {
       allow read, delete: if isAuth() && resource.data.userId == request.auth.uid;

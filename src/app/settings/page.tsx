@@ -12,9 +12,10 @@ import { useAppStore } from '@/store/appStore'
 import { setUserSettings, exportAllUserData, importAllUserData, deleteAllUserData } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
-import { downloadJSON, getLast6Months, computeLongestMoneyStreak } from '@/lib/utils'
+import { downloadJSON, getLast6Months, computeLongestMoneyStreak, EXPENSE_CATEGORIES } from '@/lib/utils'
 import { getCycleRange, getLastWorkingDay, formatCycleRange } from '@/lib/cycle'
-import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, ChevronUp, ChevronDown, Trash2, AlertTriangle, Leaf, Bug, Lightbulb, MessageCircle, Send } from 'lucide-react'
+import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, ChevronUp, ChevronDown, Trash2, AlertTriangle, Leaf, Bug, Lightbulb, MessageCircle, Send, Smartphone, Copy, KeyRound } from 'lucide-react'
+import { buildQuickAddShortcut } from '@/lib/iosShortcutPlist'
 import { BADGES, getBadgeEarnedDate, type BadgeDef } from '@/lib/badges'
 import { IconLeaf, IconFlame } from '@tabler/icons-react'
 import LinkedAccounts from '@/components/auth/LinkedAccounts'
@@ -86,6 +87,12 @@ export default function SettingsPage() {
   const [selectedBadge, setSelectedBadge] = useState<BadgeDef | null>(null)
   const txDates = transactions.map(t => t.date)
   const noSpendDays = settings?.noSpendDays ?? []
+
+  // iPhone quick-add shortcut
+  const [iosToken, setIosToken] = useState<string | null>(null) // plaintext, shown once right after generating
+  const [iosBusy, setIosBusy] = useState(false)
+  const [iosCopied, setIosCopied] = useState(false)
+  const hasIosToken = !!settings?.iosShortcut
 
   // Accent color
   const [accentColor, setAccentColor] = useState<'green' | 'purple' | 'orange' | 'pink' | 'blue' | 'black'>('green')
@@ -274,6 +281,82 @@ export default function SettingsPage() {
       toast.error(e instanceof Error ? e.message : 'Failed to send feedback')
     } finally {
       setSendingFeedback(false)
+    }
+  }
+
+  async function generateIosToken(rotate = false) {
+    if (!user) return
+    setIosBusy(true)
+    try {
+      const idToken = await user.getIdToken()
+      const res = await fetch('/api/ios-shortcut/token', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${idToken}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed')
+      setIosToken(data.token as string)
+      await refresh()
+      toast.success(rotate ? 'New token generated — old one revoked' : 'Token generated')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to generate token')
+    } finally {
+      setIosBusy(false)
+    }
+  }
+
+  async function revokeIosToken() {
+    if (!user) return
+    setIosBusy(true)
+    try {
+      const idToken = await user.getIdToken()
+      const res = await fetch('/api/ios-shortcut/token', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${idToken}` },
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        throw new Error(d.error || 'Failed')
+      }
+      setIosToken(null)
+      await refresh()
+      toast.success('Shortcut access revoked')
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'Failed to revoke')
+    } finally {
+      setIosBusy(false)
+    }
+  }
+
+  function downloadIosShortcut() {
+    if (!iosToken) return
+    const categories = Array.from(
+      new Set([...EXPENSE_CATEGORIES, ...(settings?.customCategories ?? [])]),
+    )
+    const xml = buildQuickAddShortcut({
+      origin: window.location.origin,
+      token: iosToken,
+      categories,
+    })
+    const blob = new Blob([xml], { type: 'application/octet-stream' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'Growwly Quick Add.shortcut'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+
+  async function copyIosToken() {
+    if (!iosToken) return
+    try {
+      await navigator.clipboard.writeText(iosToken)
+      setIosCopied(true)
+      setTimeout(() => setIosCopied(false), 1500)
+    } catch {
+      toast.error('Copy failed — select and copy manually')
     }
   }
 
@@ -737,6 +820,102 @@ export default function SettingsPage() {
             Link multiple sign-in methods. Your data stays the same regardless of which method you use.
           </p>
           <LinkedAccounts />
+        </div>
+
+        {/* iPhone Quick Add */}
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: hasIosToken ? 'var(--brand-soft)' : 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: hasIosToken ? 'var(--brand)' : 'var(--text-3)' }}>
+              <Smartphone size={14} />
+            </div>
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>iPhone Quick Add</h2>
+          </div>
+
+          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
+            Log an expense in three taps from anywhere — even the lock screen — using
+            iOS <strong>Back Tap</strong> + a Shortcut. Tap the back of your phone → enter
+            amount → description → pick a category. It lands in Growwly on the next
+            refresh.
+          </p>
+
+          {!hasIosToken && (
+            <button
+              onClick={() => generateIosToken(false)}
+              disabled={iosBusy}
+              className="btn-primary"
+              style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8, opacity: iosBusy ? 0.6 : 1 }}
+            >
+              <KeyRound size={14} />
+              {iosBusy ? 'Working…' : 'Generate access token'}
+            </button>
+          )}
+
+          {hasIosToken && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-3)' }}>
+                <span style={{ width: 7, height: 7, borderRadius: 999, background: 'var(--brand)', flexShrink: 0 }} />
+                <span>
+                  Active — created {settings?.iosShortcut?.createdAt ? format(parseISO(settings.iosShortcut.createdAt), 'MMM d, yyyy') : '—'}
+                </span>
+              </div>
+
+              {iosToken ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14, borderRadius: 12, background: 'var(--brand-soft)', border: '1px solid color-mix(in oklch, var(--brand) 30%, transparent)' }}>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: 'var(--brand-ink)' }}>
+                    Copy this token now — it won&apos;t be shown again.
+                  </p>
+                  <code style={{ fontSize: 12, wordBreak: 'break-all', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: 'var(--text)', background: 'var(--surface)', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)' }}>
+                    {iosToken}
+                  </code>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    <button onClick={copyIosToken} className="btn" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {iosCopied ? <Check size={14} /> : <Copy size={14} />} {iosCopied ? 'Copied' : 'Copy token'}
+                    </button>
+                    <button onClick={downloadIosShortcut} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Download size={14} /> Download shortcut
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }}>
+                  Your token is stored as a hash and can&apos;t be shown again. Generate a
+                  new one if you&apos;ve lost it — the previous token stops working immediately.
+                </p>
+              )}
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <button
+                  onClick={() => generateIosToken(true)}
+                  disabled={iosBusy}
+                  className="btn"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: iosBusy ? 0.6 : 1 }}
+                >
+                  <KeyRound size={14} /> {iosBusy ? 'Working…' : 'Generate new token'}
+                </button>
+                <button
+                  onClick={revokeIosToken}
+                  disabled={iosBusy}
+                  className="btn-danger"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: iosBusy ? 0.6 : 1 }}
+                >
+                  <Trash2 size={14} /> Revoke
+                </button>
+              </div>
+
+              <details style={{ fontSize: 12, color: 'var(--text-3)' }}>
+                <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--text)' }}>Set-up steps</summary>
+                <ol style={{ margin: '10px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+                  <li>On iPhone, open <strong>Settings → Shortcuts</strong> and turn on <strong>Allow Untrusted Shortcuts</strong> (run any shortcut once if the toggle is missing).</li>
+                  <li>Tap <strong>Download shortcut</strong> above, then open the file — it imports into the Shortcuts app with your token already baked in.</li>
+                  <li>Go to <strong>Settings → Accessibility → Touch → Back Tap</strong>, pick <strong>Double Tap</strong> or <strong>Triple Tap</strong>, and choose the <strong>Growwly Quick Add</strong> shortcut.</li>
+                  <li>Tap the back of your phone to test. From the lock screen, iOS asks for Face ID once before the prompts appear.</li>
+                </ol>
+                <p style={{ margin: '10px 0 0' }}>
+                  Prefer to build it by hand? POST JSON <code>{`{ token, amount, description, category }`}</code> to <code>{typeof window !== 'undefined' ? `${window.location.origin}/api/ios-shortcut/transaction` : '/api/ios-shortcut/transaction'}</code>.
+                </p>
+              </details>
+            </>
+          )}
         </div>
 
         {/* Accent Color */}

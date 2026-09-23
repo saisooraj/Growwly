@@ -35,7 +35,7 @@ export interface Transaction {
   settledAllocation?: Record<string, number> // borrowingId → amount applied, spread greedily across that person's outstanding "lent" records
   settledAmount?: number      // total actually applied to debt (≤ amount); any remainder is a plain expense
   refundOf?: string           // if set (type 'refund'), the id of the expense this refunds
-  source?: 'scan' | 'share-target' // set when created via the bill scanner; absent means manual entry
+  source?: 'scan' | 'share-target' | 'ios-shortcut' // set when created via the bill scanner or the iPhone quick-add shortcut; absent means manual entry
 }
 
 export interface SavingsGoal {
@@ -132,6 +132,7 @@ export interface UserSettings {
   spendingRule?: { needs: number; wants: number; savings: number }
   categoryBuckets?: { needs: string[]; savings: string[] }
   customCategories?: string[]                     // user-defined categories saved for reuse
+  iosShortcut?: { tokenHash: string; createdAt: string } // iPhone quick-add: SHA-256 hash only, never the plaintext token
   customTags?: string[]                            // user-defined transaction tags saved for reuse
   customSavingsVehicles?: string[]                // user-defined savings vehicles saved for reuse
   savingsOpeningBalances?: Record<string, number> // prior balance per vehicle before tracking started
