@@ -60,6 +60,48 @@ function savingsTabFor(tx?: Transaction | null): Tab {
   return isSavingsTransfer(tx) ? 'savings' : tx.type
 }
 
+// Creates a "lent" borrowing or an "absorbed" expense for each split participant.
+// Shared by both the create-new-transaction and edit-transaction save paths.
+async function createSplitRecords(
+  uid: string,
+  finalParticipants: SplitParticipant[],
+  totalAmount: number,
+  splitMode: SplitMode,
+  notes: string,
+  category: string,
+  date: string,
+) {
+  const n = finalParticipants.length
+  for (const p of finalParticipants) {
+    const pAmt = splitMode === 'equal'
+      ? Math.floor(totalAmount / (n + 1))
+      : splitMode === 'percentage'
+        ? Math.round(totalAmount * p.value / 100)
+        : p.value
+    if (pAmt <= 0) continue
+    if (p.kind === 'lent') {
+      await addBorrowing(uid, {
+        type: 'lent',
+        amount: pAmt,
+        person: p.name,
+        description: notes ? `${notes} (split)` : `${category} (split)`,
+        date,
+        repaidAmount: 0,
+        status: 'pending',
+      })
+    } else {
+      await addTransaction(uid, {
+        type: 'expense',
+        amount: pAmt,
+        category: 'Covered for Others',
+        date,
+        notes: `${p.name}'s share${notes ? ` · ${notes}` : ''}`,
+        isRecurring: false,
+      } as Omit<Transaction, 'id' | 'userId' | 'createdAt'>)
+    }
+  }
+}
+
 function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
   return (
     <div
@@ -458,6 +500,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
             ? { settledBorrowingId: '', settledPerson: '', settledAllocation: {}, settledAmount: 0 }
             : {}),
         ...(!editTx && initialPrefill?.source ? { source: initialPrefill.source } : {}),
+        ...(splitEnabled && finalParticipants.length > 0 ? { splitApplied: true } : {}),
       }
 
       // Persist any newly-typed tags for reuse next time
@@ -505,7 +548,19 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
             }
           }
 
-          toast.success('Transaction updated')
+          // Split: first time this transaction is being split (canSplit already
+          // excludes transactions that already have splitApplied set).
+          if (splitEnabled && finalParticipants.length > 0) {
+            await createSplitRecords(user.uid, finalParticipants, totalAmount, splitMode, notes, category, date)
+            const lentCount   = finalParticipants.filter(p => p.kind === 'lent').length
+            const absorbCount = finalParticipants.filter(p => p.kind === 'absorbed').length
+            const parts = []
+            if (lentCount)   parts.push(`${lentCount} borrowing${lentCount > 1 ? 's' : ''} created`)
+            if (absorbCount) parts.push(`${absorbCount} absorbed`)
+            toast.success(`Transaction updated — ${parts.join(', ')}`)
+          } else {
+            toast.success('Transaction updated')
+          }
         }
       } else {
         // My share transaction
@@ -605,35 +660,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
 
         // Split: create borrowings + absorbed transactions
         if (splitEnabled && finalParticipants.length > 0) {
-          const n = finalParticipants.length
-          for (const p of finalParticipants) {
-            const pAmt = splitMode === 'equal'
-              ? Math.floor(totalAmount / (n + 1))
-              : splitMode === 'percentage'
-                ? Math.round(totalAmount * p.value / 100)
-                : p.value
-            if (pAmt <= 0) continue
-            if (p.kind === 'lent') {
-              await addBorrowing(user.uid, {
-                type: 'lent',
-                amount: pAmt,
-                person: p.name,
-                description: notes ? `${notes} (split)` : `${category} (split)`,
-                date,
-                repaidAmount: 0,
-                status: 'pending',
-              })
-            } else {
-              await addTransaction(user.uid, {
-                type: 'expense',
-                amount: pAmt,
-                category: 'Covered for Others',
-                date,
-                notes: `${p.name}'s share${notes ? ` · ${notes}` : ''}`,
-                isRecurring: false,
-              } as Omit<Transaction, 'id' | 'userId' | 'createdAt'>)
-            }
-          }
+          await createSplitRecords(user.uid, finalParticipants, totalAmount, splitMode, notes, category, date)
           const lentCount   = finalParticipants.filter(p => p.kind === 'lent').length
           const absorbCount = finalParticipants.filter(p => p.kind === 'absorbed').length
           const parts = []
@@ -892,7 +919,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   }
 
   const selectedKind = TRANSFER_KINDS.find(k => k.id === transferKind)
-  const canSplit = txType === 'expense' && !editTx
+  const canSplit = txType === 'expense' && !editTx?.splitApplied
 
   return (
     <Transition appear show={open} as={Fragment}>

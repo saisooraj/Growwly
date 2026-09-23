@@ -36,6 +36,7 @@ export interface Transaction {
   settledAmount?: number      // total actually applied to debt (≤ amount); any remainder is a plain expense
   refundOf?: string           // if set (type 'refund'), the id of the expense this refunds
   source?: 'scan' | 'share-target' | 'ios-shortcut' // set when created via the bill scanner or the iPhone quick-add shortcut; absent means manual entry
+  splitApplied?: boolean      // true once this expense has had a split saved against it (creating borrowings/absorbed txns) — blocks re-splitting on a later edit, since there's no link back to undo/adjust those records
 }
 
 export interface SavingsGoal {
