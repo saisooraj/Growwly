@@ -181,17 +181,19 @@ export function computeCarryForward(
   return cf
 }
 
-export function getBudgetStatus(actual: number, planned: number): 'on-track' | 'warning' | 'over' {
+export function getBudgetStatus(actual: number, planned: number): 'on-track' | 'warning' | 'at-limit' | 'over' {
   if (planned === 0) return 'on-track'
   const ratio = actual / planned
   if (ratio <= 0.85) return 'on-track'
-  if (ratio <= 1.0) return 'warning'
+  if (ratio < 1.0) return 'warning'
+  if (ratio === 1.0) return 'at-limit'
   return 'over'
 }
 
 export const STATUS_COLORS = {
   'on-track': { pill: 'good',    bar: 'var(--good)', label: 'On Track' },
   'warning':  { pill: 'warn',    bar: 'var(--warn)', label: 'Near Limit' },
+  'at-limit': { pill: 'info',    bar: 'var(--info)', label: 'Limit Touched' },
   'over':     { pill: 'bad',     bar: 'var(--bad)',  label: 'Over Budget' },
 } as const
 

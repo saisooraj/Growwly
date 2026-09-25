@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { PieChart, Pie, Cell, Sector, ResponsiveContainer, Label } from 'recharts'
 import { useAppStore } from '@/store/appStore'
@@ -103,6 +104,12 @@ export default function CategoryPieChart() {
           <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
             {monthLabel} spending by category
           </div>
+          <Link
+            href="/planning/spending"
+            style={{ fontSize: 11, fontWeight: 600, color: 'var(--brand-ink)', marginTop: 4, display: 'inline-block', textDecoration: 'none' }}
+          >
+            View full breakdown →
+          </Link>
         </div>
 
         {/* Month dropdown */}

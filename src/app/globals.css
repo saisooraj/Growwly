@@ -483,6 +483,17 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   }
 }
 
+/* Spending breakdown page: donut | checklist */
+.spend-grid {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: var(--row-gap);
+  align-items: start;
+}
+@media (max-width: 1024px) {
+  .spend-grid { grid-template-columns: 1fr; }
+}
+
 /* Dashboard responsive grids */
 .dash-hero {
   display: grid;

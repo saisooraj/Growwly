@@ -12,20 +12,20 @@ import toast from 'react-hot-toast'
 
 // ── Defaults ───────────────────────────────────────────────────────────────────
 
-const DEFAULT_RULE = { needs: 50, wants: 30, savings: 20 }
+export const DEFAULT_RULE = { needs: 50, wants: 30, savings: 20 }
 
-const DEFAULT_NEEDS = [
+export const DEFAULT_NEEDS = [
   'Food & Dining', 'Groceries', 'Transport', 'Fuel', 'Healthcare',
   'Utilities', 'Insurance', 'Rent / Deposit', 'Living Expenses',
   'Home & Maintenance', 'Education', 'Family',
 ]
-const DEFAULT_SAVINGS = [
+export const DEFAULT_SAVINGS = [
   'Gold', 'Construction',
 ]
 
 // Pseudo-category representing real savings transactions (contributions to
 // vehicles) so they land in the Savings bucket of the 50/30/20 rule.
-const SAVINGS_TXN_LABEL = 'Savings & Investments'
+export const SAVINGS_TXN_LABEL = 'Savings & Investments'
 
 type Bucket = 'needs' | 'wants' | 'savings'
 
