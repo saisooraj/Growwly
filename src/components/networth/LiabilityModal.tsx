@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { X } from 'lucide-react'
 import type { Liability, LiabilityKind } from '@/types'
 import { formatCurrencyFull } from '@/lib/utils'
+import CenteredModal from '@/components/ui/CenteredModal'
 
 const KINDS: { value: LiabilityKind; label: string }[] = [
   { value: 'home_loan',     label: 'Home Loan' },
@@ -77,9 +78,7 @@ export default function LiabilityModal({ item, onSave, onClose }: Props) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'rgba(0,0,0,.5)', overflowY: 'auto' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 480, padding: 24, paddingBottom: 'max(24px, env(safe-area-inset-bottom))' }}>
+    <CenteredModal onClose={onClose}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{item ? 'Edit Liability' : 'Add Liability / Loan'}</h2>
           <button onClick={onClose} style={{ padding: 6, borderRadius: 8, border: 'none', background: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text-2)', display: 'flex' }}><X size={16} /></button>
@@ -137,7 +136,6 @@ export default function LiabilityModal({ item, onSave, onClose }: Props) {
             {saving ? 'Saving…' : item ? 'Update' : 'Add Liability'}
           </button>
         </form>
-      </div>
-    </div>
+    </CenteredModal>
   )
 }

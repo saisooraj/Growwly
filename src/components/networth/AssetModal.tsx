@@ -6,6 +6,7 @@ import type { Asset, AssetKind, GoldPurchase, NpsHolding, PpfDeposit } from '@/t
 import { EPF_DEFAULT_RATE, PPF_DEFAULT_RATE, computePpfBalance, npsCorpus } from '@/lib/retirement'
 import { legacyGoldPurchases, goldPurchaseTotals, goldCurrentValue } from '@/lib/gold'
 import { linkSummary } from '@/lib/holdingLinks'
+import CenteredModal from '@/components/ui/CenteredModal'
 
 const KINDS: { value: AssetKind; label: string }[] = [
   { value: 'mutual_fund', label: 'Mutual Fund'    },
@@ -292,11 +293,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
   )
 
   return (
-    <div
-      style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(4px)' }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto', padding: 24, paddingBottom: 'max(24px, env(safe-area-inset-bottom))' }}>
+    <CenteredModal onClose={onClose}>
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -687,7 +684,6 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
             {saving ? 'Saving…' : item ? 'Update' : 'Add'}
           </button>
         </form>
-      </div>
-    </div>
+    </CenteredModal>
   )
 }
