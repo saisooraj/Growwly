@@ -4,7 +4,8 @@ import { useState, useMemo, useEffect } from 'react'
 import { format, parseISO, isToday, isYesterday } from 'date-fns'
 import { ArrowLeftRight, ChevronDown, ChevronRight, ArrowUp, ArrowDown, UserMinus, UserPlus, RotateCcw } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
-import { formatCurrencyFull, CATEGORY_COLORS, getTransactionsForMonth, getTransferDisplay } from '@/lib/utils'
+import { formatCurrencyFull, CATEGORY_COLORS, getTransactionsForMonth, getTransferDisplay, isSavingsTransfer } from '@/lib/utils'
+import { findLinkedAsset } from '@/lib/holdingLinks'
 import { getCycleRange } from '@/lib/cycle'
 import { getSavingsVehicleMeta, getCategoryDisplayName, CategoryIcon } from '@/lib/categoryIcons'
 import type { Transaction, Borrowing } from '@/types'
@@ -54,6 +55,12 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
   const isTransfer  = tx.type === 'transfer'
   const isIncome    = tx.type === 'income'
   const isRefund    = tx.type === 'refund'
+  const isSavings   = isSavingsTransfer(tx)
+  const holdingName = useAppStore(s => {
+    if (!isSavings) return undefined
+    const asset = findLinkedAsset(s.assets, tx.id)
+    return asset ? asset.name || 'Gold' : undefined
+  })
 
   let color: string, icon: React.ReactNode, label: string, amountColor: string, prefix: string
 
@@ -170,6 +177,11 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
         {!!tx.goldGrams && (
           <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {tx.goldGrams}g · {tx.goldKarat ?? 22}K{tx.goldPricePerGram ? ` · ₹${tx.goldPricePerGram.toLocaleString('en-IN')}/g` : ''}
+          </div>
+        )}
+        {holdingName && (
+          <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            → {holdingName}
           </div>
         )}
         {tx.tags && tx.tags.length > 0 && (

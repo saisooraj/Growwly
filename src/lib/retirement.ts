@@ -107,7 +107,8 @@ export function computePpfBalance({
     .filter(d => d.amount > 0 && d.date)
     .sort((a, b) => a.date.localeCompare(b.date))
 
-  const totalDeposited = sorted.reduce((s, d) => s + d.amount, 0)
+  const totalDeposited = sorted.reduce((s, d) => s + (d.interest ? 0 : d.amount), 0)
+  const creditedInterest = sorted.reduce((s, d) => s + (d.interest ? d.amount : 0), 0)
   if (sorted.length === 0) return { balance: 0, totalDeposited: 0, interestEarned: 0 }
 
   const first = startDate && !isNaN(new Date(startDate).getTime())
@@ -154,7 +155,7 @@ export function computePpfBalance({
   return {
     balance: Math.round(balance + fyInterest),
     totalDeposited,
-    interestEarned: Math.round(interestEarned + fyInterest),
+    interestEarned: Math.round(interestEarned + fyInterest + creditedInterest),
   }
 }
 

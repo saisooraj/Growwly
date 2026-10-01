@@ -5,7 +5,10 @@ import {
   setBudget,
   addSavingsGoal,
   addProject,
+  getUserAssets,
+  updateAsset,
 } from '@/lib/firestore'
+import { applyLink, removeLink, findLinkedAsset } from '@/lib/holdingLinks'
 import type {
   PendingAction,
   AddTransactionPayload,
@@ -47,11 +50,24 @@ export async function executeAction(
       const p = action.payload as UpdateTransactionPayload
       const { id, description: _desc, ...fields } = p
       await updateTransaction(id, fields)
+      // A linked transaction's amount lives inside its holding too (gold is tracked in grams, so skip it)
+      const newAmount = (fields as { amount?: number }).amount
+      if (typeof newAmount === 'number' && newAmount > 0) {
+        const asset = findLinkedAsset(await getUserAssets(userId), id)
+        const removed = asset && asset.kind !== 'gold_grams' ? removeLink(asset, id) : null
+        if (asset && removed) {
+          const result = applyLink({ ...asset, ...removed.patch }, { ...removed.restore, amount: newAmount }, removed.mode)
+          if ('patch' in result) await updateAsset(asset.id, { ...removed.patch, ...result.patch })
+        }
+      }
       return { success: true, message: 'Transaction updated successfully.' }
     }
 
     case 'delete_transaction': {
       const p = action.payload as DeleteTransactionPayload
+      const asset = findLinkedAsset(await getUserAssets(userId), p.id)
+      const removed = asset ? removeLink(asset, p.id) : null
+      if (asset && removed) await updateAsset(asset.id, removed.patch)
       await deleteTransaction(p.id)
       return { success: true, message: `Deleted: ${p.description}` }
     }

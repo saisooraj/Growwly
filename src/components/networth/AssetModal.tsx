@@ -5,6 +5,7 @@ import { X, Search, Loader2, Plus, Trash2 } from 'lucide-react'
 import type { Asset, AssetKind, GoldPurchase, NpsHolding, PpfDeposit } from '@/types'
 import { EPF_DEFAULT_RATE, PPF_DEFAULT_RATE, computePpfBalance, npsCorpus } from '@/lib/retirement'
 import { legacyGoldPurchases, goldPurchaseTotals, goldCurrentValue } from '@/lib/gold'
+import { linkSummary } from '@/lib/holdingLinks'
 
 const KINDS: { value: AssetKind; label: string }[] = [
   { value: 'mutual_fund', label: 'Mutual Fund'    },
@@ -66,7 +67,11 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
   // PPF
   const [ppfStart, setPpfStart]             = useState(item?.ppfStartDate ?? '')
   const [ppfRate, setPpfRate]               = useState(String(item?.kind === 'ppf' && item?.annualRate ? item.annualRate : PPF_DEFAULT_RATE))
-  const [ppfDeposits, setPpfDeposits]       = useState<PpfDeposit[]>(item?.ppfDeposits?.length ? item.ppfDeposits : [{ date: todayISO(), amount: 0 }])
+  // What was paid in, kept apart from interest the passbook has already credited
+  const savedDeposits = item?.ppfDeposits?.filter(d => !d.interest) ?? []
+  const savedInterest = item?.ppfDeposits?.filter(d => d.interest) ?? []
+  const [ppfDeposits, setPpfDeposits]       = useState<PpfDeposit[]>(savedDeposits.length ? savedDeposits : [{ date: todayISO(), amount: 0 }])
+  const [ppfInterest, setPpfInterest]       = useState(savedInterest.length ? String(savedInterest.reduce((s, d) => s + d.amount, 0)) : '')
 
   // NPS
   const [npsHoldings, setNpsHoldings]       = useState<NpsHolding[]>(item?.npsHoldings ?? [])
@@ -141,6 +146,8 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
   }, [kind, goldPrices])
 
   const goldTotals = goldPurchaseTotals(goldPurchases)
+  const links = item ? linkSummary(item) : null
+  const linkedTag = <span style={{ flexShrink: 0, alignSelf: 'center', fontSize: 10.5, fontWeight: 600, color: 'var(--brand-ink)', background: 'var(--brand-soft)', borderRadius: 999, padding: '2px 8px' }}>linked</span>
   const goldLiveValue = goldPrices ? goldCurrentValue(goldPurchases, goldPrices) : 0
 
   // NPS: load the scheme list once, then live NAVs for whatever is held / listed.
@@ -186,9 +193,13 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
   }
 
   const npsLiveCorpus = npsCorpus(npsHoldings, npsNavByCode)
+  // Keeps its original date so re-saving doesn't restart the interest it earns
+  const ppfInterestEntry: PpfDeposit[] = parseFloat(ppfInterest) > 0
+    ? [{ date: savedInterest[0]?.date ?? todayISO(), amount: parseFloat(ppfInterest), interest: true }]
+    : []
   const ppfPreview = computePpfBalance({
     startDate: ppfStart || undefined,
-    deposits: ppfDeposits,
+    deposits: [...ppfDeposits, ...ppfInterestEntry],
     rateOverride: parseFloat(ppfRate) || undefined,
   })
 
@@ -237,7 +248,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
           ...(investedAmount ? { investedAmount: parseFloat(investedAmount) } : {}),
         }
       } else if (kind === 'ppf') {
-        const deposits = ppfDeposits.filter(d => d.amount > 0 && d.date)
+        const deposits = [...ppfDeposits.filter(d => d.amount > 0 && d.date), ...ppfInterestEntry]
         payload = { ...base, value: ppfPreview.balance, ppfDeposits: deposits,
           annualRate: parseFloat(ppfRate) || PPF_DEFAULT_RATE,
           investedAmount: ppfPreview.totalDeposited,
@@ -435,6 +446,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                       <div style={{ display: 'flex', gap: 8 }}>
                         <input className="input" type="date" max={todayISO()} value={p.date}
                           onChange={e => setGoldPurchases(list => list.map((x, j) => j === i ? { ...x, date: e.target.value } : x))} />
+                        {p.transactionId && linkedTag}
                         <button type="button" onClick={() => setGoldPurchases(list => list.filter((_, j) => j !== i))}
                           style={{ flexShrink: 0, padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-4)', cursor: 'pointer' }}>
                           <Trash2 size={14} />
@@ -540,6 +552,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                         onChange={e => setPpfDeposits(list => list.map((x, j) => j === i ? { ...x, date: e.target.value } : x))} />
                       <input className="input" type="number" min="0" placeholder="₹ amount" value={d.amount || ''}
                         onChange={e => setPpfDeposits(list => list.map((x, j) => j === i ? { ...x, amount: parseFloat(e.target.value) || 0 } : x))} />
+                      {d.transactionId && linkedTag}
                       <button type="button" onClick={() => setPpfDeposits(list => list.length > 1 ? list.filter((_, j) => j !== i) : list)}
                         style={{ flexShrink: 0, padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-4)', cursor: 'pointer' }}>
                         <Trash2 size={14} />
@@ -552,9 +565,13 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                   <Plus size={12} /> Add deposit
                 </button>
               </div>
+              <div>
+                <label className="label">Interest credited so far (₹, optional)</label>
+                <input className="input" type="number" min="0" placeholder="Total interest in your passbook" value={ppfInterest} onChange={e => setPpfInterest(e.target.value)} />
+              </div>
               {ppfPreview.totalDeposited > 0 && (
                 <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--good-soft)', fontSize: 12, color: 'var(--good-ink)' }}>
-                  Computed value ₹{ppfPreview.balance.toLocaleString('en-IN')} · deposited ₹{ppfPreview.totalDeposited.toLocaleString('en-IN')} · interest ₹{ppfPreview.interestEarned.toLocaleString('en-IN')}
+                  Value ₹{ppfPreview.balance.toLocaleString('en-IN')} = invested ₹{ppfPreview.totalDeposited.toLocaleString('en-IN')} + interest ₹{ppfPreview.interestEarned.toLocaleString('en-IN')}
                 </div>
               )}
               <p style={{ fontSize: 11, color: 'var(--text-4)', margin: 0 }}>
@@ -651,6 +668,12 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                 </div>
               )}
             </>
+          )}
+
+          {links && links.count > 0 && (
+            <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0 }}>
+              {links.unit === 'g' ? `${links.linked}g` : `₹${links.linked.toLocaleString('en-IN')}`} of this comes from {links.count} linked transaction{links.count === 1 ? '' : 's'}; {links.unit === 'g' ? `${links.historical}g` : `₹${links.historical.toLocaleString('en-IN')}`} is historical.
+            </p>
           )}
 
           <button type="submit" className="btn-primary btn" disabled={saving || !canSubmit} style={{ marginTop: 4, opacity: !canSubmit ? 0.5 : 1 }}>

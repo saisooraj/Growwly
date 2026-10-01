@@ -6,6 +6,7 @@ import { formatCurrencyFull } from '@/lib/utils'
 import { accrueEpfBalance, computePpfBalance, npsCorpus } from '@/lib/retirement'
 import { legacyGoldPurchases, goldPurchaseTotals, goldCurrentValue } from '@/lib/gold'
 import type { Asset, AssetKind } from '@/types'
+import MaskToggle from './MaskToggle'
 
 interface LivePrices {
   gold?: { price22k: number; price18k: number; price24k: number }
@@ -146,7 +147,7 @@ interface CategoryCardProps {
 }
 
 function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, allTotal, masked, onEdit, onDelete }: CategoryCardProps) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const meta = KIND_META[kind]
   const alloc = allTotal > 0 ? (totalValue / allTotal) * 100 : 0
   const fmt = (v: number) => masked ? '₹ •••' : formatCurrencyFull(v)
@@ -200,7 +201,7 @@ function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, allTo
                    a.kind === 'stocks' && a.quantity ? `${a.quantity} shares · avg ₹${(a.avgBuyPrice ?? 0).toLocaleString('en-IN')}` :
                    a.kind === 'gold_grams' ? `${a.value.toFixed(2)}g · ${goldLots.length} purchase${goldLots.length === 1 ? '' : 's'}` :
                    a.kind === 'epf' ? `est. from ${a.balanceAsOf ?? 'snapshot'}${a.monthlyContribution ? ` · +₹${a.monthlyContribution.toLocaleString('en-IN')}/mo` : ''}` :
-                   a.kind === 'ppf' ? `${a.ppfDeposits?.length ?? 0} deposit${(a.ppfDeposits?.length ?? 0) === 1 ? '' : 's'} · ${a.annualRate ?? 7.1}%` :
+                   a.kind === 'ppf' ? `${a.ppfDeposits?.filter(d => !d.interest).length ?? 0} deposit${(a.ppfDeposits?.filter(d => !d.interest).length ?? 0) === 1 ? '' : 's'} · ${a.annualRate ?? 7.1}%` :
                    a.kind === 'nps' ? (a.npsHoldings?.length ? `${a.npsHoldings.length} scheme${a.npsHoldings.length === 1 ? '' : 's'} · live NAV` : 'manual corpus') : ''}
                   {a.investedAmount ? ` · invested ${masked ? '•••' : `₹${a.investedAmount.toLocaleString('en-IN')}`}` : ''}
                 </p>
@@ -226,12 +227,13 @@ function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, allTo
 interface Props {
   assets: Asset[]
   masked: boolean
+  onToggleMask: () => void
   onAdd: () => void
   onEdit: (a: Asset) => void
   onDelete: (id: string) => void
 }
 
-export default function MyAssetsSection({ assets, masked, onAdd, onEdit, onDelete }: Props) {
+export default function MyAssetsSection({ assets, masked, onToggleMask, onAdd, onEdit, onDelete }: Props) {
   const [prices, setPrices] = useState<LivePrices>({})
 
   // Fetch all live prices on mount
@@ -332,12 +334,15 @@ export default function MyAssetsSection({ assets, masked, onAdd, onEdit, onDelet
             </div>
           )}
         </div>
-        <button
-          onClick={onAdd}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
-        >
-          <Plus size={13} /> Add
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <MaskToggle masked={masked} onToggle={onToggleMask} />
+          <button
+            onClick={onAdd}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+          >
+            <Plus size={13} /> Add
+          </button>
+        </div>
       </div>
 
       {/* Allocation bar */}

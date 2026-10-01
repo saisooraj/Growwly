@@ -435,6 +435,25 @@ export interface NpsHolding {
 export interface PpfDeposit {
   date: string           // ISO date the deposit was credited
   amount: number
+  transactionId?: string // set when this deposit came from a linked savings transaction
+  included?: boolean     // linked as money the balance already contained (see AssetContribution.included)
+  interest?: boolean     // interest already credited in the passbook: part of the balance, not of what was invested
+}
+
+// A savings transaction linked to a holding. Gold buys and PPF deposits carry their link on
+// the lot / deposit itself; every other kind (and gold sales) is recorded here.
+export interface AssetContribution {
+  transactionId: string
+  date: string
+  amount: number         // signed rupees: + contributed, − withdrawn
+  units?: number         // signed mutual fund / NPS units
+  schemeCode?: string    // NPS scheme the units belong to
+  grams?: number         // gold sold
+  karat?: 18 | 22 | 24
+  // true: the holding's balance already contained this money when it was linked, so linking and
+  // unlinking leave the total alone. false: linking added it, unlinking takes it back out.
+  // Entries written before this flag existed have none, and were all already-in-balance links.
+  included?: boolean
 }
 
 export interface GoldPurchase {
@@ -444,6 +463,7 @@ export interface GoldPurchase {
   karat: 18 | 22 | 24
   pricePerGram: number
   transactionId?: string // links back to the Transaction that logged this buy, when synced automatically
+  included?: boolean     // linked as gold the holding already contained (see AssetContribution.included)
 }
 
 export interface Asset {
@@ -474,6 +494,8 @@ export interface Asset {
   ppfDeposits?: PpfDeposit[]
   // NPS — valued live from daily scheme NAVs
   npsHoldings?: NpsHolding[]
+  // Savings transactions linked to this holding (see AssetContribution)
+  contributions?: AssetContribution[]
   createdAt: string
   updatedAt: string
 }

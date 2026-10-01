@@ -10,11 +10,11 @@ import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTransfer, buildMonthlySummary, EXPENSE_CATEGORIES, INCOME_CATEGORIES, computeProjectPaid, formatCurrencyFull } from '@/lib/utils'
 import { getSavingsVehicleMeta, getCategoryDisplayName } from '@/lib/categoryIcons'
-import { legacyGoldPurchases, applyGoldPurchase, goldPurchaseTotals } from '@/lib/gold'
+import { applyLink, removeLink, findLinkedAsset, linkedContribution, linkSummary, defaultHoldingFor, vehicleKinds, isLinkable, type LinkMode, type LinkInput } from '@/lib/holdingLinks'
 import { useAppStore } from '@/store/appStore'
 import CategoryPicker from '@/components/transactions/CategoryPicker'
 import TagPicker from '@/components/transactions/TagPicker'
-import type { Transaction, TransactionType, TransferKind } from '@/types'
+import type { Asset, Transaction, TransactionType, TransferKind } from '@/types'
 import toast from 'react-hot-toast'
 
 const GOLD_VEHICLE = 'Gold'
@@ -128,7 +128,7 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
 export default function AddTransactionModal({ open, onClose, editTx, initialTab, initialSavingsVehicle, initialPrefill, onViewOriginal }: Props) {
   const { user } = useAuth()
   const refresh = useRefreshData()
-  const { projects, budgets, transactions, borrowings, contacts, settings, emergencyFund, savingsGoals, setSavingsGoals } = useAppStore()
+  const { projects, budgets, transactions, borrowings, contacts, settings, emergencyFund, savingsGoals, setSavingsGoals, assets } = useAppStore()
 
   // Core fields
   const [activeTab, setActiveTab]       = useState<Tab>(savingsTabFor(editTx))
@@ -142,6 +142,12 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   const [goldGrams, setGoldGrams]                 = useState(editTx?.goldGrams ? String(editTx.goldGrams) : '')
   const [goldKarat, setGoldKarat]                 = useState<18 | 22 | 24>(editTx?.goldKarat ?? 22)
   const [goldPricePerGram, setGoldPricePerGram]   = useState(editTx?.goldPricePerGram ? String(editTx.goldPricePerGram) : '')
+  // The Net Worth holding this savings transaction's money belongs to
+  const [holdingId, setHoldingId]   = useState('')
+  const [linkUnits, setLinkUnits]   = useState('')
+  const [linkScheme, setLinkScheme] = useState('')
+  const [linkMode, setLinkMode]     = useState<LinkMode | null>(null)
+  const holdingTouched = useRef(false)
   const [amount, setAmount]             = useState(editTx ? String(editTx.amount) : initialPrefill?.amount != null ? String(initialPrefill.amount) : '')
   const [category, setCategory]         = useState<string>(editTx?.category ?? initialPrefill?.category ?? 'Food & Dining')
   const [date, setDate]                 = useState(editTx?.date ?? initialPrefill?.date ?? format(new Date(), 'yyyy-MM-dd'))
@@ -305,6 +311,13 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       setGoldGrams(editTx?.goldGrams ? String(editTx.goldGrams) : '')
       setGoldKarat(editTx?.goldKarat ?? 22)
       setGoldPricePerGram(editTx?.goldPricePerGram ? String(editTx.goldPricePerGram) : '')
+      const linked = editTx ? findLinkedAsset(assets, editTx.id) : undefined
+      const linkedEntry = linked && editTx ? linkedContribution(linked, editTx.id) : undefined
+      setHoldingId(linked?.id ?? '')
+      setLinkUnits(linkedEntry?.units ? String(Math.abs(linkedEntry.units)) : '')
+      setLinkScheme(linkedEntry?.schemeCode ?? '')
+      setLinkMode(null)
+      holdingTouched.current = false
       setAmount(editTx ? String(editTx.amount) : initialPrefill?.amount != null ? String(initialPrefill.amount) : '')
       setCategory(editTx?.category ?? initialPrefill?.category ?? 'Food & Dining')
       setDate(editTx?.date ?? initialPrefill?.date ?? format(new Date(), 'yyyy-MM-dd'))
@@ -433,11 +446,116 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       toast(`${Math.round(pct)}% of ${cat} budget used`, { duration: 4000 })
   }
 
+  // ── Holding link ────────────────────────────────────────────────────────────
+
+  // A new savings transaction goes to the holding its vehicle obviously means, when there is
+  // exactly one. An existing transaction is never re-pointed automatically.
+  useEffect(() => {
+    if (!open || editTx || activeTab !== 'savings' || holdingTouched.current) return
+    setHoldingId(defaultHoldingFor(savingsVehicle, assets)?.id ?? '')
+  }, [open, editTx, activeTab, savingsVehicle, assets])
+
+  const linkableAssets = useMemo(() => {
+    const preferred = vehicleKinds(savingsVehicle)
+    return assets.filter(isLinkable).sort((a, b) =>
+      Number(preferred.includes(b.kind)) - Number(preferred.includes(a.kind)) || a.name.localeCompare(b.name))
+  }, [assets, savingsVehicle])
+
+  // Emergency Fund keeps its own tracker, so it is never linked to a holding
+  const activeHoldingId = activeTab === 'savings' && savingsVehicle !== EMERGENCY_FUND_VEHICLE ? holdingId : ''
+  const holding     = activeHoldingId ? assets.find(a => a.id === activeHoldingId) : undefined
+  const prevHolding = editTx ? findLinkedAsset(assets, editTx.id) : undefined
+  // Pointing an existing transaction at a holding it wasn't linked to: its money may or may
+  // not be in that holding's balance yet, so the user has to say which.
+  const isRetroLink = !!editTx && !!holding && prevHolding?.id !== holding.id
+  const showGoldFields = activeTab === 'savings' && (savingsVehicle === GOLD_VEHICLE || holding?.kind === 'gold_grams')
+  const npsSchemes  = holding?.kind === 'nps' ? holding.npsHoldings ?? [] : []
+  const showUnits   = holding?.kind === 'mutual_fund' || npsSchemes.length > 0
+
+  function buildLinkInput(transactionId: string, linkAmount: number, target: Asset): LinkInput {
+    const units = parseFloat(linkUnits)
+    const grams = parseFloat(goldGrams)
+    const schemeCode = linkScheme || target.npsHoldings?.[0]?.schemeCode
+    return {
+      transactionId,
+      date,
+      amount: linkAmount,
+      direction: savingsKind === 'savings_contribution' ? 'in' : 'out',
+      ...(target.kind === 'gold_grams' && grams > 0 ? { grams, karat: goldKarat, pricePerGram: parseFloat(goldPricePerGram) || 0 } : {}),
+      ...((target.kind === 'mutual_fund' || target.kind === 'nps') && units > 0 ? { units } : {}),
+      ...(target.kind === 'nps' && units > 0 && schemeCode ? { schemeCode } : {}),
+    }
+  }
+
+  // What saving does to holdings: take this transaction out of the holding it was linked to,
+  // then put it into the one now selected. Pure — run on store data for the preview and on a
+  // fresh read for the actual write.
+  function resolveLink(pool: Asset[], transactionId: string, linkAmount: number):
+    { patches: Record<string, Partial<Asset>>; warning?: string } | { error: string } {
+    const patches: Record<string, Partial<Asset>> = {}
+    let warning: string | undefined
+    let keepGoldSale = false
+    let prevMode: LinkMode = 'add'
+    const prev = editTx ? findLinkedAsset(pool, editTx.id) : undefined
+    const target = activeHoldingId ? pool.find(a => a.id === activeHoldingId) : undefined
+
+    if (prev && editTx) {
+      const removed = removeLink(prev, editTx.id)
+      if (removed) {
+        patches[prev.id] = removed.patch
+        prevMode = removed.mode
+        // A gold sale's grams are never put back, so re-saving the same sale must not sell them twice.
+        const isGoldSale = prev.kind === 'gold_grams' && removed.restore.direction === 'out'
+        if (isGoldSale && target?.id === prev.id && savingsKind === 'savings_withdrawal') keepGoldSale = true
+        else warning = removed.warning
+      }
+    }
+    if (target) {
+      // Same holding as before: re-save the link the way it was made, so an edit changes only
+      // what was edited. A different holding (or none before): the user chooses.
+      const sameHolding = prev?.id === target.id
+      if (editTx && !sameHolding && !linkMode) return { error: 'Choose whether this money is already in the holding’s balance.' }
+      const mode: LinkMode = !editTx ? 'add' : !sameHolding ? linkMode! : keepGoldSale ? 'included' : prevMode
+      const result = applyLink({ ...target, ...patches[target.id] }, buildLinkInput(transactionId, linkAmount, target), mode)
+      if ('error' in result) return { error: result.error }
+      patches[target.id] = { ...patches[target.id], ...result.patch }
+    }
+    return { patches, warning }
+  }
+
+  const linkResult = holding && Number(amount) > 0
+    ? resolveLink(assets, editTx?.id ?? 'new', Number(amount))
+    : null
+  const linkError = linkResult && 'error' in linkResult ? linkResult.error : null
+  // Still waiting on the user to fill something in, as opposed to a link that can't work
+  const linkNeedsInput = (isRetroLink && !linkMode) || (holding?.kind === 'gold_grams' && !(parseFloat(goldGrams) > 0))
+  const linkPreview = holding && linkResult && !('error' in linkResult)
+    ? { before: linkSummary(holding), after: linkSummary({ ...holding, ...linkResult.patches[holding.id] }) }
+    : null
+  const fmtLinked = (n: number, unit: '₹' | 'g') => unit === 'g' ? `${n}g` : formatCurrencyFull(n)
+
+  async function syncHoldingLink(transactionId: string, linkAmount: number) {
+    if (!user || (!activeHoldingId && !prevHolding)) return
+    try {
+      const fresh = await getUserAssets(user.uid)
+      const resolved = resolveLink(fresh, transactionId, linkAmount)
+      if ('error' in resolved) {
+        toast.error(`Saved, but the holding wasn’t updated: ${resolved.error}`, { duration: 7000 })
+        return
+      }
+      for (const [id, patch] of Object.entries(resolved.patches)) await updateAsset(id, patch)
+      if (resolved.warning) toast(resolved.warning, { duration: 7000 })
+    } catch {
+      toast.error('Saved, but the holding wasn’t updated. Open the transaction and link it again.', { duration: 7000 })
+    }
+  }
+
   // ── Submit ──────────────────────────────────────────────────────────────────
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!user || !amount || Number(amount) <= 0) return
+    if (linkError) { toast.error(linkError); return }
     const pendingParticipant = splitEnabled && newName.trim()
       ? [{ id: 'tmp', name: newName.trim(), value: 0, kind: 'lent' as SplitKind }]
       : []
@@ -497,7 +615,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           : txType === 'transfer'
             ? { transferKind, category: 'Other' }
             : { category }),
-        ...(activeTab === 'savings' && savingsVehicle === GOLD_VEHICLE && parseFloat(goldGrams) > 0
+        ...(showGoldFields && parseFloat(goldGrams) > 0
           ? { goldGrams: parseFloat(goldGrams), goldKarat, goldPricePerGram: parseFloat(goldPricePerGram) || 0 }
           : {}),
         ...(projectId && (txType === 'expense' || activeTab === 'savings') ? { projectId } : {}),
@@ -542,6 +660,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           toast.success('Updated')
         } else {
           await updateTransaction(editTx.id, payload)
+          await syncHoldingLink(editTx.id, effectiveAmount)
 
           // Reconcile settlement changes on edit: net the old allocation out and the
           // new one in, per borrowing record, in a single pass.
@@ -625,29 +744,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           }
         }
 
-        // Gold savings contribution / withdrawal → sync into the Gold net-worth asset
-        if (activeTab === 'savings' && savingsVehicle === GOLD_VEHICLE && parseFloat(goldGrams) > 0) {
-          const allAssets = await getUserAssets(user.uid)
-          const goldAsset = allAssets.find(a => a.kind === 'gold_grams')
-          const direction = savingsKind === 'savings_contribution' ? 'buy' : 'sell'
-          const entry = {
-            grams: parseFloat(goldGrams),
-            karat: goldKarat,
-            pricePerGram: parseFloat(goldPricePerGram) || 0,
-            date,
-            transactionId: txId,
-          }
-          // Only ever sync into a holding the user already created. Auto-creating one here
-          // would flip NetWorthPage's "tracked as a holding" check and drop this vehicle's
-          // whole transaction history from net worth, replacing it with just this one lot.
-          if (goldAsset) {
-            const updated = applyGoldPurchase(legacyGoldPurchases(goldAsset), entry, direction)
-            const { totalGrams, totalInvested } = goldPurchaseTotals(updated)
-            await updateAsset(goldAsset.id, { goldPurchases: updated, value: totalGrams, ...(totalInvested > 0 ? { investedAmount: totalInvested } : {}) })
-          } else {
-            toast('Saved. Add a Gold holding in Net Worth to track grams and live value.', { duration: 5000 })
-          }
-        }
+        await syncHoldingLink(txId, effectiveAmount)
 
         // ── Auto-sync loan transfers → borrowings ──────────────────────────────
         if (txType === 'transfer' && loanPerson.trim()) {
@@ -1305,11 +1402,79 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                         />
                       </div>
 
+                      {/* Holding link */}
+                      {linkableAssets.length > 0 && savingsVehicle !== EMERGENCY_FUND_VEHICLE && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <label className="label">Holding</label>
+                          <select
+                            className="input" style={{ fontSize: 13 }} value={holdingId}
+                            onChange={e => { holdingTouched.current = true; setHoldingId(e.target.value); setLinkMode(null) }}
+                          >
+                            <option value="">Not linked</option>
+                            {linkableAssets.map(a => <option key={a.id} value={a.id}>{a.name || 'Gold'}</option>)}
+                          </select>
+
+                          {!holding && (
+                            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
+                              Counts under Savings &amp; Investments in Net Worth until it is linked to a holding.
+                            </p>
+                          )}
+
+                          {showUnits && (
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <input className="input" style={{ fontSize: 13 }} type="number" min="0" step="0.0001"
+                                placeholder={savingsKind === 'savings_contribution' ? 'Units bought (optional)' : 'Units sold (optional)'}
+                                value={linkUnits} onChange={e => setLinkUnits(e.target.value)} />
+                              {npsSchemes.length > 1 && (
+                                <select className="input" style={{ fontSize: 13 }} value={linkScheme || npsSchemes[0].schemeCode} onChange={e => setLinkScheme(e.target.value)}>
+                                  {npsSchemes.map(h => <option key={h.schemeCode} value={h.schemeCode}>{h.schemeName}</option>)}
+                                </select>
+                              )}
+                            </div>
+                          )}
+
+                          {isRetroLink && (
+                            <div style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 10, background: 'var(--surface-2)' }}>
+                              {([
+                                { id: 'included' as const, label: 'Already in its balance', sub: 'Holding total stays the same' },
+                                { id: 'add' as const,      label: 'New money',              sub: savingsKind === 'savings_contribution' ? 'Holding total goes up' : 'Holding total goes down' },
+                              ]).map(m => (
+                                <button key={m.id} type="button" onClick={() => setLinkMode(m.id)}
+                                  style={{
+                                    flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+                                    padding: '8px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                                    background: linkMode === m.id ? 'var(--surface)' : 'transparent',
+                                    color: linkMode === m.id ? 'var(--text)' : 'var(--text-3)',
+                                    boxShadow: linkMode === m.id ? 'var(--shadow-sm)' : 'none',
+                                    transition: 'all .15s',
+                                  }}>
+                                  <span style={{ fontSize: 12.5, fontWeight: 500 }}>{m.label}</span>
+                                  <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{m.sub}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {linkError && (
+                            <p style={{ fontSize: 11.5, color: linkNeedsInput ? 'var(--text-3)' : 'var(--bad-ink)', margin: 0 }}>{linkError}</p>
+                          )}
+                          {holding && linkPreview && (
+                            <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--good-soft)', fontSize: 12, color: 'var(--good-ink)' }}>
+                              {linkPreview.before.total === linkPreview.after.total
+                                ? `${holding.name || 'Gold'} stays at ${fmtLinked(linkPreview.after.total, linkPreview.after.unit)}`
+                                : `${holding.name || 'Gold'}: ${fmtLinked(linkPreview.before.total, linkPreview.before.unit)} → ${fmtLinked(linkPreview.after.total, linkPreview.after.unit)}`}
+                              {' · '}
+                              {fmtLinked(linkPreview.after.historical, linkPreview.after.unit)} historical + {fmtLinked(linkPreview.after.linked, linkPreview.after.unit)} from {linkPreview.after.count} linked
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Gold purchase details */}
-                      {savingsVehicle === GOLD_VEHICLE && (
+                      {showGoldFields && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 10, background: 'var(--surface-2)' }}>
                           <label className="label" style={{ margin: 0 }}>
-                            {savingsKind === 'savings_contribution' ? 'Grams bought' : 'Grams sold'} (optional — tracks it in Net Worth)
+                            {savingsKind === 'savings_contribution' ? 'Grams bought' : 'Grams sold'}{holding?.kind === 'gold_grams' ? '' : ' (optional)'}
                           </label>
                           <div style={{ display: 'flex', gap: 8 }}>
                             {([18, 22, 24] as const).map(k => (
@@ -1801,7 +1966,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                   <button
                     type="submit"
                     form="add-tx-form"
-                    disabled={saving || !amount || Number(amount) <= 0}
+                    disabled={saving || !amount || Number(amount) <= 0 || !!linkError}
                     className="btn-primary"
                     style={{ width: '100%', justifyContent: 'center', padding: '13px', fontSize: 14, opacity: saving ? 0.6 : 1 }}
                   >

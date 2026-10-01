@@ -4,10 +4,11 @@ import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { X, Edit2, Trash2, Calendar, FileText, Repeat, Folder, ArrowLeftRight, RotateCcw, ArrowRight } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
-import { deleteTransaction, deleteBorrowing, updateProject, updateSavingsGoal, updateBorrowing } from '@/lib/firestore'
+import { deleteTransaction, deleteBorrowing, updateProject, updateSavingsGoal, updateBorrowing, getUserAssets, updateAsset } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
-import { formatCurrencyFull, CATEGORY_COLORS, getTransferDisplay, computeProjectPaid, isSavingsTransfer } from '@/lib/utils'
+import { formatCurrencyFull, CATEGORY_COLORS, getTransferDisplay, computeProjectPaid, isSavingsTransfer, EMERGENCY_FUND_VEHICLE } from '@/lib/utils'
 import { CategoryIcon, getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
+import { applyLink, removeLink, findLinkedAsset, type LinkInput, type LinkMode } from '@/lib/holdingLinks'
 import { useAppStore } from '@/store/appStore'
 import type { Transaction } from '@/types'
 import AddTransactionModal from './AddTransactionModal'
@@ -23,7 +24,7 @@ interface Props {
 
 export default function TransactionDetailModal({ tx, onClose, onNavigate }: Props) {
   const refresh = useRefreshData()
-  const { projects, savingsGoals, setSavingsGoals, borrowings, transactions } = useAppStore()
+  const { projects, savingsGoals, setSavingsGoals, borrowings, transactions, assets } = useAppStore()
   const [editOpen, setEditOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
@@ -46,6 +47,9 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
   async function doDelete() {
     if (!tx) return
     setDeleting(true)
+    // What was taken out of a holding, so Undo can put it back
+    let unlinked: { assetId: string; restore: LinkInput; mode: LinkMode } | null = null
+    let unlinkWarning: string | undefined
     try {
       if (isSyntheticBorrowing) {
         const borrowingId = tx.id.replace('borrow-', '')
@@ -62,6 +66,18 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
         // Cascade-delete any linked refunds first — the undo toast only restores the parent expense
         for (const r of linkedRefunds) {
           await deleteTransaction(r.id)
+        }
+        // Take this transaction's money back out of the holding it was linked to — before
+        // deleting, so a failure here leaves a transaction that can simply be re-linked.
+        if (isSavingsTransfer(tx)) {
+          const fresh = await getUserAssets(tx.userId)
+          const asset = findLinkedAsset(fresh, tx.id)
+          const removed = asset ? removeLink(asset, tx.id) : null
+          if (asset && removed) {
+            await updateAsset(asset.id, removed.patch)
+            unlinked = { assetId: asset.id, restore: removed.restore, mode: removed.mode }
+            unlinkWarning = removed.warning
+          }
         }
         await deleteTransaction(tx.id)
         const { transactions, setTransactions, projects, setProjects } = useAppStore.getState()
@@ -170,8 +186,10 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
     onClose()
     setDeleting(false)
     refresh().catch(() => {})
+    if (unlinkWarning) toast(unlinkWarning, { duration: 7000 })
     // Show undo toast — re-creates the transaction if tapped within 5s
     const snapshot = { ...tx }
+    const relink = unlinked
     toast(t => (
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ fontSize: 13 }}>Deleted</span>
@@ -185,6 +203,14 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
               const { id, userId, createdAt, ...payload } = snapshot
               const newId = await addTx(userId, payload as never)
               setTxs([{ ...snapshot, id: newId }, ...currentTxs])
+              if (relink) {
+                const asset = (await getUserAssets(userId)).find(a => a.id === relink.assetId)
+                // A gold sale's grams were never put back, so restoring it must not sell them again
+                const mode = asset?.kind === 'gold_grams' && relink.restore.direction === 'out' ? 'included' : relink.mode
+                const result = asset ? applyLink(asset, { ...relink.restore, transactionId: newId }, mode) : null
+                if (asset && result && 'patch' in result) await updateAsset(asset.id, result.patch)
+                await refresh()
+              }
               toast.success('Restored')
             } catch { toast.error('Could not restore') }
           }}
@@ -202,6 +228,7 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
 
   if (!tx) return null
 
+  const linkedHolding = findLinkedAsset(assets, tx.id)
   const isTransfer = tx.type === 'transfer'
   const isIncome   = tx.type === 'income'
   const transferDisp = isTransfer ? getTransferDisplay(tx) : null
@@ -317,6 +344,9 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
                   {isTransfer && tx.savingsVehicle && (
                     <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-3)' }}>
                       {tx.savingsVehicle}
+                      {linkedHolding
+                        ? ` → ${linkedHolding.name || 'Gold'}`
+                        : isSavingsTransfer(tx) && tx.savingsVehicle !== EMERGENCY_FUND_VEHICLE ? ' · not linked to a holding' : ''}
                     </div>
                   )}
                 </div>

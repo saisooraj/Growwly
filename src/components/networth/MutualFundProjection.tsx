@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import { TrendingUp, Info, Wallet } from 'lucide-react'
+import { TrendingUp, Info, Wallet, ChevronDown, ChevronRight } from 'lucide-react'
+import MaskToggle from './MaskToggle'
 import type { Asset } from '@/types'
 import {
   projectPortfolio, SCENARIO_CAGR_OFFSETS,
@@ -80,12 +81,14 @@ function loadPrefs(): Prefs {
 interface Props {
   assets: Asset[]
   masked: boolean
+  onToggleMask: () => void
 }
 
-export default function MutualFundProjection({ assets, masked }: Props) {
+export default function MutualFundProjection({ assets, masked, onToggleMask }: Props) {
   const mfAssets = useMemo(() => assets.filter(a => a.kind === 'mutual_fund'), [assets])
 
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS)
+  const [expanded, setExpanded] = useState(false)
   const [cagrByFund, setCagrByFund] = useState<Record<string, number>>({})
   const [navByCode, setNavByCode] = useState<Record<string, number>>({})
   const skipPersist = useRef(true)
@@ -189,18 +192,26 @@ export default function MutualFundProjection({ assets, masked }: Props) {
     <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+      <button
+        type="button" onClick={() => setExpanded(v => !v)} aria-expanded={expanded}
+        style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flex: 1, minWidth: 0, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+      >
         <div>
           <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Wealth projection</h2>
           <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
             If you keep investing at these rates
           </p>
         </div>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-4)', whiteSpace: 'nowrap' }}>
-          <Info size={12} /> AMFI 5-yr CAGR
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-4)', whiteSpace: 'nowrap' }}>
+          {expanded && <><Info size={12} /> AMFI 5-yr CAGR</>}
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </span>
+      </button>
+      <MaskToggle masked={masked} onToggle={onToggleMask} />
       </div>
 
+      {expanded && <>
       {/* Scenario selector */}
       <div style={{ display: 'flex', gap: 6, background: 'var(--surface-2)', padding: 4, borderRadius: 12 }}>
         {(Object.keys(SCENARIO_META) as MFScenario[]).map(key => {
@@ -247,6 +258,8 @@ export default function MutualFundProjection({ assets, masked }: Props) {
         })}
       </div>
 
+      </>}
+
       {/* KPI cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
         <KPI
@@ -267,6 +280,7 @@ export default function MutualFundProjection({ assets, masked }: Props) {
         />
       </div>
 
+      {expanded && <>
       {/* Chart */}
       <ResponsiveContainer width="100%" height={200}>
         <ComposedChart data={chartData} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
@@ -371,6 +385,7 @@ export default function MutualFundProjection({ assets, masked }: Props) {
           LTCG 12.5% above ₹1.25L gain
         </span>
       </div>
+      </>}
     </div>
   )
 }

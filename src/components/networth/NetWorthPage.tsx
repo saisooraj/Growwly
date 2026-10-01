@@ -9,7 +9,8 @@ import { useRouter } from 'next/navigation'
 import { useRefreshData } from '@/hooks/useData'
 import { addAsset, updateAsset, deleteAsset, addLiability, updateLiability, deleteLiability, setEmergencyFund, setUserSettings } from '@/lib/firestore'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
-import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE, getLast6Months } from '@/lib/utils'
+import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE, getLast6Months, isSavingsTransfer } from '@/lib/utils'
+import { linkedTransactionIds } from '@/lib/holdingLinks'
 import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import { assetValueInRupees, type GoldPrices } from '@/lib/gold'
 import type { Asset, AssetKind, Liability, LiabilityKind } from '@/types'
@@ -19,6 +20,7 @@ import AssetModal from './AssetModal'
 import LiabilityModal from './LiabilityModal'
 import MyAssetsSection from './MyAssetsSection'
 import MutualFundProjection from './MutualFundProjection'
+import MaskToggle from './MaskToggle'
 
 // ── EMI / Loan calculations ────────────────────────────────────────────────────
 
@@ -74,21 +76,24 @@ const LIABILITY_META: Record<LiabilityKind, { label: string; icon: React.Element
 
 const MASK = '₹ •••'
 
-function SectionHeader({ title, onAdd }: { title: string; onAdd: () => void }) {
+function SectionHeader({ title, onAdd, extra }: { title: string; onAdd: () => void; extra?: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
       <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{title}</h2>
-      <button
-        onClick={onAdd}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)',
-          background: 'var(--surface)', color: 'var(--text-2)',
-          fontSize: 12, fontWeight: 500, cursor: 'pointer',
-        }}
-      >
-        <Plus size={13} /> Add
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        {extra}
+        <button
+          onClick={onAdd}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)',
+            background: 'var(--surface)', color: 'var(--text-2)',
+            fontSize: 12, fontWeight: 500, cursor: 'pointer',
+          }}
+        >
+          <Plus size={13} /> Add
+        </button>
+      </div>
     </div>
   )
 }
@@ -122,6 +127,10 @@ export default function NetWorthPage() {
   const router = useRouter()
 
   const [masked, setMasked] = useState(true)
+  // Each card can be revealed on its own; the eye on the net worth card flips them all
+  const [cardMasks, setCardMasks] = useState<Record<string, boolean>>({})
+  const isMasked = (card: string) => cardMasks[card] ?? masked
+  const toggleCard = (card: string) => setCardMasks(m => ({ ...m, [card]: !(m[card] ?? masked) }))
   const [assetModal, setAssetModal] = useState<{ open: boolean; item?: Asset }>({ open: false })
   const [liabilityModal, setLiabilityModal] = useState<{ open: boolean; item?: Liability }>({ open: false })
   const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
@@ -202,24 +211,21 @@ export default function NetWorthPage() {
 
   // Savings vehicles (transaction-derived), excluding Emergency Fund
   const openingBalances = settings?.savingsOpeningBalances ?? {}
-  const hasGoldAsset = assets.some(a => a.kind === 'gold_grams')
-  const hasMutualFundAsset = assets.some(a => a.kind === 'mutual_fund')
+  // A savings transaction linked to a holding is already inside that holding's value, so it
+  // is left out here — each rupee is counted in exactly one place.
+  const linkedIds = useMemo(() => linkedTransactionIds(assets), [assets])
+  const linkedSavings = useMemo(
+    () => transactions.filter(t => linkedIds.has(t.id) && isSavingsTransfer(t)),
+    [transactions, linkedIds]
+  )
 
   const savingsVehicles = useMemo(() => {
-    const byVehicle = buildSavingsByVehicle(transactions, openingBalances)
-    // A vehicle whose contributions are already reflected in a holding's value must not also
-    // be summed from transactions, or the same rupees land in net worth twice.
-    // NPS is deliberately absent: its holding covers only pre-app investment, so its
-    // transaction row is genuinely additional money — filtering it would erase real value.
-    const trackedByHolding = new Set<string>()
-    if (hasGoldAsset) trackedByHolding.add('gold')
-    if (hasMutualFundAsset) trackedByHolding.add('sip / investments')
+    const byVehicle = buildSavingsByVehicle(transactions.filter(t => !linkedIds.has(t.id)), openingBalances)
     return Object.entries(byVehicle)
       .filter(([name, v]) => name !== EMERGENCY_FUND_VEHICLE && v.balance > 0)
-      .filter(([name]) => !trackedByHolding.has(name.trim().toLowerCase()))
       .map(([name, v]) => ({ name, opening: v.opening, contributed: v.contributed, withdrawn: v.withdrawn, balance: v.balance }))
       .sort((a, b) => b.balance - a.balance)
-  }, [transactions, openingBalances, hasGoldAsset, hasMutualFundAsset])
+  }, [transactions, openingBalances, linkedIds])
 
   const savingsTotal = useMemo(() => savingsVehicles.reduce((s, v) => s + v.balance, 0), [savingsVehicles])
 
@@ -254,6 +260,8 @@ export default function NetWorthPage() {
   function fmt(v: number, prefix = '') {
     return masked ? MASK : `${prefix}${formatCurrencyFull(v)}`
   }
+  const fmtFor = (card: string) => (v: number, prefix = '') => isMasked(card) ? MASK : `${prefix}${formatCurrencyFull(v)}`
+  const fmtEf = fmtFor('ef'), fmtSav = fmtFor('savings'), fmtLiab = fmtFor('liabilities')
 
   async function handleDeleteAsset(id: string) {
     setConfirm({
@@ -307,7 +315,7 @@ export default function NetWorthPage() {
               Net Worth
             </p>
             <button
-              onClick={() => setMasked(v => !v)}
+              onClick={() => { setMasked(v => !v); setCardMasks({}) }}
               style={{
                 width: 32, height: 32, borderRadius: 10, border: 'none', cursor: 'pointer',
                 background: 'rgba(255,255,255,.2)', backdropFilter: 'blur(6px)',
@@ -359,14 +367,15 @@ export default function NetWorthPage() {
       {/* My Holdings */}
       <MyAssetsSection
         assets={assets}
-        masked={masked}
+        masked={isMasked('holdings')}
+        onToggleMask={() => toggleCard('holdings')}
         onAdd={() => setAssetModal({ open: true })}
         onEdit={a => setAssetModal({ open: true, item: a })}
         onDelete={handleDeleteAsset}
       />
 
       {/* Mutual fund wealth projection (renders only when MF holdings exist) */}
-      <MutualFundProjection assets={assets} masked={masked} />
+      <MutualFundProjection assets={assets} masked={isMasked('projection')} onToggleMask={() => toggleCard('projection')} />
 
       {/* Emergency Fund */}
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -379,18 +388,21 @@ export default function NetWorthPage() {
               <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Emergency Fund</h2>
               {emergencyFund && (
                 <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
-                  Target {fmt(emergencyFund.targetAmount)} · 6 mo runway
+                  Target {fmtEf(emergencyFund.targetAmount)} · 6 mo runway
                 </p>
               )}
             </div>
           </div>
-          <button
-            onClick={openEfEdit}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
-          >
-            {emergencyFund ? <Pencil size={12} /> : <Plus size={12} />}
-            {emergencyFund ? 'Edit' : 'Set up'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <MaskToggle masked={isMasked('ef')} onToggle={() => toggleCard('ef')} />
+            <button
+              onClick={openEfEdit}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+            >
+              {emergencyFund ? <Pencil size={12} /> : <Plus size={12} />}
+              {emergencyFund ? 'Edit' : 'Set up'}
+            </button>
+          </div>
         </div>
 
         {efEditing && (
@@ -418,7 +430,7 @@ export default function NetWorthPage() {
           <>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
               <div className="display-num" style={{ fontSize: 26, color: 'var(--text)' }}>
-                {fmt(emergencyFund.currentBalance)}
+                {fmtEf(emergencyFund.currentBalance)}
               </div>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--warn-ink)' }}>
@@ -450,17 +462,25 @@ export default function NetWorthPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Savings & Investments</h2>
-            {savingsVehicles.length > 0 && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--good-ink)' }}>{fmt(savingsTotal)}</span>}
+            {savingsVehicles.length > 0 && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--good-ink)' }}>{fmtSav(savingsTotal)}</span>}
           </div>
-          <button
-            onClick={() => setSavingsModalOpen(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
-          >
-            <Plus size={13} /> Log
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <MaskToggle masked={isMasked('savings')} onToggle={() => toggleCard('savings')} />
+            <button
+              onClick={() => setSavingsModalOpen(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+            >
+              <Plus size={13} /> Log
+            </button>
+          </div>
         </div>
+        {linkedSavings.length > 0 && (
+          <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 10px' }}>
+            Savings not yet linked to a holding. {linkedSavings.length} linked transaction{linkedSavings.length === 1 ? '' : 's'} ({fmtSav(linkedSavings.reduce((s, t) => s + (t.transferKind === 'savings_contribution' || t.transferKind === 'savings_transfer' ? t.amount : -t.amount), 0))}) {linkedSavings.length === 1 ? 'is' : 'are'} counted in My Holdings instead.
+          </p>
+        )}
         {savingsVehicles.length === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--text-4)', textAlign: 'center', padding: '24px 0' }}>No savings logged yet. Tap Log to add one.</p>
+          <p style={{ fontSize: 13, color: 'var(--text-4)', textAlign: 'center', padding: '24px 0' }}>{linkedSavings.length > 0 ? 'Everything here is linked to a holding.' : 'No savings logged yet. Tap Log to add one.'}</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {savingsVehicles.map(v => {
@@ -476,11 +496,11 @@ export default function NetWorthPage() {
                       <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v.name}</p>
                       <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
                         {v.opening > 0
-                          ? `${fmt(v.opening)} prior + ${fmt(v.contributed)} added`
-                          : 'Net contributions'}
+                          ? `${fmtSav(v.opening)} prior + ${fmtSav(v.contributed)} unlinked`
+                          : 'Not linked to a holding'}
                       </p>
                     </div>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--good-ink)', whiteSpace: 'nowrap' }}>{fmt(v.balance)}</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--good-ink)', whiteSpace: 'nowrap' }}>{fmtSav(v.balance)}</p>
                     <button onClick={() => openVehicleEdit(v.name)} style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)', flexShrink: 0 }} title="Set prior balance">
                       <Pencil size={13} />
                     </button>
@@ -519,7 +539,8 @@ export default function NetWorthPage() {
 
       {/* Liabilities */}
       <div className="card">
-        <SectionHeader title="Liabilities & Loans" onAdd={() => setLiabilityModal({ open: true })} />
+        <SectionHeader title="Liabilities & Loans" onAdd={() => setLiabilityModal({ open: true })}
+          extra={<MaskToggle masked={isMasked('liabilities')} onToggle={() => toggleCard('liabilities')} />} />
         {liabilities.length === 0 ? (
           <p style={{ fontSize: 13, color: 'var(--text-4)', textAlign: 'center', padding: '24px 0' }}>No liabilities. Great shape!</p>
         ) : (
@@ -548,8 +569,8 @@ export default function NetWorthPage() {
                       </p>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--bad-ink)', margin: 0 }}>{fmt(Math.round(outstanding))}</p>
-                      {emi > 0 && <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>EMI {fmt(Math.round(emi))}/mo</p>}
+                      <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--bad-ink)', margin: 0 }}>{fmtLiab(Math.round(outstanding))}</p>
+                      {emi > 0 && <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>EMI {fmtLiab(Math.round(emi))}/mo</p>}
                     </div>
                     <div style={{ display: 'flex', gap: 2 }}>
                       <button onClick={() => setLiabilityModal({ open: true, item: l })} style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)' }}><Pencil size={13} /></button>
@@ -572,7 +593,7 @@ export default function NetWorthPage() {
       </div>
 
       {/* FI Calculator */}
-      <FICalculator masked={masked} />
+      <FICalculator masked={isMasked('fi')} onToggleMask={() => toggleCard('fi')} />
 
       {assetModal.open && (
         <AssetModal item={assetModal.item} onSave={handleSaveAsset} onClose={() => setAssetModal({ open: false })} />
@@ -590,7 +611,7 @@ export default function NetWorthPage() {
 
 // ── FI Calculator ──────────────────────────────────────────────────────────────
 
-function FICalculator({ masked }: { masked: boolean }) {
+function FICalculator({ masked, onToggleMask }: { masked: boolean; onToggleMask: () => void }) {
   const { transactions, selectedMonth, settings, assets, liabilities } = useAppStore()
   const [goldPrices, setGoldPrices] = useState<GoldPrices | null>(null)
 
@@ -648,9 +669,12 @@ function FICalculator({ masked }: { masked: boolean }) {
 
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div>
-        <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: '0 0 4px' }}>Financial Independence Calculator</h2>
-        <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>Based on 4% withdrawal rule · 12% assumed investment return</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <div>
+          <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: '0 0 4px' }}>Financial Independence Calculator</h2>
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>Based on 4% withdrawal rule · 12% assumed investment return</p>
+        </div>
+        <MaskToggle masked={masked} onToggle={onToggleMask} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
