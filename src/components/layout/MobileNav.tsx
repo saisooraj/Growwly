@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, ArrowLeftRight, TrendingUp,
   Plus, X,
-  CalendarDays, CalendarClock, Target, FolderKanban,
+  CalendarDays, CalendarClock, Target,
   HandCoins, CheckSquare, Activity, LineChart, Settings,
   Flame, Leaf, Sparkles,
 } from 'lucide-react'
@@ -28,8 +28,7 @@ const MAIN_NAV = [
 const MORE_SECTIONS = [
   { href: '/planning',   label: 'Planning',   Icon: CalendarDays  },
   { href: '/upcoming',   label: 'Upcoming',   Icon: CalendarClock },
-  { href: '/goals',      label: 'Savings',    Icon: Target        },
-  { href: '/projects',   label: 'Projects',   Icon: FolderKanban  },
+  { href: '/goals',      label: 'Goals',      Icon: Target        },
   { href: '/borrowings', label: 'Borrowings', Icon: HandCoins     },
   { href: '/tasks',      label: 'Tasks',      Icon: CheckSquare,  settingKey: 'showTasksTab' as const  },
   { href: '/health',     label: 'Health',     Icon: Activity,     settingKey: 'showHealthTab' as const },

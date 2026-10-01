@@ -104,8 +104,8 @@ export const FALLBACK_TOUR: Announcement = {
     },
     {
       iconKey: 'target',
-      title: 'Savings, Net Worth & Projects',
-      body: 'Set savings goals, track assets and liabilities in Net Worth, and keep multi-payment Projects and Borrowings organized in their own tabs.',
+      title: 'Goals, Net Worth & Borrowings',
+      body: 'Set savings goals and multi-payment project budgets in Goals, track assets and liabilities in Net Worth, and keep Borrowings organized in their own tab.',
     },
     {
       iconKey: 'sparkles',
