@@ -3,20 +3,16 @@
 import { Fragment, useEffect, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { ChevronLeft, ChevronRight, X, TrendingUp, TrendingDown, Minus, Download } from 'lucide-react'
-import { IconChartBar, IconTrophy, IconCoin } from '@tabler/icons-react'
+import { IconChartBar, IconTrophy, IconPigMoney, IconCoin } from '@tabler/icons-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
-import { buildMonthlySummary, formatCurrencyFull, downloadJSON } from '@/lib/utils'
+import { buildMonthlySummary, formatCurrencyFull, downloadJSON, getCycleMonth } from '@/lib/utils'
 import { exportAllUserData } from '@/lib/firestore'
 import { getCategoryDisplayName } from '@/lib/categoryIcons'
 import { format, subMonths, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
 
 const STORAGE_KEY = 'recap_seen_month'
-
-function getPrevMonth(): string {
-  return format(subMonths(new Date(), 1), 'yyyy-MM')
-}
 
 // Stat tile used in slides
 function StatTile({ label, value, color }: { label: string; value: string; color: string }) {
@@ -28,18 +24,31 @@ function StatTile({ label, value, color }: { label: string; value: string; color
   )
 }
 
+// Up/down comparison row (e.g. "+12% vs August (₹52,340 avg)") — for spending,
+// up is bad (red) and down is good (green).
+function TrendRow({ diff, pct, label }: { diff: number; pct: number; label: string }) {
+  const color = diff > 0 ? 'var(--bad-ink)' : diff < 0 ? 'var(--good-ink)' : 'var(--text-3)'
+  const Icon  = diff > 0 ? TrendingUp : diff < 0 ? TrendingDown : Minus
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 12.5, fontWeight: 600 }}>
+      <Icon size={14} style={{ color, flexShrink: 0 }} />
+      <span style={{ color }}>{diff > 0 ? '+' : ''}{pct}% {label}</span>
+    </div>
+  )
+}
+
 export default function MonthlyRecap() {
-  const { transactions, emergencyFund, borrowings } = useAppStore()
+  const { transactions, emergencyFund, borrowings, settings } = useAppStore()
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [slide, setSlide] = useState(0)
   const [exporting, setExporting] = useState(false)
 
-  const prevMonth = getPrevMonth()
-  const currMonth = format(new Date(), 'yyyy-MM')
-  const prevSummary   = buildMonthlySummary(transactions, prevMonth)
-  const twoMonthsAgo  = format(subMonths(new Date(), 2), 'yyyy-MM')
-  const twoAgoSummary = buildMonthlySummary(transactions, twoMonthsAgo)
+  const currMonth     = getCycleMonth(settings)
+  const prevMonth     = format(subMonths(parseISO(`${currMonth}-01`), 1), 'yyyy-MM')
+  const twoMonthsAgo  = format(subMonths(parseISO(`${currMonth}-01`), 2), 'yyyy-MM')
+  const prevSummary   = buildMonthlySummary(transactions, prevMonth, settings, borrowings)
+  const twoAgoSummary = buildMonthlySummary(transactions, twoMonthsAgo, settings, borrowings)
 
   useEffect(() => {
     if (transactions.length === 0) return
@@ -67,16 +76,30 @@ export default function MonthlyRecap() {
 
   const prevLabel  = format(parseISO(`${prevMonth}-01`), 'MMMM yyyy')
   const topCategory = Object.entries(prevSummary.byCategory).sort(([, a], [, b]) => b - a)[0]
-  const spendDiff  = prevSummary.totalExpenses - twoAgoSummary.totalExpenses
-  const spendPct   = twoAgoSummary.totalExpenses > 0
-    ? Math.round((spendDiff / twoAgoSummary.totalExpenses) * 100) : null
-  const pendingLent     = borrowings.filter(b => b.type === 'lent'     && b.status !== 'repaid').reduce((s, b) => s + (b.amount - b.repaidAmount), 0)
-  const pendingBorrowed = borrowings.filter(b => b.type === 'borrowed' && b.status !== 'repaid').reduce((s, b) => s + (b.amount - b.repaidAmount), 0)
+
+  // vs last month (the month right before the recapped one)
+  const lastMonthDiff = prevSummary.totalExpenses - twoAgoSummary.totalExpenses
+  const lastMonthPct  = twoAgoSummary.totalExpenses > 0
+    ? Math.round((lastMonthDiff / twoAgoSummary.totalExpenses) * 100) : null
+
+  // vs trailing average, over however many of the 6 months before that have data
+  const trailingExpenses = [3, 4, 5, 6, 7, 8]
+    .map(o => buildMonthlySummary(transactions, format(subMonths(parseISO(`${currMonth}-01`), o), 'yyyy-MM'), settings, borrowings))
+    .filter(s => s.totalIncome > 0 || s.totalExpenses > 0)
+    .map(s => s.totalExpenses)
+  const avgExpenses = trailingExpenses.length > 0
+    ? trailingExpenses.reduce((a, b) => a + b, 0) / trailingExpenses.length : null
+  const avgDiff = avgExpenses !== null ? prevSummary.totalExpenses - avgExpenses : null
+  const avgPct  = avgDiff !== null && avgExpenses! > 0
+    ? Math.round((avgDiff / avgExpenses!) * 100) : null
+
+  const netSaved = prevSummary.savingsContributed - prevSummary.savingsWithdrawn
+
   const efPct = emergencyFund
     ? Math.round((emergencyFund.currentBalance / emergencyFund.targetAmount) * 100) : null
 
   const slides = [
-    // Slide 0: Spending overview
+    // Slide 0: Total spent, vs last month, vs average
     <div key="spend" style={{ textAlign: 'center', padding: '20px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <div style={{ width: 52, height: 52, borderRadius: 16, background: 'var(--brand-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -84,28 +107,55 @@ export default function MonthlyRecap() {
         </div>
       </div>
       <p style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', margin: 0 }}>{prevLabel} recap</p>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <StatTile label="Total Spent"  value={formatCurrencyFull(prevSummary.totalExpenses)} color="var(--bad-ink)" />
-        <StatTile label="Total Income" value={formatCurrencyFull(prevSummary.totalIncome)}   color="var(--good-ink)" />
+      <div style={{ padding: '14px', borderRadius: 14, background: 'var(--bad-soft)' }}>
+        <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 4px' }}>Total Spent</p>
+        <p style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', margin: 0, color: 'var(--bad-ink)' }}>
+          {formatCurrencyFull(prevSummary.totalExpenses)}
+        </p>
       </div>
-      <div style={{
-        padding: '14px', borderRadius: 14,
-        background: prevSummary.net >= 0 ? 'var(--good-soft)' : 'var(--bad-soft)',
-      }}>
-        <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 4px' }}>Net</p>
-        <p style={{
-          fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px',
-          color: prevSummary.net >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)',
-        }}>
-          {prevSummary.net >= 0 ? '+' : ''}{formatCurrencyFull(prevSummary.net)}
-        </p>
-        <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>
-          {prevSummary.net >= 0 ? 'You saved money last month' : 'Spending exceeded income'}
-        </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {lastMonthPct !== null && (
+          <TrendRow diff={lastMonthDiff} pct={lastMonthPct} label={`vs ${format(parseISO(`${twoMonthsAgo}-01`), 'MMMM')}`} />
+        )}
+        {avgPct !== null && avgExpenses !== null && (
+          <TrendRow diff={avgDiff!} pct={avgPct} label={`vs your ${trailingExpenses.length}-mo avg (${formatCurrencyFull(Math.round(avgExpenses))})`} />
+        )}
       </div>
     </div>,
 
-    // Slide 1: Top category + trend
+    // Slide 1: Saved + money in
+    <div key="saved" style={{ textAlign: 'center', padding: '20px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <div style={{ width: 52, height: 52, borderRadius: 16, background: 'var(--good-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <IconPigMoney size={28} style={{ color: 'var(--good-ink)' }} stroke={1.5} />
+        </div>
+      </div>
+      <p style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', margin: 0 }}>Saved</p>
+      <div style={{
+        padding: '14px', borderRadius: 14,
+        background: netSaved >= 0 ? 'var(--good-soft)' : 'var(--bad-soft)',
+      }}>
+        <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 4px' }}>Saved</p>
+        <p style={{
+          fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', margin: '0 0 4px',
+          color: netSaved >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)',
+        }}>
+          {netSaved >= 0 ? '+' : ''}{formatCurrencyFull(netSaved)}
+        </p>
+        {prevSummary.savingsWithdrawn > 0 ? (
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>
+            {formatCurrencyFull(prevSummary.savingsContributed)} contributed, {formatCurrencyFull(prevSummary.savingsWithdrawn)} withdrawn
+          </p>
+        ) : (
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>
+            {netSaved > 0 ? 'Moved into savings last month' : 'No savings transfers logged'}
+          </p>
+        )}
+      </div>
+      <StatTile label="Money In" value={formatCurrencyFull(prevSummary.totalIncome)} color="var(--good-ink)" />
+    </div>,
+
+    // Slide 2: Top category
     <div key="category" style={{ textAlign: 'center', padding: '20px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <div style={{ width: 52, height: 52, borderRadius: 16, background: 'var(--warn-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -126,32 +176,23 @@ export default function MonthlyRecap() {
       ) : (
         <p style={{ fontSize: 13, color: 'var(--text-4)' }}>No spending data</p>
       )}
-      {spendPct !== null && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
-          {spendDiff > 0
-            ? <TrendingUp size={16} style={{ color: 'var(--bad-ink)' }} />
-            : spendDiff < 0
-              ? <TrendingDown size={16} style={{ color: 'var(--good-ink)' }} />
-              : <Minus size={16} style={{ color: 'var(--text-3)' }} />}
-          <span style={{ color: spendDiff > 0 ? 'var(--bad-ink)' : spendDiff < 0 ? 'var(--good-ink)' : 'var(--text-3)' }}>
-            {spendDiff > 0 ? '+' : ''}{spendPct}% vs {format(parseISO(`${twoMonthsAgo}-01`), 'MMMM')}
-          </span>
-        </div>
-      )}
     </div>,
 
-    // Slide 2: Borrowings + emergency fund
+    // Slide 3: Borrowed, repayment received, debt settled + emergency fund
     <div key="money" style={{ textAlign: 'center', padding: '20px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         <div style={{ width: 52, height: 52, borderRadius: 16, background: 'var(--info-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <IconCoin size={28} style={{ color: 'var(--info-ink)' }} stroke={1.5} />
         </div>
       </div>
-      <p style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', margin: 0 }}>Money owed</p>
+      <p style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', margin: 0 }}>Borrowing & repayments</p>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <StatTile label="You owe"     value={formatCurrencyFull(pendingBorrowed)} color="var(--bad-ink)"  />
-        <StatTile label="Owed to you" value={formatCurrencyFull(pendingLent)}     color="var(--good-ink)" />
+        <StatTile label="Borrowed"           value={formatCurrencyFull(prevSummary.totalBorrowed)}     color="var(--bad-ink)"  />
+        <StatTile label="Repayment Received" value={formatCurrencyFull(prevSummary.repaymentReceived)} color="var(--good-ink)" />
       </div>
+      {prevSummary.repaymentPaid > 0 && (
+        <StatTile label="Debt Settled" value={formatCurrencyFull(prevSummary.repaymentPaid)} color="var(--info-ink)" />
+      )}
       {emergencyFund && efPct !== null && (
         <div style={{ padding: '14px', borderRadius: 14, background: 'var(--surface-2)' }}>
           <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 10px' }}>Emergency Fund</p>
