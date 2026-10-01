@@ -1416,7 +1416,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
 
                           {!holding && (
                             <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
-                              Counts under Savings &amp; Investments in Net Worth until it is linked to a holding.
+                              Counts under Unlinked savings in Net Worth until it is linked to a holding.
                             </p>
                           )}
 

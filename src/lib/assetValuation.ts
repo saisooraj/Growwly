@@ -2,7 +2,7 @@ import { accrueEpfBalance, computePpfBalance, npsCorpus } from '@/lib/retirement
 import { legacyGoldPurchases, goldPurchaseTotals, goldCurrentValue } from '@/lib/gold'
 import type { Asset } from '@/types'
 
-// One valuation for every holding, shared by the net worth total and the My Holdings list so
+// One valuation for every holding, shared by the net worth total and the holdings list so
 // the two can never disagree. Asset.value alone is not a rupee value for every kind: it is
 // grams for gold and the invested amount for mutual funds and stocks.
 

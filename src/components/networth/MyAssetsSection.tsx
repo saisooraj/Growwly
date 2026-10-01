@@ -135,11 +135,12 @@ interface Props {
   masked: boolean
   onToggleMask: () => void
   onAdd: () => void
+  onLog: () => void          // log a savings transaction
   onEdit: (a: Asset) => void
   onDelete: (id: string) => void
 }
 
-export default function MyAssetsSection({ assets, masked, onToggleMask, onAdd, onEdit, onDelete }: Props) {
+export default function MyAssetsSection({ assets, masked, onToggleMask, onAdd, onLog, onEdit, onDelete }: Props) {
   const enriched = assets
 
   // Group by kind, sorted by KIND_ORDER
@@ -164,7 +165,7 @@ export default function MyAssetsSection({ assets, masked, onToggleMask, onAdd, o
       {/* Section header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>My Holdings</h2>
+          <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Savings &amp; Investments</h2>
           {totalGainPct !== null && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
               <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{fmt(totalValue)}</span>
@@ -178,7 +179,13 @@ export default function MyAssetsSection({ assets, masked, onToggleMask, onAdd, o
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <MaskToggle masked={masked} onToggle={onToggleMask} />
           <button
-            onClick={onAdd}
+            onClick={onLog} title="Log a savings transaction"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+          >
+            <Plus size={13} /> Log
+          </button>
+          <button
+            onClick={onAdd} title="Add a holding"
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
           >
             <Plus size={13} /> Add

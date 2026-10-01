@@ -3,7 +3,7 @@ import { legacyGoldPurchases, applyGoldPurchase, goldPurchaseTotals } from '@/li
 import { computePpfBalance } from '@/lib/retirement'
 
 // A savings transaction's money is counted in exactly one place: inside the holding it is
-// linked to, or in the Savings & Investments card while it is unlinked. The link lives only
+// linked to, or in the Unlinked savings card while it is unlinked. The link lives only
 // on the holding (a gold lot, a PPF deposit, or a contributions entry carrying the
 // transaction id), so linking and unlinking are single-document writes.
 

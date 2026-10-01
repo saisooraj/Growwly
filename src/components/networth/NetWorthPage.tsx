@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
 import { useRefreshData } from '@/hooks/useData'
 import { addAsset, updateAsset, deleteAsset, addLiability, updateLiability, deleteLiability, setEmergencyFund, setUserSettings } from '@/lib/firestore'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
-import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE, getLast6Months, isSavingsTransfer } from '@/lib/utils'
+import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE, getLast6Months } from '@/lib/utils'
 import { linkedTransactionIds } from '@/lib/holdingLinks'
 import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import { computeValue } from '@/lib/assetValuation'
@@ -136,7 +136,7 @@ export default function NetWorthPage() {
   const [liabilityModal, setLiabilityModal] = useState<{ open: boolean; item?: Liability }>({ open: false })
   const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [savingsModalOpen, setSavingsModalOpen] = useState(false)
-  // Every holding at its live value — the same figures My Holdings shows
+  // Every holding at its live value — the same figures the Savings & Investments card shows
   const prices = useLivePrices(assets)
   const valuedAssets = useMemo(() => assets.map(a => computeValue(a, prices)), [assets, prices])
   const holdingsValue = useMemo(() => valuedAssets.reduce((s, a) => s + a.currentValue, 0), [valuedAssets])
@@ -201,11 +201,6 @@ export default function NetWorthPage() {
   // A savings transaction linked to a holding is already inside that holding's value, so it
   // is left out here — each rupee is counted in exactly one place.
   const linkedIds = useMemo(() => linkedTransactionIds(assets), [assets])
-  const linkedSavings = useMemo(
-    () => transactions.filter(t => linkedIds.has(t.id) && isSavingsTransfer(t)),
-    [transactions, linkedIds]
-  )
-
   const savingsVehicles = useMemo(() => {
     const byVehicle = buildSavingsByVehicle(transactions.filter(t => !linkedIds.has(t.id)), openingBalances)
     return Object.entries(byVehicle)
@@ -345,12 +340,13 @@ export default function NetWorthPage() {
         </div>
       </div>
 
-      {/* My Holdings */}
+      {/* Savings & Investments (the holdings) */}
       <MyAssetsSection
         assets={valuedAssets}
         masked={isMasked('holdings')}
         onToggleMask={() => toggleCard('holdings')}
         onAdd={() => setAssetModal({ open: true })}
+        onLog={() => setSavingsModalOpen(true)}
         onEdit={a => setAssetModal({ open: true, item: a })}
         onDelete={handleDeleteAsset}
       />
@@ -438,31 +434,19 @@ export default function NetWorthPage() {
         )}
       </div>
 
-      {/* Savings & Investments (derived from savings transactions) */}
+      {/* Unlinked savings — savings transactions not yet tied to a holding. Hidden when there are none. */}
+      {savingsVehicles.length > 0 && (
       <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Savings & Investments</h2>
-            {savingsVehicles.length > 0 && <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--good-ink)' }}>{fmtSav(savingsTotal)}</span>}
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Unlinked savings</h2>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--good-ink)' }}>{fmtSav(savingsTotal)}</span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <MaskToggle masked={isMasked('savings')} onToggle={() => toggleCard('savings')} />
-            <button
-              onClick={() => setSavingsModalOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
-            >
-              <Plus size={13} /> Log
-            </button>
-          </div>
+          <MaskToggle masked={isMasked('savings')} onToggle={() => toggleCard('savings')} />
         </div>
-        {linkedSavings.length > 0 && (
-          <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 10px' }}>
-            Savings not yet linked to a holding. {linkedSavings.length} linked transaction{linkedSavings.length === 1 ? '' : 's'} ({fmtSav(linkedSavings.reduce((s, t) => s + (t.transferKind === 'savings_contribution' || t.transferKind === 'savings_transfer' ? t.amount : -t.amount), 0))}) {linkedSavings.length === 1 ? 'is' : 'are'} counted in My Holdings instead.
-          </p>
-        )}
-        {savingsVehicles.length === 0 ? (
-          <p style={{ fontSize: 13, color: 'var(--text-4)', textAlign: 'center', padding: '24px 0' }}>{linkedSavings.length > 0 ? 'Everything here is linked to a holding.' : 'No savings logged yet. Tap Log to add one.'}</p>
-        ) : (
+        <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 10px' }}>
+          Counted in net worth, but not tied to a holding yet. Open a transaction and pick its holding to move it into Savings &amp; Investments.
+        </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {savingsVehicles.map(v => {
               const meta = getSavingsVehicleMeta(v.name)
@@ -515,8 +499,8 @@ export default function NetWorthPage() {
               )
             })}
           </div>
-        )}
       </div>
+      )}
 
       {/* Liabilities */}
       <div className="card">
@@ -582,7 +566,7 @@ export default function NetWorthPage() {
       {liabilityModal.open && (
         <LiabilityModal item={liabilityModal.item} onSave={handleSaveLiability} onClose={() => setLiabilityModal({ open: false })} />
       )}
-      <AddTransactionModal open={savingsModalOpen} onClose={() => { setSavingsModalOpen(false); refresh() }} />
+      <AddTransactionModal open={savingsModalOpen} initialTab="savings" onClose={() => { setSavingsModalOpen(false); refresh() }} />
       {confirm && (
         <ConfirmDialog open message={confirm.message} onConfirm={confirm.onConfirm} onClose={() => setConfirm(null)} />
       )}
