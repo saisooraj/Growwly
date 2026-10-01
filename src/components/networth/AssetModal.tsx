@@ -62,6 +62,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
   const [epfBalance, setEpfBalance]         = useState(item?.kind === 'epf' && item?.value ? String(item.value) : '')
   const [epfAsOf, setEpfAsOf]               = useState(item?.balanceAsOf ?? todayISO())
   const [epfContribution, setEpfContribution] = useState(item?.monthlyContribution ? String(item.monthlyContribution) : '')
+  const [epfInterest, setEpfInterest]       = useState(item?.kind === 'epf' && item.investedAmount !== undefined && item.value > item.investedAmount ? String(item.value - item.investedAmount) : '')
   const [epfRate, setEpfRate]               = useState(String(item?.kind === 'epf' && item?.annualRate ? item.annualRate : EPF_DEFAULT_RATE))
 
   // PPF
@@ -245,7 +246,8 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
         const bal = parseFloat(epfBalance) || 0
         payload = { ...base, value: bal, balanceAsOf: epfAsOf, annualRate: parseFloat(epfRate) || EPF_DEFAULT_RATE,
           ...(parseFloat(epfContribution) > 0 ? { monthlyContribution: parseFloat(epfContribution) } : {}),
-          ...(investedAmount ? { investedAmount: parseFloat(investedAmount) } : {}),
+          // What was paid in is the balance less the interest it has earned
+          ...(parseFloat(epfInterest) > 0 ? { investedAmount: Math.max(0, bal - parseFloat(epfInterest)) } : {}),
         }
       } else if (kind === 'ppf') {
         const deposits = [...ppfDeposits.filter(d => d.amount > 0 && d.date), ...ppfInterestEntry]
@@ -517,9 +519,14 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                 </div>
               </div>
               <div>
-                <label className="label">Total contributed so far (₹, optional)</label>
-                <input className="input" type="number" min="0" placeholder="For gain tracking" value={investedAmount} onChange={e => setInvestedAmount(e.target.value)} />
+                <label className="label">Interest so far (₹, optional)</label>
+                <input className="input" type="number" min="0" placeholder="Total interest shown in your passbook" value={epfInterest} onChange={e => setEpfInterest(e.target.value)} />
               </div>
+              {parseFloat(epfBalance) > 0 && parseFloat(epfInterest) > 0 && (
+                <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--good-soft)', fontSize: 12, color: 'var(--good-ink)' }}>
+                  Balance ₹{(parseFloat(epfBalance) || 0).toLocaleString('en-IN')} = contributed ₹{Math.max(0, parseFloat(epfBalance) - parseFloat(epfInterest)).toLocaleString('en-IN')} + interest ₹{parseFloat(epfInterest).toLocaleString('en-IN')}
+                </div>
+              )}
               <p style={{ fontSize: 11, color: 'var(--text-4)', margin: 0 }}>
                 EPFO has no public API. The balance is estimated forward from this snapshot using the rate and monthly credit — refresh it from your passbook now and then.
               </p>

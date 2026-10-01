@@ -68,14 +68,3 @@ export function goldPurchaseTotals(purchases: GoldPurchase[]): { totalGrams: num
 export function goldCurrentValue(purchases: GoldPurchase[], prices: GoldPrices): number {
   return purchases.reduce((sum, p) => sum + p.grams * priceForKarat(p.karat, prices), 0)
 }
-
-// asset.value is grams (not rupees) for gold_grams — anywhere assets are summed into a rupee
-// total, gold needs its live rupee value substituted in instead of the raw field.
-// Prices are null on first render and whenever the IBJA scrape fails, so fall back to cost
-// basis rather than 0 — an out-of-date value beats silently dropping the whole holding.
-export function assetValueInRupees(asset: Asset, goldPrices: GoldPrices | null): number {
-  if (asset.kind !== 'gold_grams') return asset.value
-  const purchases = legacyGoldPurchases(asset)
-  if (!goldPrices) return goldPurchaseTotals(purchases).totalInvested
-  return goldCurrentValue(purchases, goldPrices)
-}

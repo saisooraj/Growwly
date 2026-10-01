@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { Pencil, Trash2, Home, Car, Landmark, CreditCard, Package, Wallet, Eye, EyeOff, ExternalLink, Plus, TrendingUp, BarChart2, Coins } from 'lucide-react'
 import { IconLifebuoy } from '@tabler/icons-react'
 import { useAppStore } from '@/store/appStore'
@@ -12,7 +12,8 @@ import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE, getLast6Months, isSavingsTransfer } from '@/lib/utils'
 import { linkedTransactionIds } from '@/lib/holdingLinks'
 import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
-import { assetValueInRupees, type GoldPrices } from '@/lib/gold'
+import { computeValue } from '@/lib/assetValuation'
+import { useLivePrices } from '@/hooks/useLivePrices'
 import type { Asset, AssetKind, Liability, LiabilityKind } from '@/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
@@ -135,24 +136,10 @@ export default function NetWorthPage() {
   const [liabilityModal, setLiabilityModal] = useState<{ open: boolean; item?: Liability }>({ open: false })
   const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [savingsModalOpen, setSavingsModalOpen] = useState(false)
-  const [goldPrices, setGoldPrices] = useState<GoldPrices | null>(null)
-
-  // Gold's stored `value` is grams, not rupees — fetch the live rate so the net worth total can convert it
-  useEffect(() => {
-    if (!assets.some(a => a.kind === 'gold_grams')) return
-    fetch('/api/market/gold')
-      .then(r => r.json())
-      .then(d => {
-        if (d.price22kPerGram) {
-          setGoldPrices({
-            price22k: d.price22kPerGram,
-            price24k: parseFloat((d.price22kPerGram * 24 / 22).toFixed(2)),
-            price18k: parseFloat((d.price22kPerGram * 18 / 22).toFixed(2)),
-          })
-        }
-      })
-      .catch(() => {})
-  }, [assets.length])
+  // Every holding at its live value — the same figures My Holdings shows
+  const prices = useLivePrices(assets)
+  const valuedAssets = useMemo(() => assets.map(a => computeValue(a, prices)), [assets, prices])
+  const holdingsValue = useMemo(() => valuedAssets.reduce((s, a) => s + a.currentValue, 0), [valuedAssets])
 
   // Vehicle prior-balance inline edit
   const [editingVehicle, setEditingVehicle] = useState<string | null>(null)
@@ -237,13 +224,7 @@ export default function NetWorthPage() {
     })
   }, [transactions, settings])
 
-  // For net worth total we use invested/value as best estimate (MyAssetsSection shows live values);
-  // gold is the exception — its stored value is grams, not rupees, so it needs the live rate.
-  const totalAssets = useMemo(() => {
-    const assetsTotal = assets.reduce((s, a) => s + assetValueInRupees(a, goldPrices), 0)
-    const ef = emergencyFund?.currentBalance ?? 0
-    return assetsTotal + ef + savingsTotal
-  }, [assets, emergencyFund, savingsTotal, goldPrices])
+  const totalAssets = holdingsValue + (emergencyFund?.currentBalance ?? 0) + savingsTotal
 
   const totalLiabilities = useMemo(() =>
     liabilities.reduce((s, l) => {
@@ -366,7 +347,7 @@ export default function NetWorthPage() {
 
       {/* My Holdings */}
       <MyAssetsSection
-        assets={assets}
+        assets={valuedAssets}
         masked={isMasked('holdings')}
         onToggleMask={() => toggleCard('holdings')}
         onAdd={() => setAssetModal({ open: true })}
@@ -593,7 +574,7 @@ export default function NetWorthPage() {
       </div>
 
       {/* FI Calculator */}
-      <FICalculator masked={isMasked('fi')} onToggleMask={() => toggleCard('fi')} />
+      <FICalculator holdingsValue={holdingsValue} masked={isMasked('fi')} onToggleMask={() => toggleCard('fi')} />
 
       {assetModal.open && (
         <AssetModal item={assetModal.item} onSave={handleSaveAsset} onClose={() => setAssetModal({ open: false })} />
@@ -611,40 +592,21 @@ export default function NetWorthPage() {
 
 // ── FI Calculator ──────────────────────────────────────────────────────────────
 
-function FICalculator({ masked, onToggleMask }: { masked: boolean; onToggleMask: () => void }) {
-  const { transactions, selectedMonth, settings, assets, liabilities } = useAppStore()
-  const [goldPrices, setGoldPrices] = useState<GoldPrices | null>(null)
-
-  useEffect(() => {
-    if (!assets.some(a => a.kind === 'gold_grams')) return
-    fetch('/api/market/gold')
-      .then(r => r.json())
-      .then(d => {
-        if (d.price22kPerGram) {
-          setGoldPrices({
-            price22k: d.price22kPerGram,
-            price24k: parseFloat((d.price22kPerGram * 24 / 22).toFixed(2)),
-            price18k: parseFloat((d.price22kPerGram * 18 / 22).toFixed(2)),
-          })
-        }
-      })
-      .catch(() => {})
-  }, [assets.length])
-
+function FICalculator({ holdingsValue, masked, onToggleMask }: { holdingsValue: number; masked: boolean; onToggleMask: () => void }) {
+  const { transactions, selectedMonth, settings, liabilities } = useAppStore()
   const { monthlySavings, fiCorpus, currentNetWorth, yearsToFI, savingsRate, progressPct } = useMemo(() => {
     const summary = buildMonthlySummary(transactions, selectedMonth, settings)
     const monthlySavings  = Math.max(0, summary.savingsContributed - summary.savingsWithdrawn)
     const fiCorpus        = summary.totalExpenses * 12 * 25
     const savingsRate     = summary.totalIncome > 0 ? (monthlySavings / summary.totalIncome) * 100 : 0
 
-    const totalAssets      = assets.reduce((s, a) => s + assetValueInRupees(a, goldPrices), 0)
     const totalLiabilities = liabilities.reduce((s, l) => {
       const outstanding = l.tenureMonths > 0
         ? calcOutstanding(l.principal, l.interestRate, l.tenureMonths, l.startDate)
         : l.principal
       return s + outstanding
     }, 0)
-    const currentNetWorth  = Math.max(0, totalAssets - totalLiabilities)
+    const currentNetWorth  = Math.max(0, holdingsValue - totalLiabilities)
     const progressPct      = fiCorpus > 0 ? Math.min(100, (currentNetWorth / fiCorpus) * 100) : 0
 
     let yearsToFI: number | null = null
@@ -663,7 +625,7 @@ function FICalculator({ masked, onToggleMask }: { masked: boolean; onToggleMask:
     }
 
     return { monthlySavings, fiCorpus, currentNetWorth, yearsToFI, savingsRate, progressPct }
-  }, [transactions, selectedMonth, settings, assets, liabilities, goldPrices])
+  }, [transactions, selectedMonth, settings, liabilities, holdingsValue])
 
   const fmt = (v: number) => masked ? '₹ •••' : formatCurrencyFull(v)
 

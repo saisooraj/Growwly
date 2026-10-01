@@ -1,25 +1,12 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { formatCurrencyFull } from '@/lib/utils'
-import { accrueEpfBalance, computePpfBalance, npsCorpus } from '@/lib/retirement'
-import { legacyGoldPurchases, goldPurchaseTotals, goldCurrentValue } from '@/lib/gold'
+import { legacyGoldPurchases } from '@/lib/gold'
+import type { AssetWithValue } from '@/lib/assetValuation'
 import type { Asset, AssetKind } from '@/types'
 import MaskToggle from './MaskToggle'
-
-interface LivePrices {
-  gold?: { price22k: number; price18k: number; price24k: number }
-  stocks?: Record<string, { price: number; change: number; changePct: number; name: string }>
-  mf?: Record<string, { nav: number; change: number; changePct: number; schemeName: string }>
-  nps?: Record<string, { nav: number; schemeName: string; changePct: number }>
-}
-
-interface AssetWithValue extends Asset {
-  currentValue: number
-  gain: number
-  gainPct: number | null
-}
 
 // ── Kind metadata ─────────────────────────────────────────────────────────────
 
@@ -39,87 +26,6 @@ const KIND_META: Record<AssetKind, { label: string; color: string }> = {
 }
 
 const KIND_ORDER: AssetKind[] = ['mutual_fund','stocks','gold_grams','epf','ppf','nps','epf_ppf','fd_rd','cash','real_estate','vehicle','other']
-
-// ── Helper: compute current value for one asset ───────────────────────────────
-
-function computeValue(asset: Asset, prices: LivePrices): AssetWithValue {
-  let currentValue = asset.value
-  let value = asset.value
-  let gain = 0
-  let gainPct: number | null = null
-  let investedAmount = asset.investedAmount
-
-  if (asset.kind === 'gold_grams') {
-    const purchases = legacyGoldPurchases(asset)
-    const { totalGrams, totalInvested } = goldPurchaseTotals(purchases)
-    value = totalGrams
-    investedAmount = totalInvested > 0 ? totalInvested : asset.investedAmount
-    const goldPrices = prices.gold
-    if (goldPrices) {
-      currentValue = goldCurrentValue(purchases, { price18k: goldPrices.price18k, price22k: goldPrices.price22k, price24k: goldPrices.price24k })
-      if (totalInvested > 0) {
-        gain = currentValue - totalInvested
-        gainPct = (gain / totalInvested) * 100
-      }
-    } else {
-      currentValue = totalGrams
-    }
-  } else if (asset.kind === 'mutual_fund' && asset.schemeCode) {
-    const nav = prices.mf?.[asset.schemeCode]?.nav ?? 0
-    currentValue = nav > 0 && asset.units ? asset.units * nav : asset.value
-    const invested = asset.investedAmount ?? asset.value
-    if (currentValue > 0 && invested > 0) {
-      gain = currentValue - invested
-      gainPct = (gain / invested) * 100
-    }
-  } else if (asset.kind === 'stocks' && asset.ticker) {
-    const stockData = prices.stocks?.[asset.ticker]
-    const price = stockData?.price ?? 0
-    currentValue = price > 0 && asset.quantity ? asset.quantity * price : asset.value
-    const invested = asset.investedAmount ?? (asset.quantity && asset.avgBuyPrice ? asset.quantity * asset.avgBuyPrice : 0)
-    if (currentValue > 0 && invested > 0) {
-      gain = currentValue - invested
-      gainPct = (gain / invested) * 100
-    }
-  } else if (asset.kind === 'epf') {
-    currentValue = accrueEpfBalance({
-      balance: asset.value,
-      asOf: asset.balanceAsOf,
-      monthlyContribution: asset.monthlyContribution,
-      annualRate: asset.annualRate,
-    })
-    if (asset.investedAmount && asset.investedAmount > 0) {
-      gain = currentValue - asset.investedAmount
-      gainPct = (gain / asset.investedAmount) * 100
-    }
-  } else if (asset.kind === 'ppf') {
-    const p = computePpfBalance({
-      startDate: asset.ppfStartDate,
-      deposits: asset.ppfDeposits ?? [],
-      rateOverride: asset.annualRate,
-    })
-    currentValue = p.balance > 0 ? p.balance : asset.value
-    const invested = asset.investedAmount ?? p.totalDeposited
-    if (currentValue > 0 && invested > 0) {
-      gain = currentValue - invested
-      gainPct = (gain / invested) * 100
-    }
-  } else if (asset.kind === 'nps') {
-    const navMap: Record<string, number> = {}
-    for (const [code, v] of Object.entries(prices.nps ?? {})) navMap[code] = v.nav
-    const live = npsCorpus(asset.npsHoldings, navMap)
-    currentValue = live > 0 ? live : asset.value
-    if (asset.investedAmount && asset.investedAmount > 0 && currentValue > 0) {
-      gain = currentValue - asset.investedAmount
-      gainPct = (gain / asset.investedAmount) * 100
-    }
-  } else if (asset.investedAmount && asset.investedAmount > 0) {
-    gain = currentValue - asset.investedAmount
-    gainPct = (gain / asset.investedAmount) * 100
-  }
-
-  return { ...asset, value, currentValue, gain, gainPct, investedAmount }
-}
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
@@ -225,7 +131,7 @@ function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, allTo
 // ── Main component ─────────────────────────────────────────────────────────────
 
 interface Props {
-  assets: Asset[]
+  assets: AssetWithValue[]   // already valued by the page, so this list and the net worth total agree
   masked: boolean
   onToggleMask: () => void
   onAdd: () => void
@@ -234,72 +140,7 @@ interface Props {
 }
 
 export default function MyAssetsSection({ assets, masked, onToggleMask, onAdd, onEdit, onDelete }: Props) {
-  const [prices, setPrices] = useState<LivePrices>({})
-
-  // Fetch all live prices on mount
-  useEffect(() => {
-    async function fetchPrices() {
-      const updates: LivePrices = {}
-
-      // Gold
-      try {
-        const r = await fetch('/api/market/gold')
-        const d = await r.json()
-        if (d.price22kPerGram) {
-          updates.gold = {
-            price22k: d.price22kPerGram,
-            price24k: parseFloat((d.price22kPerGram * 24 / 22).toFixed(2)),
-            price18k: parseFloat((d.price22kPerGram * 18 / 22).toFixed(2)),
-          }
-        }
-      } catch {}
-
-      // Stocks
-      const stockAssets = assets.filter(a => a.kind === 'stocks' && a.ticker)
-      if (stockAssets.length > 0) {
-        try {
-          const symbols = stockAssets.map(a => a.ticker!).join(',')
-          const r = await fetch(`/api/market/stocks?symbols=${encodeURIComponent(symbols)}`)
-          const d = await r.json()
-          const stockMap: LivePrices['stocks'] = {}
-          for (const s of d.data ?? []) stockMap[s.symbol] = s
-          updates.stocks = stockMap
-        } catch {}
-      }
-
-      // Mutual Funds
-      const mfAssets = assets.filter(a => a.kind === 'mutual_fund' && a.schemeCode)
-      if (mfAssets.length > 0) {
-        try {
-          const codes = mfAssets.map(a => a.schemeCode!).join(',')
-          const r = await fetch(`/api/market/mf/nav?codes=${encodeURIComponent(codes)}`)
-          const d = await r.json()
-          updates.mf = d.nav ?? {}
-        } catch {}
-      }
-
-      // NPS
-      const npsCodes = Array.from(new Set(
-        assets.filter(a => a.kind === 'nps').flatMap(a => (a.npsHoldings ?? []).map(h => h.schemeCode))
-      ))
-      if (npsCodes.length > 0) {
-        try {
-          const r = await fetch(`/api/market/nps?codes=${encodeURIComponent(npsCodes.join(','))}`)
-          const d = await r.json()
-          updates.nps = d.nav ?? {}
-        } catch {}
-      }
-
-      setPrices(updates)
-    }
-    fetchPrices()
-  }, [assets.length]) // re-fetch when holdings change
-
-  // Compute values with live prices
-  const enriched = useMemo(
-    () => assets.map(a => computeValue(a, prices)),
-    [assets, prices]
-  )
+  const enriched = assets
 
   // Group by kind, sorted by KIND_ORDER
   const groups = useMemo(() => {
