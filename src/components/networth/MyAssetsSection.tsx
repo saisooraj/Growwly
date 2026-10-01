@@ -40,19 +40,51 @@ function GainBadge({ gain, gainPct }: { gain: number; gainPct: number | null }) 
   )
 }
 
+// What a holding cost: the basis its gain is measured against, or the invested amount on file.
+function investedOf(a: AssetWithValue): number | null {
+  if (a.gainPct !== null) return a.currentValue - a.gain
+  return a.investedAmount && a.investedAmount > 0 ? a.investedAmount : null
+}
+
+// Totals for a set of holdings. `invested` is only given when every holding has one, so it
+// always describes the same money as `value`.
+function summarize(items: AssetWithValue[]) {
+  const value = items.reduce((s, a) => s + a.currentValue, 0)
+  const tracked = items.filter(a => a.gainPct !== null)
+  const gain = tracked.reduce((s, a) => s + a.gain, 0)
+  const basis = tracked.reduce((s, a) => s + (a.currentValue - a.gain), 0)
+  const costs = items.map(investedOf)
+  const invested = items.length > 0 && costs.every(c => c !== null) ? costs.reduce((s: number, c) => s + (c ?? 0), 0) : null
+  return { value, gain, gainPct: basis > 0 ? (gain / basis) * 100 : null, invested }
+}
+
+function GainLine({ gain, gainPct, masked }: { gain: number; gainPct: number | null; masked: boolean }) {
+  if (gainPct === null) return null
+  const up = gain >= 0
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontWeight: 600, color: up ? 'var(--good-ink)' : 'var(--bad-ink)', whiteSpace: 'nowrap' }}>
+      {up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+      {masked
+        ? `${up ? '+' : '−'}${Math.abs(gainPct).toFixed(1)}%`
+        : `${up ? '+' : '−'}${formatCurrencyFull(Math.abs(gain))} (${Math.abs(gainPct).toFixed(1)}%)`}
+    </span>
+  )
+}
+
 interface CategoryCardProps {
   kind: AssetKind
   assets: AssetWithValue[]
   totalValue: number
   totalGain: number
   totalGainPct: number | null
+  invested: number | null
   allTotal: number
   masked: boolean
   onEdit: (a: Asset) => void
   onDelete: (id: string) => void
 }
 
-function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, allTotal, masked, onEdit, onDelete }: CategoryCardProps) {
+function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, invested, allTotal, masked, onEdit, onDelete }: CategoryCardProps) {
   const [open, setOpen] = useState(false)
   const meta = KIND_META[kind]
   const alloc = allTotal > 0 ? (totalValue / allTotal) * 100 : 0
@@ -71,15 +103,13 @@ function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, allTo
             <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)' }}>{meta.label}</span>
             <span style={{ fontSize: 11, color: 'var(--text-4)', background: 'var(--surface-3)', borderRadius: 999, padding: '1px 7px' }}>{alloc.toFixed(1)}%</span>
           </div>
-          <GainBadge gain={totalGain} gainPct={totalGainPct} />
+          {invested !== null && (
+            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, whiteSpace: 'nowrap' }}>Invested {fmt(invested)}</div>
+          )}
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0, marginRight: 6 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{fmt(totalValue)}</div>
-          {totalGain !== 0 && !masked && (
-            <div style={{ fontSize: 11, color: totalGain >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
-              {totalGain >= 0 ? '+' : ''}{formatCurrencyFull(totalGain)}
-            </div>
-          )}
+          <GainLine gain={totalGain} gainPct={totalGainPct} masked={masked} />
         </div>
         {open ? <ChevronDown size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} /> : <ChevronRight size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} />}
       </button>
@@ -153,10 +183,8 @@ export default function MyAssetsSection({ assets, masked, onToggleMask, onAdd, o
     return KIND_ORDER.filter(k => map.has(k)).map(k => ({ kind: k, items: map.get(k)! }))
   }, [enriched])
 
-  const totalValue    = enriched.reduce((s, a) => s + a.currentValue, 0)
-  const totalInvested = enriched.reduce((s, a) => s + (a.investedAmount ?? (a.kind === 'stocks' && a.quantity && a.avgBuyPrice ? a.quantity * a.avgBuyPrice : a.kind !== 'gold_grams' ? 0 : 0)), 0)
-  const totalGain     = enriched.reduce((s, a) => s + (a.gainPct !== null ? a.gain : 0), 0)
-  const totalGainPct  = totalInvested > 0 ? (totalGain / totalInvested) * 100 : null
+  const total = useMemo(() => summarize(enriched), [enriched])
+  const totalValue = total.value
 
   const fmt = (v: number) => masked ? '₹ •••' : formatCurrencyFull(v)
 
@@ -166,14 +194,14 @@ export default function MyAssetsSection({ assets, masked, onToggleMask, onAdd, o
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Savings &amp; Investments</h2>
-          {totalGainPct !== null && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+          {total.gainPct !== null && (
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0 6px', marginTop: 3 }}>
               <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{fmt(totalValue)}</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: totalGain >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                {totalGain >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                {totalGain >= 0 ? '+' : ''}{fmt(Math.abs(totalGain))} ({totalGainPct.toFixed(1)}%)
-              </span>
+              <GainLine gain={total.gain} gainPct={total.gainPct} masked={masked} />
             </div>
+          )}
+          {total.invested !== null && (
+            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 1 }}>Invested {fmt(total.invested)}</div>
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -212,18 +240,16 @@ export default function MyAssetsSection({ assets, masked, onToggleMask, onAdd, o
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {groups.map(g => {
-            const gTotal    = g.items.reduce((s, a) => s + a.currentValue, 0)
-            const gGain     = g.items.reduce((s, a) => s + (a.gainPct !== null ? a.gain : 0), 0)
-            const gInvested = g.items.reduce((s, a) => s + (a.investedAmount ?? 0), 0)
-            const gGainPct  = gInvested > 0 ? (gGain / gInvested) * 100 : null
+            const sum = summarize(g.items)
             return (
               <CategoryCard
                 key={g.kind}
                 kind={g.kind}
                 assets={g.items}
-                totalValue={gTotal}
-                totalGain={gGain}
-                totalGainPct={gGainPct}
+                totalValue={sum.value}
+                totalGain={sum.gain}
+                totalGainPct={sum.gainPct}
+                invested={sum.invested}
                 allTotal={totalValue}
                 masked={masked}
                 onEdit={onEdit}
