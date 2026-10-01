@@ -5,16 +5,19 @@ import { Dialog, Transition } from '@headlessui/react'
 import { X, RefreshCw, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Split, UserPlus, Trash2, PiggyBank, RotateCcw } from 'lucide-react'
 import { IconMedal, IconCrane } from '@tabler/icons-react'
 import { format, parseISO } from 'date-fns'
-import { addTransaction, updateTransaction, deleteTransaction, updateProject, updateSavingsGoal, addBorrowing, updateBorrowing, setUserSettings, setEmergencyFund, getUserTransactions } from '@/lib/firestore'
+import { addTransaction, updateTransaction, deleteTransaction, updateProject, updateSavingsGoal, addBorrowing, updateBorrowing, setUserSettings, setEmergencyFund, getUserTransactions, getUserAssets, updateAsset } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTransfer, buildMonthlySummary, EXPENSE_CATEGORIES, INCOME_CATEGORIES, computeProjectPaid, formatCurrencyFull } from '@/lib/utils'
 import { getSavingsVehicleMeta, getCategoryDisplayName } from '@/lib/categoryIcons'
+import { legacyGoldPurchases, applyGoldPurchase, goldPurchaseTotals } from '@/lib/gold'
 import { useAppStore } from '@/store/appStore'
 import CategoryPicker from '@/components/transactions/CategoryPicker'
 import TagPicker from '@/components/transactions/TagPicker'
 import type { Transaction, TransactionType, TransferKind } from '@/types'
 import toast from 'react-hot-toast'
+
+const GOLD_VEHICLE = 'Gold'
 
 type Tab = 'expense' | 'income' | 'transfer' | 'savings'
 type SavingsKind = 'savings_contribution' | 'savings_withdrawal'
@@ -135,6 +138,10 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     editTx?.transferKind === 'savings_withdrawal' || editTx?.transferKind === 'ef_withdrawal' ? 'savings_withdrawal' : 'savings_contribution'
   )
   const [savingsVehicle, setSavingsVehicle] = useState<string>(editTx?.savingsVehicle ?? EMERGENCY_FUND_VEHICLE)
+  // Gold savings transfers: grams/karat/price — synced into the Gold net-worth asset on create
+  const [goldGrams, setGoldGrams]                 = useState(editTx?.goldGrams ? String(editTx.goldGrams) : '')
+  const [goldKarat, setGoldKarat]                 = useState<18 | 22 | 24>(editTx?.goldKarat ?? 22)
+  const [goldPricePerGram, setGoldPricePerGram]   = useState(editTx?.goldPricePerGram ? String(editTx.goldPricePerGram) : '')
   const [amount, setAmount]             = useState(editTx ? String(editTx.amount) : initialPrefill?.amount != null ? String(initialPrefill.amount) : '')
   const [category, setCategory]         = useState<string>(editTx?.category ?? initialPrefill?.category ?? 'Food & Dining')
   const [date, setDate]                 = useState(editTx?.date ?? initialPrefill?.date ?? format(new Date(), 'yyyy-MM-dd'))
@@ -295,6 +302,9 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       setTransferKind(editTx?.transferKind ?? 'loan_repayment_received')
       setSavingsKind(editTx?.transferKind === 'savings_withdrawal' || editTx?.transferKind === 'ef_withdrawal' ? 'savings_withdrawal' : 'savings_contribution')
       setSavingsVehicle(editTx?.savingsVehicle ?? initialSavingsVehicle ?? EMERGENCY_FUND_VEHICLE)
+      setGoldGrams(editTx?.goldGrams ? String(editTx.goldGrams) : '')
+      setGoldKarat(editTx?.goldKarat ?? 22)
+      setGoldPricePerGram(editTx?.goldPricePerGram ? String(editTx.goldPricePerGram) : '')
       setAmount(editTx ? String(editTx.amount) : initialPrefill?.amount != null ? String(initialPrefill.amount) : '')
       setCategory(editTx?.category ?? initialPrefill?.category ?? 'Food & Dining')
       setDate(editTx?.date ?? initialPrefill?.date ?? format(new Date(), 'yyyy-MM-dd'))
@@ -487,6 +497,9 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           : txType === 'transfer'
             ? { transferKind, category: 'Other' }
             : { category }),
+        ...(activeTab === 'savings' && savingsVehicle === GOLD_VEHICLE && parseFloat(goldGrams) > 0
+          ? { goldGrams: parseFloat(goldGrams), goldKarat, goldPricePerGram: parseFloat(goldPricePerGram) || 0 }
+          : {}),
         ...(projectId && (txType === 'expense' || activeTab === 'savings') ? { projectId } : {}),
         ...(txType === 'transfer' && loanPerson.trim() ? { loanPerson: loanPerson.trim() } : {}),
         ...(txType === 'expense' && settledPerson && finalSettleApplied > 0
@@ -609,6 +622,30 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
             await setUserSettings(user.uid, {
               customSavingsVehicles: [...(settings?.customSavingsVehicles ?? []), savingsVehicle.trim()],
             })
+          }
+        }
+
+        // Gold savings contribution / withdrawal → sync into the Gold net-worth asset
+        if (activeTab === 'savings' && savingsVehicle === GOLD_VEHICLE && parseFloat(goldGrams) > 0) {
+          const allAssets = await getUserAssets(user.uid)
+          const goldAsset = allAssets.find(a => a.kind === 'gold_grams')
+          const direction = savingsKind === 'savings_contribution' ? 'buy' : 'sell'
+          const entry = {
+            grams: parseFloat(goldGrams),
+            karat: goldKarat,
+            pricePerGram: parseFloat(goldPricePerGram) || 0,
+            date,
+            transactionId: txId,
+          }
+          // Only ever sync into a holding the user already created. Auto-creating one here
+          // would flip NetWorthPage's "tracked as a holding" check and drop this vehicle's
+          // whole transaction history from net worth, replacing it with just this one lot.
+          if (goldAsset) {
+            const updated = applyGoldPurchase(legacyGoldPurchases(goldAsset), entry, direction)
+            const { totalGrams, totalInvested } = goldPurchaseTotals(updated)
+            await updateAsset(goldAsset.id, { goldPurchases: updated, value: totalGrams, ...(totalInvested > 0 ? { investedAmount: totalInvested } : {}) })
+          } else {
+            toast('Saved. Add a Gold holding in Net Worth to track grams and live value.', { duration: 5000 })
           }
         }
 
@@ -1267,6 +1304,38 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                           onChange={e => setSavingsVehicle(e.target.value)}
                         />
                       </div>
+
+                      {/* Gold purchase details */}
+                      {savingsVehicle === GOLD_VEHICLE && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 10, background: 'var(--surface-2)' }}>
+                          <label className="label" style={{ margin: 0 }}>
+                            {savingsKind === 'savings_contribution' ? 'Grams bought' : 'Grams sold'} (optional — tracks it in Net Worth)
+                          </label>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            {([18, 22, 24] as const).map(k => (
+                              <button key={k} type="button" onClick={() => setGoldKarat(k)}
+                                style={{
+                                  flex: 1, padding: '7px', borderRadius: 8, fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
+                                  border: `1.5px solid ${goldKarat === k ? 'var(--brand)' : 'var(--border)'}`,
+                                  background: goldKarat === k ? 'var(--brand-soft)' : 'var(--surface)',
+                                  color: goldKarat === k ? 'var(--brand-ink)' : 'var(--text-2)',
+                                }}
+                              >{k}K</button>
+                            ))}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                            <input className="input" type="number" min="0" step="0.001" placeholder="Grams"
+                              value={goldGrams} onChange={e => setGoldGrams(e.target.value)} />
+                            <input className="input" type="number" min="0" step="0.01" placeholder="₹/gram"
+                              value={goldPricePerGram} onChange={e => setGoldPricePerGram(e.target.value)} />
+                          </div>
+                          {parseFloat(goldGrams) > 0 && parseFloat(goldPricePerGram) > 0 && (
+                            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
+                              = ₹{Math.round(parseFloat(goldGrams) * parseFloat(goldPricePerGram)).toLocaleString('en-IN')} — should match the amount below
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 

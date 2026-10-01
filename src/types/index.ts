@@ -37,6 +37,10 @@ export interface Transaction {
   refundOf?: string           // if set (type 'refund'), the id of the expense this refunds
   source?: 'scan' | 'share-target' | 'ios-shortcut' // set when created via the bill scanner or the iPhone quick-add shortcut; absent means manual entry
   splitApplied?: boolean      // true once this expense has had a split saved against it (creating borrowings/absorbed txns) — blocks re-splitting on a later edit, since there's no link back to undo/adjust those records
+  // Gold savings transfers (savingsVehicle === 'Gold'): what was bought/sold, synced into the Gold net-worth asset on create
+  goldGrams?: number
+  goldKarat?: 18 | 22 | 24
+  goldPricePerGram?: number
 }
 
 export interface SavingsGoal {
@@ -416,17 +420,42 @@ export type AssetKind =
   | 'stocks'
   | 'real_estate'
   | 'vehicle'
-  | 'epf_ppf'
+  | 'epf_ppf'            // legacy — split into epf / ppf / nps; still rendered for old records
+  | 'epf'
+  | 'ppf'
+  | 'nps'
   | 'other'
+
+export interface NpsHolding {
+  schemeCode: string     // npsnav.in scheme code, e.g. "SM008003"
+  schemeName: string
+  units: number
+}
+
+export interface PpfDeposit {
+  date: string           // ISO date the deposit was credited
+  amount: number
+}
+
+export interface GoldPurchase {
+  id: string
+  date: string           // ISO date of the buy
+  grams: number
+  karat: 18 | 22 | 24
+  pricePerGram: number
+  transactionId?: string // links back to the Transaction that logged this buy, when synced automatically
+}
 
 export interface Asset {
   id: string
   userId: string
   name: string
   kind: AssetKind
-  value: number          // grams for gold_grams; invested amount for MF/stocks; current value for rest
-  // Gold
+  value: number          // grams for gold_grams (legacy/manual, ignored once goldPurchases is set); invested amount for MF/stocks; current value for rest
+  // Gold — a lot-by-lot purchase history (karat can vary per lot); value/karat/investedAmount below
+  // stay as a fallback for assets created before this existed.
   karat?: 18 | 22 | 24
+  goldPurchases?: GoldPurchase[]
   // Mutual Fund
   schemeCode?: string    // AMFI scheme code
   units?: number         // units held
@@ -436,6 +465,15 @@ export interface Asset {
   avgBuyPrice?: number   // average buy price per share
   // Common for MF + stocks (what was put in)
   investedAmount?: number
+  // EPF — balance auto-accrues from the snapshot between manual updates
+  balanceAsOf?: string       // ISO date the `value` balance was accurate
+  monthlyContribution?: number // total credited each month (employee + employer)
+  annualRate?: number        // % p.a. (EPF ~8.25, PPF ~7.1); also used as PPF rate override
+  // PPF — value computed from deposit history + statutory quarterly rates
+  ppfStartDate?: string
+  ppfDeposits?: PpfDeposit[]
+  // NPS — valued live from daily scheme NAVs
+  npsHoldings?: NpsHolding[]
   createdAt: string
   updatedAt: string
 }

@@ -11,6 +11,7 @@ import { addAsset, updateAsset, deleteAsset, addLiability, updateLiability, dele
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE, getLast6Months } from '@/lib/utils'
 import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
+import { assetValueInRupees, type GoldPrices } from '@/lib/gold'
 import type { Asset, AssetKind, Liability, LiabilityKind } from '@/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
@@ -56,6 +57,9 @@ const ASSET_META: Record<AssetKind, { label: string; icon: React.ElementType; co
   stocks:       { label: 'Stocks',           icon: BarChart2,  color: 'var(--brand-deep)' },
   real_estate:  { label: 'Real Estate',      icon: Home,       color: 'var(--warn)' },
   vehicle:      { label: 'Vehicle',          icon: Car,        color: 'var(--text-3)' },
+  epf:          { label: 'EPF',              icon: Landmark,   color: 'var(--info)' },
+  ppf:          { label: 'PPF',              icon: Landmark,   color: 'var(--info)' },
+  nps:          { label: 'NPS',              icon: Landmark,   color: 'var(--info)' },
   epf_ppf:      { label: 'EPF / PPF / NPS', icon: Landmark,   color: 'var(--info)' },
   other:        { label: 'Other Asset',      icon: Package,    color: 'var(--text-3)' },
 }
@@ -122,6 +126,24 @@ export default function NetWorthPage() {
   const [liabilityModal, setLiabilityModal] = useState<{ open: boolean; item?: Liability }>({ open: false })
   const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [savingsModalOpen, setSavingsModalOpen] = useState(false)
+  const [goldPrices, setGoldPrices] = useState<GoldPrices | null>(null)
+
+  // Gold's stored `value` is grams, not rupees — fetch the live rate so the net worth total can convert it
+  useEffect(() => {
+    if (!assets.some(a => a.kind === 'gold_grams')) return
+    fetch('/api/market/gold')
+      .then(r => r.json())
+      .then(d => {
+        if (d.price22kPerGram) {
+          setGoldPrices({
+            price22k: d.price22kPerGram,
+            price24k: parseFloat((d.price22kPerGram * 24 / 22).toFixed(2)),
+            price18k: parseFloat((d.price22kPerGram * 18 / 22).toFixed(2)),
+          })
+        }
+      })
+      .catch(() => {})
+  }, [assets.length])
 
   // Vehicle prior-balance inline edit
   const [editingVehicle, setEditingVehicle] = useState<string | null>(null)
@@ -180,14 +202,24 @@ export default function NetWorthPage() {
 
   // Savings vehicles (transaction-derived), excluding Emergency Fund
   const openingBalances = settings?.savingsOpeningBalances ?? {}
+  const hasGoldAsset = assets.some(a => a.kind === 'gold_grams')
+  const hasMutualFundAsset = assets.some(a => a.kind === 'mutual_fund')
 
   const savingsVehicles = useMemo(() => {
     const byVehicle = buildSavingsByVehicle(transactions, openingBalances)
+    // A vehicle whose contributions are already reflected in a holding's value must not also
+    // be summed from transactions, or the same rupees land in net worth twice.
+    // NPS is deliberately absent: its holding covers only pre-app investment, so its
+    // transaction row is genuinely additional money — filtering it would erase real value.
+    const trackedByHolding = new Set<string>()
+    if (hasGoldAsset) trackedByHolding.add('gold')
+    if (hasMutualFundAsset) trackedByHolding.add('sip / investments')
     return Object.entries(byVehicle)
       .filter(([name, v]) => name !== EMERGENCY_FUND_VEHICLE && v.balance > 0)
+      .filter(([name]) => !trackedByHolding.has(name.trim().toLowerCase()))
       .map(([name, v]) => ({ name, opening: v.opening, contributed: v.contributed, withdrawn: v.withdrawn, balance: v.balance }))
       .sort((a, b) => b.balance - a.balance)
-  }, [transactions, openingBalances])
+  }, [transactions, openingBalances, hasGoldAsset, hasMutualFundAsset])
 
   const savingsTotal = useMemo(() => savingsVehicles.reduce((s, v) => s + v.balance, 0), [savingsVehicles])
 
@@ -199,12 +231,13 @@ export default function NetWorthPage() {
     })
   }, [transactions, settings])
 
-  // For net worth total we use invested/value as best estimate (MyAssetsSection shows live values)
+  // For net worth total we use invested/value as best estimate (MyAssetsSection shows live values);
+  // gold is the exception — its stored value is grams, not rupees, so it needs the live rate.
   const totalAssets = useMemo(() => {
-    const assetsTotal = assets.reduce((s, a) => s + a.value, 0)
+    const assetsTotal = assets.reduce((s, a) => s + assetValueInRupees(a, goldPrices), 0)
     const ef = emergencyFund?.currentBalance ?? 0
     return assetsTotal + ef + savingsTotal
-  }, [assets, emergencyFund, savingsTotal])
+  }, [assets, emergencyFund, savingsTotal, goldPrices])
 
   const totalLiabilities = useMemo(() =>
     liabilities.reduce((s, l) => {
@@ -559,6 +592,23 @@ export default function NetWorthPage() {
 
 function FICalculator({ masked }: { masked: boolean }) {
   const { transactions, selectedMonth, settings, assets, liabilities } = useAppStore()
+  const [goldPrices, setGoldPrices] = useState<GoldPrices | null>(null)
+
+  useEffect(() => {
+    if (!assets.some(a => a.kind === 'gold_grams')) return
+    fetch('/api/market/gold')
+      .then(r => r.json())
+      .then(d => {
+        if (d.price22kPerGram) {
+          setGoldPrices({
+            price22k: d.price22kPerGram,
+            price24k: parseFloat((d.price22kPerGram * 24 / 22).toFixed(2)),
+            price18k: parseFloat((d.price22kPerGram * 18 / 22).toFixed(2)),
+          })
+        }
+      })
+      .catch(() => {})
+  }, [assets.length])
 
   const { monthlySavings, fiCorpus, currentNetWorth, yearsToFI, savingsRate, progressPct } = useMemo(() => {
     const summary = buildMonthlySummary(transactions, selectedMonth, settings)
@@ -566,7 +616,7 @@ function FICalculator({ masked }: { masked: boolean }) {
     const fiCorpus        = summary.totalExpenses * 12 * 25
     const savingsRate     = summary.totalIncome > 0 ? (monthlySavings / summary.totalIncome) * 100 : 0
 
-    const totalAssets      = assets.reduce((s, a) => s + a.value, 0)
+    const totalAssets      = assets.reduce((s, a) => s + assetValueInRupees(a, goldPrices), 0)
     const totalLiabilities = liabilities.reduce((s, l) => {
       const outstanding = l.tenureMonths > 0
         ? calcOutstanding(l.principal, l.interestRate, l.tenureMonths, l.startDate)
@@ -592,7 +642,7 @@ function FICalculator({ masked }: { masked: boolean }) {
     }
 
     return { monthlySavings, fiCorpus, currentNetWorth, yearsToFI, savingsRate, progressPct }
-  }, [transactions, selectedMonth, settings, assets, liabilities])
+  }, [transactions, selectedMonth, settings, assets, liabilities, goldPrices])
 
   const fmt = (v: number) => masked ? '₹ •••' : formatCurrencyFull(v)
 

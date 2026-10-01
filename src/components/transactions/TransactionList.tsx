@@ -167,6 +167,11 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
             {tx.notes}
           </div>
         )}
+        {!!tx.goldGrams && (
+          <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {tx.goldGrams}g · {tx.goldKarat ?? 22}K{tx.goldPricePerGram ? ` · ₹${tx.goldPricePerGram.toLocaleString('en-IN')}/g` : ''}
+          </div>
+        )}
         {tx.tags && tx.tags.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
             {tx.tags.map(tag => (

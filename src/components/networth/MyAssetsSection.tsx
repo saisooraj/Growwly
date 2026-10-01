@@ -3,12 +3,15 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { formatCurrencyFull } from '@/lib/utils'
+import { accrueEpfBalance, computePpfBalance, npsCorpus } from '@/lib/retirement'
+import { legacyGoldPurchases, goldPurchaseTotals, goldCurrentValue } from '@/lib/gold'
 import type { Asset, AssetKind } from '@/types'
 
 interface LivePrices {
   gold?: { price22k: number; price18k: number; price24k: number }
   stocks?: Record<string, { price: number; change: number; changePct: number; name: string }>
   mf?: Record<string, { nav: number; change: number; changePct: number; schemeName: string }>
+  nps?: Record<string, { nav: number; schemeName: string; changePct: number }>
 }
 
 interface AssetWithValue extends Asset {
@@ -23,7 +26,10 @@ const KIND_META: Record<AssetKind, { label: string; color: string }> = {
   mutual_fund:  { label: 'Mutual Funds',      color: '#6366f1' },
   stocks:       { label: 'Stocks & ETFs',     color: '#8b5cf6' },
   gold_grams:   { label: 'Gold',              color: '#f59e0b' },
-  epf_ppf:      { label: 'EPF / PPF / NPS',  color: '#0ea5e9' },
+  epf:          { label: 'EPF',               color: '#0ea5e9' },
+  ppf:          { label: 'PPF',               color: '#0284c7' },
+  nps:          { label: 'NPS',               color: '#0891b2' },
+  epf_ppf:      { label: 'EPF / PPF (legacy)', color: '#0ea5e9' },
   fd_rd:        { label: 'FD / RD',           color: '#10b981' },
   cash:         { label: 'Cash & Savings',    color: '#22c55e' },
   real_estate:  { label: 'Real Estate',       color: '#f97316' },
@@ -31,25 +37,31 @@ const KIND_META: Record<AssetKind, { label: string; color: string }> = {
   other:        { label: 'Other',             color: '#94a3b8' },
 }
 
-const KIND_ORDER: AssetKind[] = ['mutual_fund','stocks','gold_grams','epf_ppf','fd_rd','cash','real_estate','vehicle','other']
+const KIND_ORDER: AssetKind[] = ['mutual_fund','stocks','gold_grams','epf','ppf','nps','epf_ppf','fd_rd','cash','real_estate','vehicle','other']
 
 // ── Helper: compute current value for one asset ───────────────────────────────
 
 function computeValue(asset: Asset, prices: LivePrices): AssetWithValue {
   let currentValue = asset.value
+  let value = asset.value
   let gain = 0
   let gainPct: number | null = null
+  let investedAmount = asset.investedAmount
 
   if (asset.kind === 'gold_grams') {
-    const karat = asset.karat ?? 22
-    const pricePerGram =
-      karat === 24 ? (prices.gold?.price24k ?? 0) :
-      karat === 18 ? (prices.gold?.price18k ?? 0) :
-      (prices.gold?.price22k ?? 0)
-    currentValue = pricePerGram > 0 ? asset.value * pricePerGram : asset.value
-    if (asset.investedAmount && asset.investedAmount > 0 && pricePerGram > 0) {
-      gain = currentValue - asset.investedAmount
-      gainPct = (gain / asset.investedAmount) * 100
+    const purchases = legacyGoldPurchases(asset)
+    const { totalGrams, totalInvested } = goldPurchaseTotals(purchases)
+    value = totalGrams
+    investedAmount = totalInvested > 0 ? totalInvested : asset.investedAmount
+    const goldPrices = prices.gold
+    if (goldPrices) {
+      currentValue = goldCurrentValue(purchases, { price18k: goldPrices.price18k, price22k: goldPrices.price22k, price24k: goldPrices.price24k })
+      if (totalInvested > 0) {
+        gain = currentValue - totalInvested
+        gainPct = (gain / totalInvested) * 100
+      }
+    } else {
+      currentValue = totalGrams
     }
   } else if (asset.kind === 'mutual_fund' && asset.schemeCode) {
     const nav = prices.mf?.[asset.schemeCode]?.nav ?? 0
@@ -68,12 +80,44 @@ function computeValue(asset: Asset, prices: LivePrices): AssetWithValue {
       gain = currentValue - invested
       gainPct = (gain / invested) * 100
     }
+  } else if (asset.kind === 'epf') {
+    currentValue = accrueEpfBalance({
+      balance: asset.value,
+      asOf: asset.balanceAsOf,
+      monthlyContribution: asset.monthlyContribution,
+      annualRate: asset.annualRate,
+    })
+    if (asset.investedAmount && asset.investedAmount > 0) {
+      gain = currentValue - asset.investedAmount
+      gainPct = (gain / asset.investedAmount) * 100
+    }
+  } else if (asset.kind === 'ppf') {
+    const p = computePpfBalance({
+      startDate: asset.ppfStartDate,
+      deposits: asset.ppfDeposits ?? [],
+      rateOverride: asset.annualRate,
+    })
+    currentValue = p.balance > 0 ? p.balance : asset.value
+    const invested = asset.investedAmount ?? p.totalDeposited
+    if (currentValue > 0 && invested > 0) {
+      gain = currentValue - invested
+      gainPct = (gain / invested) * 100
+    }
+  } else if (asset.kind === 'nps') {
+    const navMap: Record<string, number> = {}
+    for (const [code, v] of Object.entries(prices.nps ?? {})) navMap[code] = v.nav
+    const live = npsCorpus(asset.npsHoldings, navMap)
+    currentValue = live > 0 ? live : asset.value
+    if (asset.investedAmount && asset.investedAmount > 0 && currentValue > 0) {
+      gain = currentValue - asset.investedAmount
+      gainPct = (gain / asset.investedAmount) * 100
+    }
   } else if (asset.investedAmount && asset.investedAmount > 0) {
     gain = currentValue - asset.investedAmount
     gainPct = (gain / asset.investedAmount) * 100
   }
 
-  return { ...asset, currentValue, gain, gainPct }
+  return { ...asset, value, currentValue, gain, gainPct, investedAmount }
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -136,21 +180,28 @@ function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, allTo
       {/* Holdings list */}
       {open && (
         <div style={{ borderTop: '1px solid var(--border)' }}>
-          {assets.map(a => (
+          {assets.map(a => {
+            const goldLots = a.kind === 'gold_grams' ? legacyGoldPurchases(a) : []
+            const goldKarats = Array.from(new Set(goldLots.map(p => p.karat)))
+            const goldKaratLabel = goldKarats.length === 1 ? `${goldKarats[0]}K` : goldKarats.length > 1 ? 'Au' : `${a.karat ?? 22}K`
+            return (
             <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
               <div style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0, background: meta.color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: meta.color }}>
-                  {a.kind === 'gold_grams' ? `${a.karat ?? 22}K` : a.name.slice(0, 2).toUpperCase()}
+                  {a.kind === 'gold_grams' ? goldKaratLabel : a.name.slice(0, 2).toUpperCase()}
                 </span>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {a.name || (a.kind === 'gold_grams' ? `${a.karat ?? 22}K Gold` : a.ticker ?? a.schemeCode)}
+                  {a.name || (a.kind === 'gold_grams' ? `${goldKaratLabel} Gold` : a.ticker ?? a.schemeCode)}
                 </p>
                 <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, marginTop: 1 }}>
                   {a.kind === 'mutual_fund' && a.units ? `${a.units.toFixed(3)} units` :
                    a.kind === 'stocks' && a.quantity ? `${a.quantity} shares · avg ₹${(a.avgBuyPrice ?? 0).toLocaleString('en-IN')}` :
-                   a.kind === 'gold_grams' ? `${a.value}g` : ''}
+                   a.kind === 'gold_grams' ? `${a.value.toFixed(2)}g · ${goldLots.length} purchase${goldLots.length === 1 ? '' : 's'}` :
+                   a.kind === 'epf' ? `est. from ${a.balanceAsOf ?? 'snapshot'}${a.monthlyContribution ? ` · +₹${a.monthlyContribution.toLocaleString('en-IN')}/mo` : ''}` :
+                   a.kind === 'ppf' ? `${a.ppfDeposits?.length ?? 0} deposit${(a.ppfDeposits?.length ?? 0) === 1 ? '' : 's'} · ${a.annualRate ?? 7.1}%` :
+                   a.kind === 'nps' ? (a.npsHoldings?.length ? `${a.npsHoldings.length} scheme${a.npsHoldings.length === 1 ? '' : 's'} · live NAV` : 'manual corpus') : ''}
                   {a.investedAmount ? ` · invested ${masked ? '•••' : `₹${a.investedAmount.toLocaleString('en-IN')}`}` : ''}
                 </p>
               </div>
@@ -163,7 +214,7 @@ function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, allTo
                 <button onClick={() => onDelete(a.id)} style={{ padding: 5, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)' }}><Trash2 size={12} /></button>
               </div>
             </div>
-          ))}
+          )})}
         </div>
       )}
     </div>
@@ -222,6 +273,18 @@ export default function MyAssetsSection({ assets, masked, onAdd, onEdit, onDelet
           const r = await fetch(`/api/market/mf/nav?codes=${encodeURIComponent(codes)}`)
           const d = await r.json()
           updates.mf = d.nav ?? {}
+        } catch {}
+      }
+
+      // NPS
+      const npsCodes = Array.from(new Set(
+        assets.filter(a => a.kind === 'nps').flatMap(a => (a.npsHoldings ?? []).map(h => h.schemeCode))
+      ))
+      if (npsCodes.length > 0) {
+        try {
+          const r = await fetch(`/api/market/nps?codes=${encodeURIComponent(npsCodes.join(','))}`)
+          const d = await r.json()
+          updates.nps = d.nav ?? {}
         } catch {}
       }
 
