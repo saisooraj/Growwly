@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import { TrendingUp, Info, Wallet, ChevronDown, ChevronRight } from 'lucide-react'
 import MaskToggle from './MaskToggle'
+import { pendingUnitContributions } from '@/lib/assetValuation'
 import type { Asset } from '@/types'
 import {
   projectPortfolio, SCENARIO_CAGR_OFFSETS,
@@ -150,7 +151,7 @@ export default function MutualFundProjection({ assets, masked, onToggleMask }: P
   const projectionFunds: ProjectionFund[] = useMemo(() => mfAssets.map(a => {
     const pref = debouncedFundPrefs[a.id]
     const nav = a.schemeCode ? navByCode[a.schemeCode] : undefined
-    const existingCorpus = nav && a.units ? nav * a.units : (a.investedAmount ?? a.value)
+    const existingCorpus = nav && a.units ? nav * a.units + pendingUnitContributions(a).amount : (a.investedAmount ?? a.value)
     return {
       id: a.id,
       name: a.name,

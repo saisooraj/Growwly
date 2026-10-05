@@ -82,9 +82,10 @@ interface CategoryCardProps {
   masked: boolean
   onEdit: (a: Asset) => void
   onDelete: (id: string) => void
+  onAddUnits: (transactionId: string) => void
 }
 
-function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, invested, allTotal, masked, onEdit, onDelete }: CategoryCardProps) {
+function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, invested, allTotal, masked, onEdit, onDelete, onAddUnits }: CategoryCardProps) {
   const [open, setOpen] = useState(false)
   const meta = KIND_META[kind]
   const alloc = allTotal > 0 ? (totalValue / allTotal) * 100 : 0
@@ -141,6 +142,15 @@ function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, inves
                    a.kind === 'nps' ? (a.npsHoldings?.length ? `${a.npsHoldings.length} scheme${a.npsHoldings.length === 1 ? '' : 's'} · live NAV` : 'manual corpus') : ''}
                   {a.investedAmount ? ` · invested ${masked ? '•••' : `₹${a.investedAmount.toLocaleString('en-IN')}`}` : ''}
                 </p>
+                {a.pendingTransactionIds.length > 0 && (
+                  <button
+                    type="button" onClick={() => onAddUnits(a.pendingTransactionIds[0])}
+                    title="Counted at cost until the allotted units are added. Click to add them."
+                    style={{ marginTop: 4, padding: '2px 8px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 10.5, fontWeight: 600, background: 'var(--warn-soft)', color: 'var(--warn-ink)' }}
+                  >
+                    {masked ? '•••' : formatCurrencyFull(Math.abs(a.pendingAmount))} awaiting units · Add units
+                  </button>
+                )}
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
                 <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{fmt(a.currentValue)}</p>
@@ -168,9 +178,10 @@ interface Props {
   onLog: () => void          // log a savings transaction
   onEdit: (a: Asset) => void
   onDelete: (id: string) => void
+  onAddUnits: (transactionId: string) => void  // open a transaction still waiting on its units
 }
 
-export default function MyAssetsSection({ assets, masked, onToggleMask, onAdd, onLog, onEdit, onDelete }: Props) {
+export default function MyAssetsSection({ assets, masked, onToggleMask, onAdd, onLog, onEdit, onDelete, onAddUnits }: Props) {
   const enriched = assets
 
   // Group by kind, sorted by KIND_ORDER
@@ -254,6 +265,7 @@ export default function MyAssetsSection({ assets, masked, onToggleMask, onAdd, o
                 masked={masked}
                 onEdit={onEdit}
                 onDelete={onDelete}
+                onAddUnits={onAddUnits}
               />
             )
           })}

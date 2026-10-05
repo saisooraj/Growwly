@@ -14,7 +14,7 @@ import { linkedTransactionIds } from '@/lib/holdingLinks'
 import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import { computeValue } from '@/lib/assetValuation'
 import { useLivePrices } from '@/hooks/useLivePrices'
-import type { Asset, AssetKind, Liability, LiabilityKind } from '@/types'
+import type { Asset, AssetKind, Liability, LiabilityKind, Transaction } from '@/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
 import AssetModal from './AssetModal'
@@ -136,6 +136,7 @@ export default function NetWorthPage() {
   const [liabilityModal, setLiabilityModal] = useState<{ open: boolean; item?: Liability }>({ open: false })
   const [confirm, setConfirm] = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [savingsModalOpen, setSavingsModalOpen] = useState(false)
+  const [unitsTx, setUnitsTx] = useState<Transaction | null>(null)
   // Every holding at its live value — the same figures the Savings & Investments card shows
   const prices = useLivePrices(assets)
   const valuedAssets = useMemo(() => assets.map(a => computeValue(a, prices)), [assets, prices])
@@ -349,6 +350,11 @@ export default function NetWorthPage() {
         onLog={() => setSavingsModalOpen(true)}
         onEdit={a => setAssetModal({ open: true, item: a })}
         onDelete={handleDeleteAsset}
+        onAddUnits={id => {
+          const tx = transactions.find(t => t.id === id)
+          if (tx) setUnitsTx(tx)
+          else toast.error('Couldn’t find that transaction')
+        }}
       />
 
       {/* Mutual fund wealth projection (renders only when MF holdings exist) */}
@@ -567,6 +573,7 @@ export default function NetWorthPage() {
         <LiabilityModal item={liabilityModal.item} onSave={handleSaveLiability} onClose={() => setLiabilityModal({ open: false })} />
       )}
       <AddTransactionModal open={savingsModalOpen} initialTab="savings" onClose={() => { setSavingsModalOpen(false); refresh() }} />
+      <AddTransactionModal open={!!unitsTx} editTx={unitsTx} onClose={() => { setUnitsTx(null); refresh() }} />
       {confirm && (
         <ConfirmDialog open message={confirm.message} onConfirm={confirm.onConfirm} onClose={() => setConfirm(null)} />
       )}

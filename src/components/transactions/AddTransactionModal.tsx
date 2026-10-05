@@ -1423,7 +1423,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                           {showUnits && (
                             <div style={{ display: 'flex', gap: 8 }}>
                               <input className="input" style={{ fontSize: 13 }} type="number" min="0" step="0.0001"
-                                placeholder={savingsKind === 'savings_contribution' ? 'Units bought (optional)' : 'Units sold (optional)'}
+                                placeholder={savingsKind === 'savings_contribution' ? 'Units allotted' : 'Units redeemed'}
                                 value={linkUnits} onChange={e => setLinkUnits(e.target.value)} />
                               {npsSchemes.length > 1 && (
                                 <select className="input" style={{ fontSize: 13 }} value={linkScheme || npsSchemes[0].schemeCode} onChange={e => setLinkScheme(e.target.value)}>
@@ -1431,6 +1431,11 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                                 </select>
                               )}
                             </div>
+                          )}
+                          {showUnits && !(parseFloat(linkUnits) > 0) && (
+                            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
+                              Units not allotted yet? Save now. The holding counts this at cost and shows it as awaiting units until you open this transaction and add them.
+                            </p>
                           )}
 
                           {isRetroLink && (

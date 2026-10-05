@@ -8,6 +8,8 @@ import { format } from 'date-fns'
 import { addProject, updateProject } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
+import { useAppStore } from '@/store/appStore'
+import { computeProjectPaid, formatCurrencyFull } from '@/lib/utils'
 import type { Project } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -15,7 +17,6 @@ interface FormData {
   name: string
   description: string
   totalBudget: string
-  paid: string
   startDate: string
   endDate: string
   status: Project['status']
@@ -30,6 +31,9 @@ interface Props {
 export default function AddProjectModal({ open, onClose, editProject }: Props) {
   const { user } = useAuth()
   const refresh = useRefreshData()
+  const transactions = useAppStore((s) => s.transactions)
+  // Paid is always the sum of the transactions linked to the project, never typed in
+  const paid = editProject ? computeProjectPaid(transactions, editProject.id) : 0
 
   const { register, handleSubmit, reset, formState: { isSubmitting } } = useForm<FormData>()
 
@@ -39,7 +43,6 @@ export default function AddProjectModal({ open, onClose, editProject }: Props) {
         name: editProject?.name ?? '',
         description: editProject?.description ?? '',
         totalBudget: editProject ? String(editProject.totalBudget) : '',
-        paid: editProject ? String(editProject.paid) : '0',
         startDate: editProject?.startDate ?? format(new Date(), 'yyyy-MM-dd'),
         endDate: editProject?.endDate ?? '',
         status: editProject?.status ?? 'active',
@@ -54,7 +57,7 @@ export default function AddProjectModal({ open, onClose, editProject }: Props) {
         name: data.name,
         description: data.description,
         totalBudget: Number(data.totalBudget),
-        paid: Number(data.paid),
+        paid,
         startDate: data.startDate,
         status: data.status,
         ...(data.endDate ? { endDate: data.endDate } : {}),
@@ -120,10 +123,15 @@ export default function AddProjectModal({ open, onClose, editProject }: Props) {
                       <input type="number" className="input" {...register('totalBudget', { required: true })} />
                     </div>
                     <div>
-                      <label className="label">Paid So Far (₹)</label>
-                      <input type="number" className="input" {...register('paid')} />
+                      <label className="label">Paid So Far</label>
+                      <div className="input" style={{ display: 'flex', alignItems: 'center', color: 'var(--text-2)', background: 'var(--surface-2)', cursor: 'default' }}>
+                        {formatCurrencyFull(paid)}
+                      </div>
                     </div>
                   </div>
+                  <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '-8px 0 0' }}>
+                    Paid is the total of the transactions linked to this project. To add a payment, log a transaction and link it here.
+                  </p>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
                       <label className="label">Start Date</label>

@@ -17,6 +17,23 @@ export interface AssetWithValue extends Asset {
   currentValue: number
   gain: number
   gainPct: number | null
+  pendingAmount: number           // linked money still waiting on its units, counted at cost
+  pendingTransactionIds: string[] // oldest first
+}
+
+// Fund orders settle days after the debit: a linked transaction saved without units has
+// moved the money into the holding but not the units. Until the units are added, that money
+// is valued at cost rather than at nothing. Only entries that added money count — an
+// 'included' link attributes money whose units the holding already had.
+export function pendingUnitContributions(asset: Asset): { amount: number; transactionIds: string[] } {
+  if (asset.kind !== 'mutual_fund' && asset.kind !== 'nps') return { amount: 0, transactionIds: [] }
+  const pending = (asset.contributions ?? [])
+    .filter(c => c.included === false && !c.units)
+    .sort((a, b) => a.date.localeCompare(b.date))
+  return {
+    amount: pending.reduce((s, c) => s + c.amount, 0),
+    transactionIds: pending.map(c => c.transactionId),
+  }
 }
 
 export function computeValue(asset: Asset, prices: LivePrices): AssetWithValue {
@@ -25,6 +42,7 @@ export function computeValue(asset: Asset, prices: LivePrices): AssetWithValue {
   let gain = 0
   let gainPct: number | null = null
   let investedAmount = asset.investedAmount
+  const pending = pendingUnitContributions(asset)
 
   if (asset.kind === 'gold_grams') {
     const purchases = legacyGoldPurchases(asset)
@@ -44,7 +62,7 @@ export function computeValue(asset: Asset, prices: LivePrices): AssetWithValue {
     }
   } else if (asset.kind === 'mutual_fund' && asset.schemeCode) {
     const nav = prices.mf?.[asset.schemeCode]?.nav ?? 0
-    currentValue = nav > 0 && asset.units ? asset.units * nav : asset.value
+    currentValue = nav > 0 && asset.units ? asset.units * nav + pending.amount : asset.value
     const invested = asset.investedAmount ?? asset.value
     if (currentValue > 0 && invested > 0) {
       gain = currentValue - invested
@@ -86,7 +104,7 @@ export function computeValue(asset: Asset, prices: LivePrices): AssetWithValue {
     const navMap: Record<string, number> = {}
     for (const [code, v] of Object.entries(prices.nps ?? {})) navMap[code] = v.nav
     const live = npsCorpus(asset.npsHoldings, navMap)
-    currentValue = live > 0 ? live : asset.value
+    currentValue = live > 0 ? live + pending.amount : asset.value
     if (asset.investedAmount && asset.investedAmount > 0 && currentValue > 0) {
       gain = currentValue - asset.investedAmount
       gainPct = (gain / asset.investedAmount) * 100
@@ -96,5 +114,8 @@ export function computeValue(asset: Asset, prices: LivePrices): AssetWithValue {
     gainPct = (gain / asset.investedAmount) * 100
   }
 
-  return { ...asset, value, currentValue, gain, gainPct, investedAmount }
+  return {
+    ...asset, value, currentValue, gain, gainPct, investedAmount,
+    pendingAmount: pending.amount, pendingTransactionIds: pending.transactionIds,
+  }
 }
