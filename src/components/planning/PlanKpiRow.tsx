@@ -65,14 +65,15 @@ export default function PlanKpiRow({ plan, masked }: { plan: BudgetPlan; masked:
   }
 
   return (
-    <div className="gw-stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 12 }}>
+    // 2×2 on phones so the four tiles don't stack into a long column; one row on desktop.
+    <div className="gw-stagger grid grid-cols-2 lg:grid-cols-4" style={{ gap: 10 }}>
       {[left, spent, saved, forecast].map(t => (
-        <div key={t.label} className="card-sm" style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span className="h-eyebrow">{t.label}</span>
-          <span className="display-num" style={{ fontSize: 'clamp(20px, 4vw, 26px)', color: t.color ?? 'var(--text)', lineHeight: 1.15 }}>
+        <div key={t.label} className="card-sm" style={{ padding: 'clamp(12px, 3vw, 16px) clamp(12px, 3vw, 18px)', display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <span className="h-eyebrow" style={{ whiteSpace: 'normal' }}>{t.label}</span>
+          <span className="display-num" style={{ fontSize: 'clamp(17px, 4.4vw, 26px)', color: t.color ?? 'var(--text)', lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {t.value}
           </span>
-          <span style={{ fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.4 }}>{t.sub}</span>
+          <span style={{ fontSize: 'clamp(11px, 2.9vw, 12.5px)', color: 'var(--text-3)', lineHeight: 1.4 }}>{t.sub}</span>
         </div>
       ))}
     </div>

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { ChevronLeft, ChevronRight, Sun, Moon, Plus, Search, Flame } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowLeft, ChevronLeft, ChevronRight, Sun, Moon, Plus, Search, Flame } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
@@ -10,10 +11,12 @@ import { getLast6Months, getMonthLabel, computeMoneyStreak } from '@/lib/utils'
 import { getCycleRange, formatCycleRange } from '@/lib/cycle'
 import { usePathname, useRouter } from 'next/navigation'
 
-const PAGE_META: Record<string, { title: string; sub: string }> = {
+// `back` marks a sub-page: the header shows an arrow to its parent page.
+const PAGE_META: Record<string, { title: string; sub: string; back?: { href: string; label: string } }> = {
   '/':             { title: 'Overview',      sub: 'Your money at a glance' },
   '/transactions': { title: 'Transactions',  sub: 'Every movement, searchable' },
   '/planning':     { title: 'Planning',      sub: 'The 50 / 30 / 20 split' },
+  '/planning/spending': { title: 'Spending Breakdown', sub: 'Where this month’s money went', back: { href: '/planning', label: 'Planning' } },
   '/networth':     { title: 'Net Worth',     sub: 'Assets, cash & liabilities' },
   '/goals':        { title: 'Goals',         sub: 'Savings goals and project budgets' },
   '/borrowings':   { title: 'Borrowings',    sub: 'Who owes whom' },
@@ -22,6 +25,24 @@ const PAGE_META: Record<string, { title: string; sub: string }> = {
   '/health':       { title: 'Money Health',  sub: 'Habits, streaks & momentum' },
   '/market':       { title: 'Market',        sub: 'Stocks, funds, gold & news' },
   '/settings':     { title: 'Settings',      sub: 'Account, mode & appearance' },
+}
+
+function BackLink({ href, label, size }: { href: string; label: string; size: number }) {
+  return (
+    <Link
+      href={href}
+      aria-label={`Back to ${label}`}
+      title={`Back to ${label}`}
+      className="pressable"
+      style={{
+        width: size, height: size, borderRadius: 10, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)',
+      }}
+    >
+      <ArrowLeft size={Math.round(size * 0.47)} strokeWidth={2.2} />
+    </Link>
+  )
 }
 
 function getGreeting(): string {
@@ -184,14 +205,17 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
               </h1>
             </>
           ) : (
-            <>
-              <h1 style={{ margin: 0, fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {meta.title}
-              </h1>
-              <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 500, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {meta.sub}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+              {meta.back && <BackLink href={meta.back.href} label={meta.back.label} size={32} />}
+              <div style={{ minWidth: 0 }}>
+                <h1 style={{ margin: 0, fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.2, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {meta.title}
+                </h1>
+                <div style={{ fontSize: 11, color: 'var(--text-3)', fontWeight: 500, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {meta.sub}
+                </div>
               </div>
-            </>
+            </div>
           )}
         </div>
 
@@ -202,8 +226,11 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
           pointerEvents: scrolled ? 'auto' : 'none',
           position: scrolled ? 'relative' : 'absolute',
         }}>
-          <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {compactLabel}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            {!isHome && meta.back && <BackLink href={meta.back.href} label={meta.back.label} size={28} />}
+            <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {compactLabel}
+            </div>
           </div>
         </div>
       </div>
@@ -220,14 +247,17 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
             </h1>
           </>
         ) : (
-          <>
-            <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.15, color: 'var(--text)' }}>
-              {meta.title}
-            </h1>
-            <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontWeight: 500, marginTop: 2 }}>
-              {meta.sub}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {meta.back && <BackLink href={meta.back.href} label={meta.back.label} size={36} />}
+            <div style={{ minWidth: 0 }}>
+              <h1 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.15, color: 'var(--text)' }}>
+                {meta.title}
+              </h1>
+              <div style={{ fontSize: 12.5, color: 'var(--text-3)', fontWeight: 500, marginTop: 2 }}>
+                {meta.sub}
+              </div>
             </div>
-          </>
+          </div>
         )}
       </div>
 
