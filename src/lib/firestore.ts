@@ -12,6 +12,7 @@ import {
   orderBy,
   limit as fsLimit,
   startAfter,
+  writeBatch,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { db } from './firebase'
@@ -91,20 +92,53 @@ export async function getTransactionsPage(
 
 // ── Budgets ──────────────────────────────────────────────────────────────────
 
+export interface BudgetEntry {
+  category: string
+  planned: number
+  kind?: 'savings'
+}
+
+// Savings plans get their own id prefix so a vehicle and an expense category with
+// the same name (e.g. Gold) never overwrite each other.
+function budgetDoc(userId: string, month: string, { category, planned, kind }: BudgetEntry) {
+  const slug = category.replace(/\s+/g, '_').replace(/\//g, '-')
+  const id = `${userId}_${month}_${kind === 'savings' ? 'savings_' : ''}${slug}`
+  return {
+    ref: doc(db, 'budgets', id),
+    data: {
+      userId,
+      month,
+      category,
+      planned,
+      ...(kind ? { kind } : {}),
+      createdAt: new Date().toISOString(),
+    },
+  }
+}
+
 export async function setBudget(
   userId: string,
   month: string,
   category: string,
-  planned: number
+  planned: number,
+  kind?: 'savings'
 ): Promise<void> {
-  const id = `${userId}_${month}_${category.replace(/\s+/g, '_').replace(/\//g, '-')}`
-  await setDoc(doc(db, 'budgets', id), {
-    userId,
-    month,
-    category,
-    planned,
-    createdAt: new Date().toISOString(),
-  })
+  const { ref, data } = budgetDoc(userId, month, { category, planned, kind })
+  await setDoc(ref, data)
+}
+
+export async function setBudgetsBatch(
+  userId: string,
+  month: string,
+  entries: BudgetEntry[]
+): Promise<void> {
+  // Firestore batches cap at 500 writes; a month has far fewer rows than that.
+  const batch = writeBatch(db)
+  for (const entry of entries) {
+    const { ref, data } = budgetDoc(userId, month, entry)
+    batch.set(ref, data)
+  }
+  await batch.commit()
 }
 
 export async function getUserBudgets(userId: string): Promise<Budget[]> {

@@ -47,6 +47,11 @@
   --info-soft: oklch(0.94 0.04 245);
   --info-ink:  oklch(0.38 0.1 245);
 
+  /* Wants bucket — kept off amber so amber only ever means "watch out" */
+  --wants:      oklch(0.6 0.15 305);
+  --wants-soft: oklch(0.95 0.035 305);
+  --wants-ink:  oklch(0.4 0.13 305);
+
   /* Elevation & surface aliases */
   --elev:        0 1px 2px rgba(24,20,48,.04), 0 8px 24px -10px rgba(24,20,48,.12);
   --elev-lg:     0 1px 2px rgba(24,20,48,.04), 0 20px 48px -16px rgba(24,20,48,.18);
@@ -100,6 +105,9 @@
   --bad-ink:    oklch(0.78 0.16 25);
   --info-soft:  color-mix(in oklch, var(--info) 22%, transparent);
   --info-ink:   oklch(0.82 0.12 245);
+  --wants:      oklch(0.66 0.15 305);
+  --wants-soft: color-mix(in oklch, var(--wants) 22%, transparent);
+  --wants-ink:  oklch(0.82 0.11 305);
 
   --elev:       0 1px 2px rgba(0,0,0,.4), 0 12px 32px -12px rgba(0,0,0,.56);
   --elev-lg:    0 1px 2px rgba(0,0,0,.4), 0 24px 60px -18px rgba(0,0,0,.7);

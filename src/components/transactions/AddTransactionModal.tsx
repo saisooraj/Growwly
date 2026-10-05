@@ -12,6 +12,7 @@ import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTran
 import { getSavingsVehicleMeta, getCategoryDisplayName } from '@/lib/categoryIcons'
 import { applyLink, removeLink, findLinkedAsset, linkedContribution, linkSummary, defaultHoldingFor, vehicleKinds, isLinkable, type LinkMode, type LinkInput } from '@/lib/holdingLinks'
 import { useAppStore } from '@/store/appStore'
+import { isSavingsPlan } from '@/lib/budgetPlan'
 import CategoryPicker from '@/components/transactions/CategoryPicker'
 import TagPicker from '@/components/transactions/TagPicker'
 import type { Asset, Transaction, TransactionType, TransferKind } from '@/types'
@@ -434,7 +435,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
 
   function checkBudgetAlert(cat: string, addedAmount: number, d: string) {
     const month = d.slice(0, 7)
-    const budget = budgets.find(b => b.month === month && b.category === cat)
+    const budget = budgets.find(b => b.month === month && b.category === cat && !isSavingsPlan(b))
     if (!budget || budget.planned === 0) return
     const summary = buildMonthlySummary(transactions, month)
     const alreadySpent = summary.byCategory[cat as keyof typeof summary.byCategory] ?? 0

@@ -2,6 +2,7 @@
 
 import { AlertTriangle, TrendingDown, ShieldOff, ArrowDown, Flame, X } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
+import { isSavingsPlan } from '@/lib/budgetPlan'
 import { buildMonthlySummary, getTransactionsForWeek, formatCurrencyFull } from '@/lib/utils'
 import { useState } from 'react'
 
@@ -30,7 +31,7 @@ export default function AlertsPanel() {
     })
   }
 
-  const monthBudgets = budgets.filter(b => b.month === selectedMonth)
+  const monthBudgets = budgets.filter(b => b.month === selectedMonth && !isSavingsPlan(b))
   for (const b of monthBudgets) {
     const actual = summary.byCategory[b.category as keyof typeof summary.byCategory] ?? 0
     if (actual > b.planned && b.planned > 0) {

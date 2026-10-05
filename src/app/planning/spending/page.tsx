@@ -10,7 +10,7 @@ import { useAppStore } from '@/store/appStore'
 import { buildCategoryTrend, buildCurrentPeriodDetail, bucketTopSlices, getMonthsEndingAt } from '@/lib/spendingAnalytics'
 import { getCycleRange } from '@/lib/cycle'
 import { CATEGORY_COLORS, EXPENSE_CATEGORIES, buildMonthlySummary, getCycleMonth, getMonthLabel } from '@/lib/utils'
-import { DEFAULT_NEEDS, DEFAULT_RULE, DEFAULT_SAVINGS } from '@/components/planning/SpendingRuleCard'
+import { DEFAULT_NEEDS, DEFAULT_RULE, DEFAULT_SAVINGS, isSavingsPlan } from '@/lib/budgetPlan'
 import SpendingKpiRow from '@/components/spending/SpendingKpiRow'
 import SpendingDonut from '@/components/spending/SpendingDonut'
 import CategoryChecklist from '@/components/spending/CategoryChecklist'
@@ -91,7 +91,7 @@ export default function SpendingBreakdownPage() {
 
   // ── Budget map for the currently viewed month ──
   const budgetMap = useMemo(() => {
-    const monthBudgets = budgets.filter(b => b.month === chartMonth)
+    const monthBudgets = budgets.filter(b => b.month === chartMonth && !isSavingsPlan(b))
     return Object.fromEntries(monthBudgets.map(b => [b.category, b.planned])) as Record<string, number>
   }, [budgets, chartMonth])
 

@@ -5,6 +5,7 @@ import { ArrowUp, ArrowDown, ArrowDownRight, Handshake, Eye, EyeOff } from 'luci
 import { useAppStore } from '@/store/appStore'
 import { buildMonthlySummary, computeCarryForward, formatCurrencyFull, getLast6Months } from '@/lib/utils'
 import { getCycleRange, formatCycleRange } from '@/lib/cycle'
+import { isSavingsPlan } from '@/lib/budgetPlan'
 
 interface StatProps {
   label: string
@@ -94,7 +95,7 @@ export default function SummaryCards() {
     ? formatCycleRange(start, end)
     : null
 
-  const totalBudget = budgets.filter(b => b.month === selectedMonth).reduce((s, b) => s + b.planned, 0)
+  const totalBudget = budgets.filter(b => b.month === selectedMonth && !isSavingsPlan(b)).reduce((s, b) => s + b.planned, 0)
 
   const incomeChange = prev && prev.totalIncome > 0
     ? ((cur.totalIncome - prev.totalIncome) / prev.totalIncome * 100).toFixed(1)

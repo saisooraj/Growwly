@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useAppStore } from '@/store/appStore'
 import { buildMonthlySummary, formatCurrency, getLast6Months } from '@/lib/utils'
 import { getCycleRange } from '@/lib/cycle'
+import { isSavingsPlan } from '@/lib/budgetPlan'
 import { differenceInCalendarDays, parseISO, format } from 'date-fns'
 import Link from 'next/link'
 import {
@@ -41,7 +42,7 @@ export default function SmartInsights() {
       })
     }
 
-    for (const b of budgets.filter(b => b.month === selectedMonth)) {
+    for (const b of budgets.filter(b => b.month === selectedMonth && !isSavingsPlan(b))) {
       const actual = cur.byCategory[b.category as keyof typeof cur.byCategory] ?? 0
       if (actual > b.planned && b.planned > 0) {
         result.push({

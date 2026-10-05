@@ -1,5 +1,6 @@
 import type { FinancialSnapshot } from './types'
 import type { Transaction, Budget, SavingsGoal, EmergencyFund, Borrowing, UserSettings } from '@/types'
+import { isSavingsPlan } from '@/lib/budgetPlan'
 
 interface StoreSnapshot {
   userId: string
@@ -69,7 +70,7 @@ export function buildFinancialSnapshot(store: StoreSnapshot): FinancialSnapshot 
   const thisMonthSummary = summarizeTxns(thisMonthTxns)
   const lastMonthSummary = summarizeTxns(lastMonthTxns)
 
-  const thisMonthBudgets = store.budgets.filter(b => b.month === currentMonth)
+  const thisMonthBudgets = store.budgets.filter(b => b.month === currentMonth && !isSavingsPlan(b))
   const budgetsWithSpent = thisMonthBudgets.map(b => ({
     category: b.category,
     month: b.month,

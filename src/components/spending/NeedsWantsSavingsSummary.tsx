@@ -17,7 +17,7 @@ function NeedsWantsSavingsSummary({ amounts, pcts, target, masked }: Props) {
   const unallocated = Math.max(0, 100 - pcts.needs - pcts.wants - pcts.savings)
   const segments = [
     { key: 'needs', label: 'Needs', pct: pcts.needs, amt: amounts.needs, color: 'var(--info)' },
-    { key: 'wants', label: 'Wants', pct: pcts.wants, amt: amounts.wants, color: 'var(--warn)' },
+    { key: 'wants', label: 'Wants', pct: pcts.wants, amt: amounts.wants, color: 'var(--wants)' },
     { key: 'savings', label: 'Savings', pct: pcts.savings, amt: amounts.savings, color: 'var(--good)' },
   ] as const
 

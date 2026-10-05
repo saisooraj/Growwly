@@ -1,171 +1,416 @@
 'use client'
 
 import { useState } from 'react'
-import { setBudget } from '@/lib/firestore'
+import { format, parseISO } from 'date-fns'
+import { Plus, Sparkles } from 'lucide-react'
+import { setBudget, setBudgetsBatch, type BudgetEntry } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
-import { EXPENSE_CATEGORIES, SAVINGS_VEHICLES, formatCurrencyFull, buildMonthlySummary, getTransactionsForMonth, getBudgetStatus, STATUS_COLORS } from '@/lib/utils'
-import { getCategoryDisplayName } from '@/lib/categoryIcons'
-import type { Category } from '@/types'
+import { CategoryIcon, SavingsIcon, getCategoryDisplayName } from '@/lib/categoryIcons'
+import type { BudgetPlan, PlanGroup, PlanRow } from '@/lib/budgetPlan'
+import { BUCKET_META, money } from './bucketMeta'
 import toast from 'react-hot-toast'
-import { Check, Edit2, Eye, EyeOff } from 'lucide-react'
 
-const MASK = '₹ ••••'
+function rowName(r: PlanRow): string {
+  return r.isVehicle && r.kind === 'savings' ? r.name : getCategoryDisplayName(r.name)
+}
 
-export default function BudgetPlanner() {
+function toEntry(r: PlanRow, planned: number): BudgetEntry {
+  return { category: r.name, planned, ...(r.kind === 'savings' ? { kind: 'savings' as const } : {}) }
+}
+
+const linkButton: React.CSSProperties = {
+  height: 34, padding: '0 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface-2)',
+  color: 'var(--text)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+}
+const ghostButton: React.CSSProperties = {
+  height: 34, padding: '0 10px', borderRadius: 10, border: 'none', background: 'transparent',
+  color: 'var(--text-3)', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+}
+
+export default function BudgetPlanner({ plan, masked }: { plan: BudgetPlan; masked: boolean }) {
   const { user } = useAuth()
-  const [masked, setMasked] = useState(true)
-  const { budgets, transactions, selectedMonth, settings } = useAppStore()
+  const { selectedMonth } = useAppStore()
   const refresh = useRefreshData()
-  const [editing, setEditing] = useState<Category | null>(null)
-  const [inputVal, setInputVal] = useState('')
 
-  const summary = buildMonthlySummary(transactions, selectedMonth, settings)
-  const monthBudgets = budgets.filter((b) => b.month === selectedMonth)
-  const budgetMap = Object.fromEntries(monthBudgets.map((b) => [b.category, b.planned]))
+  const [editing, setEditing] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [shown, setShown] = useState<Set<string>>(new Set())   // hidden rows the user opened via "Add"
+  const [addOpen, setAddOpen] = useState<string | null>(null)
 
-  // Some categories (e.g. Gold) are also savings vehicles — count contributions too
-  const savingsVehicleSet = new Set(SAVINGS_VEHICLES)
-  const monthTxs = getTransactionsForMonth(transactions, selectedMonth, settings)
-  const savingsActual: Record<string, number> = {}
-  for (const t of monthTxs) {
-    if (t.type !== 'transfer' || t.transferKind !== 'savings_contribution' || !t.savingsVehicle) continue
-    savingsActual[t.savingsVehicle] = (savingsActual[t.savingsVehicle] ?? 0) + t.amount
+  const { cycle, suggestions } = plan
+  const live = cycle.phase === 'live'
+
+  function startEdit(r: PlanRow) {
+    setEditing(r.key)
+    setDraft(String(r.planned || r.avg3 || ''))
   }
 
-  async function save(cat: Category) {
-    if (!user) return
+  function cancelEdit() {
+    setShown(prev => {
+      if (!editing || !prev.has(editing)) return prev
+      const next = new Set(prev); next.delete(editing); return next
+    })
+    setEditing(null)
+  }
+
+  async function saveRow(r: PlanRow, amount: number) {
+    if (!user || saving) return
+    setSaving(true)
     try {
-      await setBudget(user.uid, selectedMonth, cat, Number(inputVal) || 0)
+      await setBudget(user.uid, selectedMonth, r.name, amount, r.kind === 'savings' ? 'savings' : undefined)
       await refresh()
       setEditing(null)
-      toast.success('Budget saved')
+      toast.success(amount > 0 ? 'Budget saved' : 'Budget removed')
     } catch {
       toast.error('Failed to save')
+    } finally {
+      setSaving(false)
     }
   }
 
-  const totalPlanned = Object.values(budgetMap).reduce((s, v) => s + v, 0)
-  const extraSavings = EXPENSE_CATEGORIES
-    .filter(cat => savingsVehicleSet.has(cat))
-    .reduce((sum, cat) => sum + (savingsActual[cat] ?? 0), 0)
-  const totalActual = summary.totalExpenses + extraSavings
-  const variance = totalPlanned - totalActual
+  async function fillMany(entries: BudgetEntry[], label: string) {
+    if (!user || saving || entries.length === 0) return
+    setSaving(true)
+    try {
+      await setBudgetsBatch(user.uid, selectedMonth, entries)
+      await refresh()
+      toast.success(label)
+    } catch {
+      toast.error('Failed to save')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const unsetCount = new Set([...suggestions.avgRows.map(r => r.key), ...suggestions.prevRows.map(p => p.row.key)]).size
+  const prevLabel = format(parseISO(`${suggestions.prevMonth}-01`), 'MMMM')
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Totals header + eye toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>This month</span>
-        <button
-          onClick={() => setMasked(v => !v)}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'inherit' }}
-        >
-          {masked ? <Eye size={12} /> : <EyeOff size={12} />}
-          {masked ? 'Show' : 'Hide'}
-        </button>
-      </div>
-
-      {/* Totals */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 4 }}>
-        {[
-          { label: 'Planned',  value: totalPlanned,       color: 'var(--text)',                                               prefix: undefined },
-          { label: 'Actual',   value: totalActual,        color: 'var(--text)',                                               prefix: undefined },
-          { label: 'Variance', value: Math.abs(variance), color: variance >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)',        prefix: variance >= 0 ? '+' : '−' },
-        ].map(({ label, value, color, prefix }) => (
-          <div key={label} className="card-sm" style={{
-            background: label === 'Variance' ? (variance >= 0 ? 'var(--good-soft)' : 'var(--bad-soft)') : 'var(--surface)',
-            padding: '10px 12px',
-          }}>
-            <p style={{ fontSize: 10.5, color: 'var(--text-3)', marginBottom: 4, margin: '0 0 4px', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 600 }}>{label}</p>
-            <p className="display-num" style={{ fontSize: 'clamp(12px, 3.5vw, 17px)', color, fontWeight: 600, lineHeight: 1.2, margin: 0 }}>
-              {masked ? MASK : `${prefix ?? ''}${formatCurrencyFull(value)}`}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Category rows */}
-      {EXPENSE_CATEGORIES.map((cat) => {
-        const planned = budgetMap[cat] ?? 0
-        const actual = (summary.byCategory[cat] ?? 0) + (savingsVehicleSet.has(cat) ? (savingsActual[cat] ?? 0) : 0)
-        const status = getBudgetStatus(actual, planned)
-        const sc = STATUS_COLORS[status]
-        const pct = planned > 0 ? Math.min((actual / planned) * 100, 100) : 0
-
-        return (
-          <div key={cat} className="card-sm" style={{ padding: '12px 14px' }}>
-            {/* Row 1: category name + status pill + edit button */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: planned > 0 || actual > 0 ? 8 : 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {getCategoryDisplayName(cat)}
-                </span>
-                {planned > 0 && (
-                  <span className={`pill ${sc.pill}`} style={{ fontSize: 10, padding: '1px 6px', flexShrink: 0 }}>
-                    {sc.label}
-                  </span>
-                )}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+      {/* ── Setup banner ── */}
+      {unsetCount > 0 && (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          padding: '14px 18px', borderRadius: 16, background: 'var(--surface)', border: '1px dashed var(--border-strong)',
+        }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', minWidth: 0, flex: '1 1 260px' }}>
+            <Sparkles size={16} style={{ color: 'var(--brand)', marginTop: 2, flexShrink: 0 }} />
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>
+                {unsetCount} {unsetCount === 1 ? 'category has' : 'categories have'} no budget yet
               </div>
-
-              {editing === cat ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                  <span style={{ fontSize: 12, color: 'var(--text-3)' }}>₹</span>
-                  <input
-                    type="number"
-                    value={inputVal}
-                    onChange={(e) => setInputVal(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && save(cat)}
-                    className="input"
-                    style={{ width: 80, padding: '4px 8px', fontSize: 13 }}
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => save(cat)}
-                    style={{ padding: 6, borderRadius: 8, background: 'var(--brand-soft)', color: 'var(--brand-ink)', border: 'none', cursor: 'pointer', display: 'flex' }}
-                  >
-                    <Check size={13} />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => { setEditing(cat); setInputVal(String(planned || '')) }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, whiteSpace: 'nowrap' }}
-                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-2)')}
-                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
-                >
-                  <Edit2 size={11} />
-                  {planned > 0 ? (masked ? MASK : formatCurrencyFull(planned)) : 'Set budget'}
-                </button>
-              )}
+              <div style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 2 }}>
+                Fill them in one go — you can adjust any one after.
+              </div>
             </div>
-
-            {/* Progress bar + spent/remaining */}
-            {planned > 0 && (
-              <>
-                <div style={{ width: '100%', background: 'var(--surface-2)', borderRadius: 999, height: 5, overflow: 'hidden', marginBottom: 6 }}>
-                  <div style={{ height: '100%', width: `${pct}%`, background: sc.bar, borderRadius: 999, transition: 'width .4s ease' }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-3)', gap: 4 }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1 }}>
-                    Spent: <span className="num">{masked ? MASK : formatCurrencyFull(actual)}</span>
-                  </span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 1, textAlign: 'right' }}>
-                    Left: <span className="num">{masked ? MASK : formatCurrencyFull(Math.max(planned - actual, 0))}</span>
-                  </span>
-                </div>
-              </>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {suggestions.prevRows.length > 0 && (
+              <button
+                className="btn-primary btn-sm"
+                disabled={saving}
+                onClick={() => fillMany(suggestions.prevRows.map(p => toEntry(p.row, p.planned)), `Copied ${prevLabel}’s plan`)}
+              >
+                Copy {prevLabel}’s plan · {money(suggestions.prevTotal, masked)}
+              </button>
             )}
-
-            {planned === 0 && actual > 0 && (
-              <p style={{ fontSize: 11, color: 'var(--text-3)' }}>
-                Spent: <span className="num">{masked ? MASK : formatCurrencyFull(actual)}</span> · no budget set
-              </p>
+            {suggestions.avgRows.length > 0 && (
+              <button
+                className={suggestions.prevRows.length > 0 ? 'btn-secondary btn-sm' : 'btn-primary btn-sm'}
+                disabled={saving}
+                onClick={() => fillMany(suggestions.avgRows.map(r => toEntry(r, r.avg3)), 'Filled from your 3-month average')}
+              >
+                Use 3-month average · {money(suggestions.avgTotal, masked)}
+              </button>
             )}
           </div>
-        )
-      })}
+        </div>
+      )}
+
+      {/* ── Bucket groups ── */}
+      {plan.groups.map(g => (
+        <GroupSection
+          key={g.bucket}
+          group={g}
+          plan={plan}
+          masked={masked}
+          shown={shown}
+          addOpen={addOpen === g.bucket}
+          onToggleAdd={() => setAddOpen(prev => prev === g.bucket ? null : g.bucket)}
+          onAdd={r => { setShown(prev => new Set(prev).add(r.key)); setAddOpen(null); startEdit(r) }}
+          editing={editing}
+          draft={draft}
+          saving={saving}
+          onDraft={v => setDraft(v.replace(/[^\d]/g, ''))}
+          onStartEdit={startEdit}
+          onCancel={cancelEdit}
+          onSave={(r, amount) => saveRow(r, amount)}
+        />
+      ))}
+
+      {live && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-3)', padding: '0 4px' }}>
+          <span style={{ width: 2, height: 12, borderRadius: 1, background: 'var(--text-3)', flexShrink: 0 }} />
+          Marker shows where spending should be today if paced evenly — recurring bills count as soon as they’re due. Click any amount to edit.
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Group ──────────────────────────────────────────────────────────────────────
+
+interface GroupProps {
+  group: PlanGroup
+  plan: BudgetPlan
+  masked: boolean
+  shown: Set<string>
+  addOpen: boolean
+  onToggleAdd: () => void
+  onAdd: (r: PlanRow) => void
+  editing: string | null
+  draft: string
+  saving: boolean
+  onDraft: (v: string) => void
+  onStartEdit: (r: PlanRow) => void
+  onCancel: () => void
+  onSave: (r: PlanRow, amount: number) => void
+}
+
+function GroupSection({ group: g, plan, masked, shown, addOpen, onToggleAdd, onAdd, ...rowProps }: GroupProps) {
+  const meta = BUCKET_META[g.bucket]
+  const isSavings = g.bucket === 'savings'
+  const rows = [...g.rows, ...g.hidden.filter(r => shown.has(r.key))]
+  const addable = g.hidden.filter(r => !shown.has(r.key))
+
+  return (
+    <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between', gap: '4px 12px', padding: '0 4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+          <span style={{ width: 10, height: 10, borderRadius: 3, background: meta.color, alignSelf: 'center' }} />
+          <span style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em' }}>{meta.label}</span>
+          <span style={{ fontSize: 12.5, color: 'var(--text-3)' }}>{meta.desc}</span>
+        </div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
+          {isSavings ? 'Saved' : 'Spent'} <b style={{ color: 'var(--text)', fontWeight: 700 }}>{money(g.actual, masked)}</b>
+          {' · '}planned <b style={{ color: 'var(--text)', fontWeight: 700 }}>{money(g.planned, masked)}</b>
+          {g.target > 0 && <> / {money(g.target, masked)} target</>}
+        </div>
+      </div>
+
+      <div className="card-flat" style={{ borderRadius: 'var(--radius-lg)', boxShadow: 'var(--elev)' }}>
+        {rows.length === 0 && (
+          <div style={{ padding: '16px 18px', fontSize: 13, color: 'var(--text-3)' }}>
+            {isSavings ? 'No savings plans yet.' : 'No activity in this bucket yet.'}
+          </div>
+        )}
+        {rows.map((r, i) => (
+          <PlanRowView key={r.key} row={r} first={i === 0} plan={plan} masked={masked} {...rowProps} />
+        ))}
+
+        {addable.length > 0 && (
+          <div style={{ borderTop: rows.length ? '1px solid var(--border)' : 'none', padding: '8px 12px' }}>
+            <button onClick={onToggleAdd} style={{ ...ghostButton, display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-2)' }}>
+              <Plus size={13} /> {isSavings ? 'Add a savings plan' : 'Add a category'}
+            </button>
+            {addOpen && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '6px 4px 6px' }}>
+                {addable.map(r => (
+                  <button
+                    key={r.key}
+                    onClick={() => onAdd(r)}
+                    style={{ ...linkButton, height: 30, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                  >
+                    <RowIcon row={r} size={13} /> {rowName(r)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+// ── Row ────────────────────────────────────────────────────────────────────────
+
+function RowIcon({ row, size }: { row: PlanRow; size: number }) {
+  return row.isVehicle
+    ? <SavingsIcon vehicle={row.name} size={size} />
+    : <span style={{ color: 'var(--text-3)', display: 'inline-flex' }}><CategoryIcon category={row.name} size={size} /></span>
+}
+
+interface RowProps {
+  row: PlanRow
+  first: boolean
+  plan: BudgetPlan
+  masked: boolean
+  editing: string | null
+  draft: string
+  saving: boolean
+  onDraft: (v: string) => void
+  onStartEdit: (r: PlanRow) => void
+  onCancel: () => void
+  onSave: (r: PlanRow, amount: number) => void
+}
+
+function PlanRowView({ row: r, first, plan, masked, editing, draft, saving, onDraft, onStartEdit, onCancel, onSave }: RowProps) {
+  const { cycle } = plan
+  const isEditing = editing === r.key
+  const isSavings = r.bucket === 'savings'
+  const meta = BUCKET_META[r.bucket]
+  const remaining = r.planned - r.actual
+
+  let sub: string
+  let subColor = 'var(--text-3)'
+  let barColor = meta.color
+  switch (r.status) {
+    case 'none':
+      sub = r.actual > 0 ? `${isSavings ? 'Saved' : 'Spent'} ${money(r.actual, masked)} · no ${isSavings ? 'plan' : 'budget'}`
+        : r.lastMonth > 0 ? `${money(r.lastMonth, masked)} last month · no ${isSavings ? 'plan' : 'budget'}`
+        : `No ${isSavings ? 'plan' : 'budget'} yet`
+      break
+    case 'over':
+      sub = `Over by ${money(-remaining, masked)}`; subColor = 'var(--bad-ink)'; barColor = 'var(--bad)'
+      break
+    case 'paid':
+      sub = 'Paid'
+      break
+    case 'ahead':
+      sub = `${money(remaining, masked)} left · ahead of pace`; subColor = 'var(--warn-ink)'; barColor = 'var(--warn)'
+      break
+    case 'saved':
+      sub = r.actual > r.planned ? `${money(r.actual - r.planned, masked)} above plan` : 'Plan met'
+      subColor = 'var(--good-ink)'
+      break
+    case 'short':
+      sub = cycle.phase === 'past' ? `Fell ${money(remaining, masked)} short` : `${money(remaining, masked)} to go`
+      break
+    default:
+      sub = cycle.phase === 'live'
+        ? `${money(remaining, masked)} left · ${money(remaining / Math.max(1, cycle.daysLeft), masked)}/day`
+        : cycle.phase === 'past' ? `${money(remaining, masked)} unspent` : `${money(r.planned, masked)} planned`
+  }
+
+  const pct = r.planned > 0 ? Math.min(100, (r.actual / r.planned) * 100) : 0
+  const showMarker = cycle.phase === 'live' && r.paceMark !== null && !isSavings
+
+  function commit() {
+    onSave(r, Number(draft) || 0)
+  }
+
+  return (
+    <div style={{
+      display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px 24px',
+      padding: '14px 18px', borderTop: first ? 'none' : '1px solid var(--border)',
+      background: isEditing ? 'var(--surface-2)' : 'transparent', transition: 'background .12s',
+    }}>
+      {/* Name + status */}
+      <div style={{ flex: '1 1 210px', display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+        <span style={{
+          width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'var(--surface-2)',
+        }}>
+          <RowIcon row={r} size={16} />
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {rowName(r)}
+          </div>
+          <div style={{ fontSize: 12, color: subColor, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {sub}
+          </div>
+        </div>
+      </div>
+
+      {/* Editing */}
+      {isEditing ? (
+        <div style={{ flex: '2 1 300px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
+          {r.lastMonth > 0 && (
+            <button style={{ ...ghostButton, height: 30, border: '1px solid var(--border)' }} onClick={() => onDraft(String(Math.round(r.lastMonth)))}>
+              Last month {money(r.lastMonth, masked)}
+            </button>
+          )}
+          {r.avg3 > 0 && (
+            <button style={{ ...ghostButton, height: 30, border: '1px solid var(--border)' }} onClick={() => onDraft(String(r.avg3))}>
+              3-mo avg {money(r.avg3, masked)}
+            </button>
+          )}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6, height: 36, padding: '0 10px', borderRadius: 10,
+            border: '1px solid var(--brand)', background: 'var(--surface)',
+            boxShadow: '0 0 0 3px color-mix(in oklch, var(--brand) 15%, transparent)',
+          }}>
+            <span style={{ color: 'var(--text-3)', fontSize: 13 }}>₹</span>
+            <input
+              autoFocus
+              inputMode="numeric"
+              value={draft}
+              placeholder="Amount"
+              onChange={e => onDraft(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') onCancel() }}
+              style={{ width: 90, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text)', fontFamily: 'inherit', fontSize: 14, fontWeight: 600 }}
+            />
+          </div>
+          <button className="btn-primary btn-sm" style={{ height: 34 }} disabled={saving} onClick={commit}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          {r.planned > 0 && (
+            <button style={{ ...ghostButton, color: 'var(--bad-ink)' }} disabled={saving} onClick={() => onSave(r, 0)}>
+              Remove
+            </button>
+          )}
+          <button style={ghostButton} onClick={onCancel}>Cancel</button>
+        </div>
+      ) : r.planned > 0 ? (
+        /* Progress */
+        <div style={{ flex: '2 1 300px', display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
+          <div style={{ position: 'relative', flex: 1, height: 8, borderRadius: 4, background: 'var(--surface-3)', minWidth: 80 }}>
+            <div style={{
+              position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 4,
+              width: `${pct}%`, background: barColor, transition: 'width .5s cubic-bezier(.22,1,.36,1)',
+            }} />
+            {showMarker && (
+              <div
+                title="Where you should be today"
+                style={{
+                  position: 'absolute', top: -4, bottom: -4, width: 2, borderRadius: 1,
+                  background: 'var(--text-3)', left: `calc(${(r.paceMark ?? 0) * 100}% - 1px)`,
+                }}
+              />
+            )}
+          </div>
+          <button
+            onClick={() => onStartEdit(r)}
+            title="Edit budget"
+            style={{
+              minWidth: 150, textAlign: 'right', border: 'none', background: 'transparent', cursor: 'pointer',
+              padding: '6px 8px', borderRadius: 8, fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: 'var(--text)',
+              whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            {money(r.actual, masked)} <span style={{ color: 'var(--text-3)', fontWeight: 500 }}>/ {money(r.planned, masked)}</span>
+          </button>
+        </div>
+      ) : (
+        /* No budget */
+        <div style={{ flex: '2 1 300px', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 6, flexWrap: 'wrap' }}>
+          {r.avg3 > 0 && (
+            <button style={linkButton} disabled={saving} onClick={() => onSave(r, r.avg3)}>
+              Use {money(r.avg3, masked)} <span style={{ color: 'var(--text-3)', fontWeight: 500 }}>· 3-mo avg</span>
+            </button>
+          )}
+          <button style={r.avg3 > 0 ? ghostButton : linkButton} onClick={() => onStartEdit(r)}>
+            {r.avg3 > 0 ? 'Custom' : isSavings ? 'Set plan' : 'Set budget'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

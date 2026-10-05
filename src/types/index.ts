@@ -58,8 +58,9 @@ export interface Budget {
   id: string
   userId: string
   month: string // "YYYY-MM"
-  category: Category
+  category: Category  // expense category, or the savings vehicle when kind is 'savings'
   planned: number
+  kind?: 'savings'    // absent = spending limit on an expense category; 'savings' = amount to save into a vehicle
   createdAt: string
 }
 
