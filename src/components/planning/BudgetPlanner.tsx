@@ -154,7 +154,7 @@ export default function BudgetPlanner({ plan, masked }: { plan: BudgetPlan; mask
       {live && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-3)', padding: '0 4px' }}>
           <span style={{ width: 2, height: 12, borderRadius: 1, background: 'var(--text-3)', flexShrink: 0 }} />
-          Marker shows where spending should be today if paced evenly — recurring bills count as soon as they’re due. Click any amount to edit.
+          Safe line: stay under it and what you usually spend in the rest of the month still fits the budget. Based on your last 3 months. Click any amount to edit.
         </div>
       )}
     </div>
@@ -277,11 +277,14 @@ function PlanRowView({ row: r, first, plan, masked, editing, draft, saving, onDr
     case 'over':
       sub = `Over by ${money(-remaining, masked)}`; subColor = 'var(--bad-ink)'; barColor = 'var(--bad)'
       break
-    case 'paid':
-      sub = 'Paid'
+    case 'met':
+      sub = 'Limit met · stop here'; subColor = 'var(--good-ink)'; barColor = 'var(--good)'
       break
     case 'ahead':
-      sub = `${money(remaining, masked)} left · ahead of pace`; subColor = 'var(--warn-ink)'; barColor = 'var(--warn)'
+      sub = remaining <= r.planned * 0.05
+        ? `Limit nearly reached · ~${money(r.rest, masked)} more usually comes`
+        : `${money(remaining, masked)} left · heading ${money(r.forecast - r.planned, masked)} over`
+      subColor = 'var(--warn-ink)'; barColor = 'var(--warn)'
       break
     case 'saved':
       sub = r.actual > r.planned ? `${money(r.actual - r.planned, masked)} above plan` : 'Plan met'
@@ -290,14 +293,25 @@ function PlanRowView({ row: r, first, plan, masked, editing, draft, saving, onDr
     case 'short':
       sub = cycle.phase === 'past' ? `Fell ${money(remaining, masked)} short` : `${money(remaining, masked)} to go`
       break
-    default:
+    default: {
+      const spare = r.planned - r.forecast
       sub = cycle.phase === 'live'
-        ? `${money(remaining, masked)} left · ${money(remaining / Math.max(1, cycle.daysLeft), masked)}/day`
+        ? spare >= Math.max(100, r.planned * 0.05)
+          ? `${money(remaining, masked)} left · ~${money(spare, masked)} to spare`
+          : `${money(remaining, masked)} left · on track`
         : cycle.phase === 'past' ? `${money(remaining, masked)} unspent` : `${money(r.planned, masked)} planned`
+    }
   }
 
+  // Something major happened: savings beaten (green), or a limit broken / savings
+  // plan missed near or after the end of the cycle (red).
+  const missedSaving = r.status === 'short' && (cycle.phase === 'past' || (cycle.phase === 'live' && cycle.daysLeft <= 5))
+  const flare = r.status === 'saved' && r.actual > r.planned ? 'flare-seg flare-good'
+    : r.status === 'over' || missedSaving ? 'flare-seg flare-bad'
+    : undefined
+
   const pct = r.planned > 0 ? Math.min(100, (r.actual / r.planned) * 100) : 0
-  const showMarker = cycle.phase === 'live' && r.paceMark !== null && !isSavings
+  const showMarker = cycle.phase === 'live' && r.safeMark !== null && r.safeMark < 1 && !isSavings
 
   function commit() {
     onSave(r, Number(draft) || 0)
@@ -370,16 +384,24 @@ function PlanRowView({ row: r, first, plan, masked, editing, draft, saving, onDr
         /* Progress */
         <div style={{ flex: '2 1 300px', display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
           <div style={{ position: 'relative', flex: 1, height: 8, borderRadius: 4, background: 'var(--surface-3)', minWidth: 80 }}>
-            <div style={{
+            {showMarker && (
+              // Beyond the safe line: budget the rest of the month usually needs.
+              <div style={{
+                position: 'absolute', top: 0, bottom: 0, right: 0, borderRadius: '0 4px 4px 0',
+                left: `${(r.safeMark ?? 0) * 100}%`,
+                background: 'repeating-linear-gradient(135deg, transparent 0 3px, color-mix(in oklch, var(--text-3) 22%, transparent) 3px 5px)',
+              }} />
+            )}
+            <div className={flare} style={{
               position: 'absolute', left: 0, top: 0, bottom: 0, borderRadius: 4,
               width: `${pct}%`, background: barColor, transition: 'width .5s cubic-bezier(.22,1,.36,1)',
             }} />
             {showMarker && (
               <div
-                title="Where you should be today"
+                title={`Safe line · stay under ${money(r.planned * (r.safeMark ?? 0), masked)} and the usual ${money(r.rest, masked)} for the rest of the month still fits`}
                 style={{
                   position: 'absolute', top: -4, bottom: -4, width: 2, borderRadius: 1,
-                  background: 'var(--text-3)', left: `calc(${(r.paceMark ?? 0) * 100}% - 1px)`,
+                  background: 'var(--text-3)', left: `calc(${(r.safeMark ?? 0) * 100}% - 1px)`,
                 }}
               />
             )}

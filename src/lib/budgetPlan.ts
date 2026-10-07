@@ -1,4 +1,4 @@
-import { differenceInCalendarDays, format, parseISO } from 'date-fns'
+import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns'
 import type { Budget, Transaction, UserSettings } from '@/types'
 import { getCycleRange } from './cycle'
 import { EMERGENCY_FUND_VEHICLE, EXPENSE_CATEGORIES, SAVINGS_VEHICLES, getTransferDisplay, isSavingsTransfer } from './utils'
@@ -38,9 +38,9 @@ export function planKey(kind: PlanKind, name: string): string {
 export type RowStatus =
   | 'none'    // no budget set
   | 'ok'      // spending, within plan and on pace
-  | 'ahead'   // spending faster than the cycle is passing
+  | 'ahead'   // on course to finish the cycle over plan
   | 'over'    // spent more than planned
-  | 'paid'    // plan was all fixed costs and they're posted
+  | 'met'     // reached the plan with nothing more usually to come
   | 'short'   // savings: still below the plan
   | 'saved'   // savings: plan met or beaten
 
@@ -55,7 +55,9 @@ export interface PlanRow {
   recurring: number     // part of `actual` from recurring transactions
   lastMonth: number
   avg3: number          // 3-month average, rounded to ₹100
-  paceMark: number | null  // 0–1 position on the bar where spend should be today
+  rest: number          // spend still expected this cycle, from past cycles' same days
+  forecast: number      // actual + rest
+  safeMark: number | null  // 0–1 on the bar: stay under it and the usual rest of the cycle still fits
   status: RowStatus
   visible: boolean      // has a plan or any recent activity
 }
@@ -92,7 +94,7 @@ export interface BudgetPlan {
     left: number              // spendPlanned − spendBudgeted
     savePlanned: number
     saved: number             // actual in savings rows that have a plan
-    forecast: number | null   // projected budgeted spend at cycle end
+    forecast: number | null   // projected budgeted spend at cycle end (sum of row forecasts)
   }
   suggestions: {
     avgRows: PlanRow[]        // visible rows with no plan but a 3-month average
@@ -141,9 +143,18 @@ export function buildBudgetPlan(
     phase, pace: days > 0 ? elapsed / days : 0,
   }
 
+  // Each earlier cycle's spend from "the same day as today" onwards is what usually
+  // still comes after today. Front-loaded costs (rent on the 1st) then don't get
+  // stretched across the month the way a flat daily rate would.
+  const restFrom = ranges.slice(0, 3).map(r =>
+    phase === 'past' ? '9999-12-31' : format(addDays(parseISO(r.start), elapsed), 'yyyy-MM-dd'))
+
   // ── One pass: per-month category spend, vehicle net savings, income ──
   const catByMonth: Record<string, number[]> = {}
   const vehByMonth: Record<string, number[]> = {}
+  const catRest: Record<string, number[]> = {}         // prior cycles, from restFrom on
+  const vehRest: Record<string, number[]> = {}
+  const catRestRecurring: Record<string, number> = {}  // recurring part of catRest, summed
   const recurringByCat: Record<string, number> = {}
   const income = [0, 0, 0, 0]
   const active = [false, false, false, false]
@@ -166,10 +177,22 @@ export function buildBudgetPlan(
       if (i === 3 && t.isRecurring && t.type === 'expense') {
         recurringByCat[t.category] = (recurringByCat[t.category] ?? 0) + t.amount
       }
+      if (i < 3 && t.date >= restFrom[i]) {
+        const rest = catRest[t.category] ?? (catRest[t.category] = [0, 0, 0])
+        rest[i] += signed
+        if (t.isRecurring && t.type === 'expense') {
+          catRestRecurring[t.category] = (catRestRecurring[t.category] ?? 0) + t.amount
+        }
+      }
     } else if (isSavingsTransfer(t)) {
       const v = vehicleOf(t)
       const arr = vehByMonth[v] ?? (vehByMonth[v] = [0, 0, 0, 0])
-      arr[i] += getTransferDisplay(t).dir === 'out' ? t.amount : -t.amount
+      const signed = getTransferDisplay(t).dir === 'out' ? t.amount : -t.amount
+      arr[i] += signed
+      if (i < 3 && t.date >= restFrom[i]) {
+        const rest = vehRest[v] ?? (vehRest[v] = [0, 0, 0])
+        rest[i] += signed
+      }
     }
   }
 
@@ -208,33 +231,47 @@ export function buildBudgetPlan(
   const zero = [0, 0, 0, 0]
   const rows: PlanRow[] = []
 
-  function addRow(name: string, kind: PlanKind, isVehicle: boolean, bucket: Bucket, byMonth: number[], recurring: number) {
+  function addRow(
+    name: string, kind: PlanKind, isVehicle: boolean, bucket: Bucket,
+    byMonth: number[], restByMonth: number[], restRecurring: number, recurring: number,
+  ) {
     const key = planKey(kind, name)
     const p = planned[key] ?? 0
     const actual = Math.max(0, byMonth[3])
     const lastMonth = Math.max(0, byMonth[2])
-    const avg3 = roundSuggestion((Math.max(0, byMonth[0]) + Math.max(0, byMonth[1]) + lastMonth) / activePrior)
+    const priorTotal = Math.max(0, byMonth[0]) + Math.max(0, byMonth[1]) + lastMonth
+    const avg3 = roundSuggestion(priorTotal / activePrior)
+
+    // What usually still comes this cycle. A recurring bill that has already posted
+    // this cycle isn't expected again, even if it usually lands later in the month.
+    let rest = 0
+    if (phase !== 'past') {
+      if (priorTotal > 0) {
+        const usual = (Math.max(0, restByMonth[0]) + Math.max(0, restByMonth[1]) + Math.max(0, restByMonth[2])) / activePrior
+        rest = Math.max(0, usual - Math.min(restRecurring / activePrior, recurring))
+      } else if (phase === 'live') {
+        // No history: carry on at this cycle's day-rate, leaving recurring bills out.
+        rest = Math.max(0, actual - recurring) / elapsed * (days - elapsed)
+      }
+    }
+    const forecast = actual + rest
 
     let status: RowStatus = 'none'
-    let paceMark: number | null = null
+    let safeMark: number | null = null
     if (p > 0 && bucket === 'savings') {
       status = actual >= p ? 'saved' : 'short'
     } else if (p > 0) {
-      // Recurring costs land whenever they're due, so only the variable part of the
-      // plan is expected to track the calendar.
-      const fixed = Math.min(recurring, p)
-      const variable = p - fixed
-      const variableSpent = Math.max(0, actual - recurring)
-      if (phase !== 'future') paceMark = Math.min(1, (fixed + variable * cycle.pace) / p)
+      if (phase === 'live') safeMark = Math.min(1, Math.max(0, (p - rest) / p))
+      const nearLimit = actual >= p * 0.95
       if (actual > p) status = 'over'
-      else if (variable <= 0) status = 'paid'
-      else if (phase === 'live' && variableSpent / variable > cycle.pace + 0.1) status = 'ahead'
+      else if (nearLimit && (phase === 'past' || rest <= p * 0.05)) status = 'met'
+      else if (phase === 'live' && forecast > p * 1.05) status = 'ahead'
       else status = 'ok'
     }
 
     rows.push({
       key, name, kind, isVehicle, bucket,
-      planned: p, actual, recurring, lastMonth, avg3, paceMark, status,
+      planned: p, actual, recurring, lastMonth, avg3, rest, forecast, safeMark, status,
       visible: p > 0 || actual > 0 || avg3 > 0 || (prevPlanned[key] ?? 0) > 0,
     })
   }
@@ -247,13 +284,19 @@ export function buildBudgetPlan(
     if (bucket === 'savings' && vehicles.has(cat)) {
       vehicles.delete(cat)
       const vehMonths = vehByMonth[cat] ?? zero
-      addRow(cat, 'expense', true, bucket, catMonths.map((v, i) => v + vehMonths[i]), recurringByCat[cat] ?? 0)
+      const catRestMonths = catRest[cat] ?? zero
+      const vehRestMonths = vehRest[cat] ?? zero
+      addRow(
+        cat, 'expense', true, bucket,
+        catMonths.map((v, i) => v + vehMonths[i]), catRestMonths.map((v, i) => v + vehRestMonths[i]),
+        catRestRecurring[cat] ?? 0, recurringByCat[cat] ?? 0,
+      )
     } else {
-      addRow(cat, 'expense', false, bucket, catMonths, recurringByCat[cat] ?? 0)
+      addRow(cat, 'expense', false, bucket, catMonths, catRest[cat] ?? zero, catRestRecurring[cat] ?? 0, recurringByCat[cat] ?? 0)
     }
   }
   for (const v of Array.from(vehicles)) {
-    addRow(v, 'savings', true, 'savings', vehByMonth[v] ?? zero, 0)
+    addRow(v, 'savings', true, 'savings', vehByMonth[v] ?? zero, vehRest[v] ?? zero, 0, 0)
   }
 
   // ── Income: this cycle's, else the target from settings, else last cycle's ──
@@ -288,15 +331,13 @@ export function buildBudgetPlan(
   const spendUnbudgeted = spendRows.filter(r => r.planned === 0).reduce((s, r) => s + r.actual, 0)
   const saveRows = rows.filter(r => r.bucket === 'savings' && r.planned > 0)
 
-  // Forecast: recurring costs as posted, everything else extrapolated at the
-  // current daily rate. Too noisy in the first few days to be worth showing.
+  // Forecast: spent so far plus what earlier cycles usually spent from today on.
+  // Without any history it falls back to a day-rate, too noisy for the first few days.
+  const hasHistory = active.slice(0, 3).some(Boolean)
   let forecast: number | null = null
   if (phase === 'past') forecast = spendBudgeted
-  else if (phase === 'live' && elapsed >= 5 && budgeted.length > 0) {
-    forecast = budgeted.reduce((s, r) => {
-      const variableSpent = Math.max(0, r.actual - r.recurring)
-      return s + Math.max(r.actual, r.recurring + variableSpent / elapsed * days)
-    }, 0)
+  else if (phase === 'live' && (hasHistory || elapsed >= 5) && budgeted.length > 0) {
+    forecast = budgeted.reduce((s, r) => s + r.forecast, 0)
   }
 
   // ── Suggestions ──

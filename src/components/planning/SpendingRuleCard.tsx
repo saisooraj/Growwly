@@ -128,6 +128,20 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
               {income > 0 ? money(income, masked) : '—'}
             </div>
           </div>
+          {income > 0 && (
+            // Unallotted income is the number to act on, so it sits up here, highlighted.
+            <div style={{
+              textAlign: 'right', padding: '6px 12px', borderRadius: 10,
+              background: unplanned < 0 ? 'var(--bad-soft)' : unplanned >= tolerance ? 'var(--warn-soft)' : 'var(--good-soft)',
+            }}>
+              <div className="h-eyebrow" style={{ color: unplanned < 0 ? 'var(--bad-ink)' : unplanned >= tolerance ? 'var(--warn-ink)' : 'var(--good-ink)' }}>
+                {unplanned < 0 ? 'Over-allotted' : 'Not allotted'}
+              </div>
+              <div className="display-num" style={{ fontSize: 18, marginTop: 2, color: unplanned < 0 ? 'var(--bad-ink)' : unplanned >= tolerance ? 'var(--warn-ink)' : 'var(--good-ink)' }}>
+                {money(Math.abs(unplanned), masked)}
+              </div>
+            </div>
+          )}
           {!editingRule && !editingCats && (
             <div style={{ display: 'flex', gap: 6 }}>
               <button onClick={openCatEdit} style={toolButton}>
@@ -147,11 +161,26 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
         </p>
       ) : (
         <>
-          {/* Stacked bar: each bucket's planned amount as a share of income */}
-          <div style={{ display: 'flex', height: 14, borderRadius: 8, overflow: 'hidden', gap: 2, background: 'var(--surface-3)' }}>
-            {plan.groups.map(g => (
-              <div key={g.bucket} style={{
-                width: `${(g.planned / scale) * 100}%`, background: BUCKET_META[g.bucket].color,
+          {/* Stacked bar: each bucket's planned amount as a share of income, then what's
+              left unallotted. A bucket past its target glows: green for savings, red otherwise. */}
+          <div style={{ display: 'flex', height: 14, borderRadius: 8, gap: 2, background: 'var(--surface-3)' }}>
+            {[
+              ...plan.groups.filter(g => g.planned > 0).map(g => ({
+                key: g.bucket,
+                width: g.planned / scale,
+                color: BUCKET_META[g.bucket].color,
+                flare: g.planned - g.target >= tolerance ? (g.bucket === 'savings' ? 'flare-seg flare-good' : 'flare-seg flare-bad') : undefined,
+              })),
+              ...(unplanned > 0 ? [{
+                key: 'unallotted',
+                width: unplanned / scale,
+                color: unplanned >= tolerance ? 'var(--warn-2)' : 'var(--good-soft)',
+                flare: undefined,
+              }] : []),
+            ].map((seg, i, all) => (
+              <div key={seg.key} className={seg.flare} title={seg.key === 'unallotted' ? 'Not allotted' : undefined} style={{
+                width: `${seg.width * 100}%`, background: seg.color,
+                borderRadius: `${i === 0 ? 8 : 0}px ${i === all.length - 1 ? 8 : 0}px ${i === all.length - 1 ? 8 : 0}px ${i === 0 ? 8 : 0}px`,
                 transition: 'width .6s cubic-bezier(.22,1,.36,1)',
               }} />
             ))}
@@ -185,13 +214,6 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
             })}
           </div>
 
-          {totalPlanned > 0 && (
-            <div style={{ fontSize: 12.5, color: unplanned < 0 ? 'var(--bad-ink)' : 'var(--text-3)' }}>
-              {unplanned < 0
-                ? `Your plan is ${money(-unplanned, masked)} more than your income.`
-                : `${money(unplanned, masked)} of income isn’t planned yet.`}
-            </div>
-          )}
         </>
       )}
 

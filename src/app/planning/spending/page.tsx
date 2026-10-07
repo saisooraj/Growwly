@@ -7,9 +7,9 @@ import { useRouter } from 'next/navigation'
 import { differenceInCalendarDays, parseISO } from 'date-fns'
 import AppShell from '@/components/layout/AppShell'
 import { useAppStore } from '@/store/appStore'
-import { buildCategoryTrend, buildCurrentPeriodDetail, bucketTopSlices, getMonthsEndingAt } from '@/lib/spendingAnalytics'
+import { buildCategoryTrend, buildCurrentPeriodDetail, bucketTopSlices, getMonthsEndingAt, projectCycleSpend } from '@/lib/spendingAnalytics'
 import { getCycleRange } from '@/lib/cycle'
-import { CATEGORY_COLORS, EXPENSE_CATEGORIES, buildMonthlySummary, getCycleMonth, getMonthLabel } from '@/lib/utils'
+import { CATEGORY_COLORS, EXPENSE_CATEGORIES, buildMonthlySummary, getMonthLabel } from '@/lib/utils'
 import { DEFAULT_NEEDS, DEFAULT_RULE, DEFAULT_SAVINGS, isSavingsPlan } from '@/lib/budgetPlan'
 import SpendingKpiRow from '@/components/spending/SpendingKpiRow'
 import SpendingDonut from '@/components/spending/SpendingDonut'
@@ -143,12 +143,11 @@ export default function SpendingBreakdownPage() {
   )
   const avgPerDay = daysInCycle > 0 ? totalSpent / daysInCycle : 0
 
-  // ── Pace forecast: only meaningful for the cycle that's actually in progress ──
-  const isLiveCycle = chartMonth === getCycleMonth(settings)
-  const daysElapsed = isLiveCycle
-    ? Math.min(daysInCycle, Math.max(1, differenceInCalendarDays(new Date(), parseISO(cycleStart)) + 1))
-    : daysInCycle
-  const projectedTotal = isLiveCycle ? (totalSpent / daysElapsed) * daysInCycle : null
+  // ── Month-end projection: only for the cycle that's actually in progress ──
+  const projectedTotal = useMemo(
+    () => projectCycleSpend(transactions, chartMonth, settings),
+    [transactions, chartMonth, settings]
+  )
   const plannedTotal = useMemo(() => Object.values(budgetMap).reduce((s, v) => s + v, 0), [budgetMap])
 
   // ── Daily heatmap, biggest expenses, recurring split — one extra pass, current cycle only ──

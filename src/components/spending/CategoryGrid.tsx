@@ -92,11 +92,18 @@ function CategoryGrid({ rows, masked, onRowClick }: Props) {
                 <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
                   {masked ? MASK : formatCurrencyFull(actual)}
                 </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: isUp ? 'var(--warn-ink)' : isDown ? 'var(--good-ink)' : 'var(--text-3)' }}>
-                  {isUp && <TrendingUp size={11} />}
-                  {isDown && <TrendingDown size={11} />}
-                  {!isUp && !isDown && <Minus size={11} />}
-                  {momPct !== null ? `${isUp ? '+' : ''}${momPct}%` : prevActual === 0 && actual > 0 ? 'New' : '—'}
+                <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+                  {prevActual > 0 && (
+                    <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+                      Last month {masked ? MASK : formatCurrencyFull(prevActual)}
+                    </span>
+                  )}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', color: isUp ? 'var(--warn-ink)' : isDown ? 'var(--good-ink)' : 'var(--text-3)' }}>
+                    {isUp && <TrendingUp size={11} />}
+                    {isDown && <TrendingDown size={11} />}
+                    {!isUp && !isDown && <Minus size={11} />}
+                    {momPct !== null ? `${isUp ? '+' : ''}${momPct}%` : prevActual === 0 && actual > 0 ? 'New' : '—'}
+                  </span>
                 </span>
               </div>
 

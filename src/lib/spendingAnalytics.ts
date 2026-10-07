@@ -1,4 +1,4 @@
-import { addDays, format, parseISO } from 'date-fns'
+import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns'
 import type { Transaction, UserSettings } from '@/types'
 import { getCycleRange } from './cycle'
 
@@ -18,6 +18,63 @@ export function getMonthsEndingAt(endMonth: string, count: number): string[] {
     out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
   return out
+}
+
+// Month-end spend for the cycle in progress: what's been spent so far, plus what
+// the last three cycles usually spent from this day of the cycle onwards. Costs
+// that land early (rent, a monthly grocery run) are already in "spent" and don't
+// get stretched across the month the way a flat daily rate would stretch them.
+// Recurring bills already posted this cycle aren't expected again. Without any
+// history it falls back to this cycle's day-rate, leaving recurring bills out.
+// Returns null unless `month` is the live cycle.
+export function projectCycleSpend(
+  transactions: Transaction[],
+  month: string,
+  settings?: UserSettings | null,
+  today: string = format(new Date(), 'yyyy-MM-dd'),
+): number | null {
+  const months = getMonthsEndingAt(month, 4)
+  const ranges = months.map(m => getCycleRange(m, settings))
+  const cur = ranges[3]
+  if (today < cur.start || today > cur.end) return null
+
+  const elapsed = differenceInCalendarDays(parseISO(today), parseISO(cur.start)) + 1
+  const days = differenceInCalendarDays(parseISO(cur.end), parseISO(cur.start)) + 1
+  const restFrom = ranges.slice(0, 3).map(r => format(addDays(parseISO(r.start), elapsed), 'yyyy-MM-dd'))
+
+  let spent = 0
+  let recurringNow = 0
+  let restRecurring = 0
+  const rest = [0, 0, 0]
+  const active = [false, false, false]
+
+  for (const t of transactions) {
+    if (t.type !== 'expense' && t.type !== 'refund') continue
+    if (t.date < ranges[0].start || t.date > cur.end) continue
+    const signed = t.type === 'refund' ? -t.amount : t.amount
+    const recurring = t.isRecurring && t.type === 'expense'
+    if (t.date >= cur.start) {
+      spent += signed
+      if (recurring) recurringNow += t.amount
+      continue
+    }
+    for (let i = 2; i >= 0; i--) {
+      if (t.date < ranges[i].start || t.date > ranges[i].end) continue
+      active[i] = true
+      if (t.date >= restFrom[i]) {
+        rest[i] += signed
+        if (recurring) restRecurring += t.amount
+      }
+      break
+    }
+  }
+
+  const activePrior = active.filter(Boolean).length
+  if (activePrior === 0) {
+    return spent + Math.max(0, spent - recurringNow) / elapsed * (days - elapsed)
+  }
+  const usual = rest.reduce((s, v) => s + Math.max(0, v), 0) / activePrior
+  return spent + Math.max(0, usual - Math.min(restRecurring / activePrior, recurringNow))
 }
 
 // Single-pass category × month aggregation for expense/refund transactions.
