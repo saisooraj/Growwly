@@ -8,9 +8,15 @@ import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
 import { useRefreshData } from '@/hooks/useData'
 import { CategoryIcon, SavingsIcon, getCategoryDisplayName } from '@/lib/categoryIcons'
-import type { BudgetPlan, PlanGroup, PlanRow } from '@/lib/budgetPlan'
+import { CHECKPOINT, type BudgetPlan, type PlanGroup, type PlanRow } from '@/lib/budgetPlan'
 import { BUCKET_META, money } from './bucketMeta'
 import toast from 'react-hot-toast'
+
+// Looking back at a finished cycle, or on its last day: the time to show what was
+// cut and what overran.
+function isReview(plan: BudgetPlan): boolean {
+  return plan.cycle.phase === 'past' || (plan.cycle.phase === 'live' && plan.cycle.daysLeft <= 1)
+}
 
 function rowName(r: PlanRow): string {
   return r.isVehicle && r.kind === 'savings' ? r.name : getCategoryDisplayName(r.name)
@@ -85,6 +91,13 @@ export default function BudgetPlanner({ plan, masked }: { plan: BudgetPlan; mask
     }
   }
 
+  const review = isReview(plan)
+  const spendRows = plan.groups.filter(g => g.bucket !== 'savings').flatMap(g => g.rows).filter(r => r.planned > 0)
+  const underRows = spendRows.filter(r => r.actual < r.planned * 0.95)
+  const overRows = spendRows.filter(r => r.actual > r.planned)
+  const cut = underRows.reduce((s, r) => s + r.planned - r.actual, 0)
+  const overrun = overRows.reduce((s, r) => s + r.actual - r.planned, 0)
+
   const unsetCount = new Set([...suggestions.avgRows.map(r => r.key), ...suggestions.prevRows.map(p => p.row.key)]).size
   const prevLabel = format(parseISO(`${suggestions.prevMonth}-01`), 'MMMM')
 
@@ -130,6 +143,34 @@ export default function BudgetPlanner({ plan, masked }: { plan: BudgetPlan; mask
         </div>
       )}
 
+      {/* ── Cycle review ── */}
+      {review && spendRows.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+          <div style={{ flex: '1 1 240px', padding: '14px 18px', borderRadius: 16, background: 'var(--good-soft)' }}>
+            <div className="h-eyebrow" style={{ color: 'var(--good-ink)' }}>
+              {cycle.phase === 'past' ? 'Cut this cycle' : 'Cut so far · last day'}
+            </div>
+            <div className="display-num" style={{ fontSize: 22, color: 'var(--good-ink)', marginTop: 2 }}>{money(cut, masked)}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--good-ink)', marginTop: 2 }}>
+              {underRows.length > 0
+                ? `Under budget in ${underRows.length} ${underRows.length === 1 ? 'category' : 'categories'}`
+                : 'No category came in under budget'}
+            </div>
+          </div>
+          <div style={{ flex: '1 1 240px', padding: '14px 18px', borderRadius: 16, background: overRows.length ? 'var(--bad-soft)' : 'var(--surface-2)' }}>
+            <div className="h-eyebrow" style={{ color: overRows.length ? 'var(--bad-ink)' : 'var(--text-3)' }}>Over budget</div>
+            <div className="display-num" style={{ fontSize: 22, color: overRows.length ? 'var(--bad-ink)' : 'var(--text)', marginTop: 2 }}>
+              {overRows.length ? money(overrun, masked) : '—'}
+            </div>
+            <div style={{ fontSize: 12.5, color: overRows.length ? 'var(--bad-ink)' : 'var(--text-3)', marginTop: 2 }}>
+              {overRows.length
+                ? `In ${overRows.length} ${overRows.length === 1 ? 'category' : 'categories'}`
+                : 'Every budget held'}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Bucket groups ── */}
       {plan.groups.map(g => (
         <GroupSection
@@ -151,10 +192,10 @@ export default function BudgetPlanner({ plan, masked }: { plan: BudgetPlan; mask
         />
       ))}
 
-      {live && (
+      {live && !review && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-3)', padding: '0 4px' }}>
           <span style={{ width: 2, height: 12, borderRadius: 1, background: 'var(--text-3)', flexShrink: 0 }} />
-          Safe line: stay under it and what you usually spend in the rest of the month still fits the budget. Based on your last 3 months. Click any amount to edit.
+          Checkpoint at {Math.round(CHECKPOINT * 100)}% of each budget. Once you pass it, slow down so the last {Math.round((1 - CHECKPOINT) * 100)}% lasts the rest of the cycle. Click any amount to edit.
         </div>
       )}
     </div>
@@ -264,6 +305,10 @@ function PlanRowView({ row: r, first, plan, masked, editing, draft, saving, onDr
   const isSavings = r.bucket === 'savings'
   const meta = BUCKET_META[r.bucket]
   const remaining = r.planned - r.actual
+  const review = isReview(plan)
+
+  // Cut / overrun badge beside the name when looking back at the cycle
+  let badge: { text: string; tone: 'good' | 'bad' } | null = null
 
   let sub: string
   let subColor = 'var(--text-3)'
@@ -276,15 +321,19 @@ function PlanRowView({ row: r, first, plan, masked, editing, draft, saving, onDr
       break
     case 'over':
       sub = `Over by ${money(-remaining, masked)}`; subColor = 'var(--bad-ink)'; barColor = 'var(--bad)'
+      if (review) badge = { text: `+${money(-remaining, masked)} over`, tone: 'bad' }
       break
     case 'met':
-      sub = 'Limit met · stop here'; subColor = 'var(--good-ink)'; barColor = 'var(--good)'
+      sub = review ? 'Spent right to plan' : 'Limit met · on track, stop here'
+      subColor = 'var(--good-ink)'; barColor = 'var(--good)'
       break
-    case 'ahead':
-      sub = remaining <= r.planned * 0.05
-        ? `Limit nearly reached · ~${money(r.rest, masked)} more usually comes`
-        : `${money(remaining, masked)} left · heading ${money(r.forecast - r.planned, masked)} over`
-      subColor = 'var(--warn-ink)'; barColor = 'var(--warn)'
+    case 'near':
+      if (review) {
+        sub = `Came in ${money(remaining, masked)} under plan`; subColor = 'var(--good-ink)'
+        badge = { text: `${money(remaining, masked)} cut`, tone: 'good' }
+      } else {
+        sub = `Past checkpoint · ${money(remaining, masked)} left`; subColor = 'var(--warn-ink)'; barColor = 'var(--warn)'
+      }
       break
     case 'saved':
       sub = r.actual > r.planned ? `${money(r.actual - r.planned, masked)} above plan` : 'Plan met'
@@ -293,14 +342,15 @@ function PlanRowView({ row: r, first, plan, masked, editing, draft, saving, onDr
     case 'short':
       sub = cycle.phase === 'past' ? `Fell ${money(remaining, masked)} short` : `${money(remaining, masked)} to go`
       break
-    default: {
-      const spare = r.planned - r.forecast
-      sub = cycle.phase === 'live'
-        ? spare >= Math.max(100, r.planned * 0.05)
-          ? `${money(remaining, masked)} left · ~${money(spare, masked)} to spare`
-          : `${money(remaining, masked)} left · on track`
-        : cycle.phase === 'past' ? `${money(remaining, masked)} unspent` : `${money(r.planned, masked)} planned`
-    }
+    default:
+      if (review) {
+        sub = `Came in ${money(remaining, masked)} under plan`; subColor = 'var(--good-ink)'
+        badge = { text: `${money(remaining, masked)} cut`, tone: 'good' }
+      } else {
+        sub = cycle.phase === 'live'
+          ? `${money(remaining, masked)} left · ${money(remaining / Math.max(1, cycle.daysLeft), masked)}/day`
+          : `${money(r.planned, masked)} planned`
+      }
   }
 
   // Something major happened: savings beaten (green), or a limit broken / savings
@@ -311,7 +361,7 @@ function PlanRowView({ row: r, first, plan, masked, editing, draft, saving, onDr
     : undefined
 
   const pct = r.planned > 0 ? Math.min(100, (r.actual / r.planned) * 100) : 0
-  const showMarker = cycle.phase === 'live' && r.safeMark !== null && r.safeMark < 1 && !isSavings
+  const showMarker = cycle.phase === 'live' && !review && r.planned > 0 && !isSavings
 
   function commit() {
     onSave(r, Number(draft) || 0)
@@ -332,8 +382,15 @@ function PlanRowView({ row: r, first, plan, masked, editing, draft, saving, onDr
           <RowIcon row={r} size={16} />
         </span>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {rowName(r)}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {rowName(r)}
+            </span>
+            {badge && (
+              <span className={`pill ${badge.tone}`} style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0, fontWeight: 700 }}>
+                {badge.text}
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 12, color: subColor, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {sub}
@@ -385,10 +442,10 @@ function PlanRowView({ row: r, first, plan, masked, editing, draft, saving, onDr
         <div style={{ flex: '2 1 300px', display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
           <div style={{ position: 'relative', flex: 1, height: 8, borderRadius: 4, background: 'var(--surface-3)', minWidth: 80 }}>
             {showMarker && (
-              // Beyond the safe line: budget the rest of the month usually needs.
+              // Past the checkpoint: the slow-down zone.
               <div style={{
                 position: 'absolute', top: 0, bottom: 0, right: 0, borderRadius: '0 4px 4px 0',
-                left: `${(r.safeMark ?? 0) * 100}%`,
+                left: `${CHECKPOINT * 100}%`,
                 background: 'repeating-linear-gradient(135deg, transparent 0 3px, color-mix(in oklch, var(--text-3) 22%, transparent) 3px 5px)',
               }} />
             )}
@@ -398,10 +455,10 @@ function PlanRowView({ row: r, first, plan, masked, editing, draft, saving, onDr
             }} />
             {showMarker && (
               <div
-                title={`Safe line · stay under ${money(r.planned * (r.safeMark ?? 0), masked)} and the usual ${money(r.rest, masked)} for the rest of the month still fits`}
+                title={`Checkpoint · ${money(r.planned * CHECKPOINT, masked)}, ${Math.round(CHECKPOINT * 100)}% of the budget`}
                 style={{
                   position: 'absolute', top: -4, bottom: -4, width: 2, borderRadius: 1,
-                  background: 'var(--text-3)', left: `calc(${(r.safeMark ?? 0) * 100}% - 1px)`,
+                  background: 'var(--text-3)', left: `calc(${CHECKPOINT * 100}% - 1px)`,
                 }}
               />
             )}

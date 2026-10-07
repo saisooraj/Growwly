@@ -20,13 +20,29 @@ export function getMonthsEndingAt(endMonth: string, count: number): string[] {
   return out
 }
 
-// Month-end spend for the cycle in progress: what's been spent so far, plus what
-// the last three cycles usually spent from this day of the cycle onwards. Costs
-// that land early (rent, a monthly grocery run) are already in "spent" and don't
-// get stretched across the month the way a flat daily rate would stretch them.
-// Recurring bills already posted this cycle aren't expected again. Without any
-// history it falls back to this cycle's day-rate, leaving recurring bills out.
-// Returns null unless `month` is the live cycle.
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = sorted.length >> 1
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+}
+
+// Spend still to come this cycle in one category, judged from earlier cycles:
+// what they spent from today's day of the cycle onwards. Medians, so one unusual
+// cycle (a deposit) doesn't skew it. Capped at the usual cycle total less what's
+// already spent, so a bill paid earlier than usual isn't expected a second time.
+// `priorTotals` / `priorRests` hold one value per earlier cycle that had activity.
+export function expectedRest(priorTotals: number[], priorRests: number[], actual: number): number {
+  if (priorTotals.length === 0) return 0
+  const usualRest = median(priorRests.map(v => Math.max(0, v)))
+  const usualTotal = median(priorTotals.map(v => Math.max(0, v)))
+  return Math.min(usualRest, Math.max(0, usualTotal - actual))
+}
+
+// Month-end spend for the cycle in progress: what's been spent so far plus, per
+// category, what usually still comes (see expectedRest). Costs that land early
+// (rent, a monthly grocery run) don't get stretched across the month the way a
+// flat daily rate would stretch them. Without any history it falls back to this
+// cycle's day-rate, leaving recurring bills out. Null unless `month` is live.
 export function projectCycleSpend(
   transactions: Transaction[],
   month: string,
@@ -44,37 +60,40 @@ export function projectCycleSpend(
 
   let spent = 0
   let recurringNow = 0
-  let restRecurring = 0
-  const rest = [0, 0, 0]
+  const now: Record<string, number> = {}
+  const prior: Record<string, number[]> = {}
+  const rest: Record<string, number[]> = {}
   const active = [false, false, false]
 
   for (const t of transactions) {
     if (t.type !== 'expense' && t.type !== 'refund') continue
     if (t.date < ranges[0].start || t.date > cur.end) continue
     const signed = t.type === 'refund' ? -t.amount : t.amount
-    const recurring = t.isRecurring && t.type === 'expense'
     if (t.date >= cur.start) {
       spent += signed
-      if (recurring) recurringNow += t.amount
+      now[t.category] = (now[t.category] ?? 0) + signed
+      if (t.isRecurring && t.type === 'expense') recurringNow += t.amount
       continue
     }
     for (let i = 2; i >= 0; i--) {
       if (t.date < ranges[i].start || t.date > ranges[i].end) continue
       active[i] = true
-      if (t.date >= restFrom[i]) {
-        rest[i] += signed
-        if (recurring) restRecurring += t.amount
-      }
+      ;(prior[t.category] ?? (prior[t.category] = [0, 0, 0]))[i] += signed
+      if (t.date >= restFrom[i]) (rest[t.category] ?? (rest[t.category] = [0, 0, 0]))[i] += signed
       break
     }
   }
 
-  const activePrior = active.filter(Boolean).length
-  if (activePrior === 0) {
+  const priorIdx = [0, 1, 2].filter(i => active[i])
+  if (priorIdx.length === 0) {
     return spent + Math.max(0, spent - recurringNow) / elapsed * (days - elapsed)
   }
-  const usual = rest.reduce((s, v) => s + Math.max(0, v), 0) / activePrior
-  return spent + Math.max(0, usual - Math.min(restRecurring / activePrior, recurringNow))
+  let toCome = 0
+  for (const cat of Object.keys(prior)) {
+    const r = rest[cat] ?? [0, 0, 0]
+    toCome += expectedRest(priorIdx.map(i => prior[cat][i]), priorIdx.map(i => r[i]), Math.max(0, now[cat] ?? 0))
+  }
+  return spent + toCome
 }
 
 // Single-pass category × month aggregation for expense/refund transactions.
