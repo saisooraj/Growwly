@@ -3,17 +3,19 @@ import {
   isAfter, isBefore, addDays,
 } from 'date-fns'
 import type {
-  Transaction, UserSettings, EmergencyFund, SavingsGoal,
+  Transaction, UserSettings, EmergencyFund, SavingsGoal, Budget,
   Project, Borrowing, UpcomingExpense, UpcomingPayment,
   FinancialPulse, PulseHealthScore, PulseCashPosition,
   PulseUpcoming, PulseAllocation, PulseSpendCategory,
   PulseGoal, PulseBorrowingAlert, MonthlySummary,
 } from '@/types'
+import { buildBudgetPlan, type BudgetPlan } from './budgetPlan'
 import { buildMonthlySummary, computeCarryForward, getTransactionsForMonth, getLast6Months, EMERGENCY_FUND_VEHICLE, formatCurrencyFull } from './utils'
 
 export interface PulseSnapshot {
   transactions: Transaction[]
   settings: UserSettings | null
+  budgets: Budget[]
   emergencyFund: EmergencyFund | null
   savingsGoals: SavingsGoal[]
   projects: Project[]
@@ -24,84 +26,139 @@ export interface PulseSnapshot {
 }
 
 // ── Health Score ─────────────────────────────────────────────────────────────
+// Each part asks "are you keeping the plan you set?" — Spending, Emergency fund and
+// Savings read the Planning page for the same cycle, so a plan that shows as met
+// there scores full here. A part with nothing to keep (no goals, nothing owed)
+// scores full; without a plan, Spending and Savings fall back to income ratios.
+
+function pct(n: number): string {
+  return `${Math.round(n * 100)}%`
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
 
 function computeHealthScore(
   snapshot: PulseSnapshot,
+  plan: BudgetPlan,
   curSummary: MonthlySummary,
   now: Date,
 ): PulseHealthScore {
   const { settings, emergencyFund, projects, savingsGoals, borrowings } = snapshot
-  const dayOfMonth = now.getDate()
-  const isEarlyMonth = dayOfMonth <= 7
+  const { cycle, totals } = plan
+  const isEarlyCycle = cycle.phase === 'future' || (cycle.phase === 'live' && cycle.elapsed <= 7)
   const { totalIncome: monthIncome, totalExpenses: monthExpenses } = curSummary
+  const incomeRef = Math.max(monthIncome, settings?.monthlyIncomeTarget ?? 0)
+  const planRows = plan.groups.flatMap(g => g.rows).filter(r => r.planned > 0)
 
-  const breakdown = {
+  const breakdown: PulseHealthScore['breakdown'] = {
     spendingControl: 0,
     efProgress: 0,
     savingsMomentum: 0,
     goalsProgress: 0,
     borrowingHealth: 0,
   }
+  const notes: PulseHealthScore['notes'] = {
+    spendingControl: '',
+    efProgress: '',
+    savingsMomentum: '',
+    goalsProgress: '',
+    borrowingHealth: '',
+  }
 
-  // 1. Spending control (30 pts) — expenses vs income reference
-  const incomeRef = Math.max(monthIncome, settings?.monthlyIncomeTarget ?? 0)
-  if (incomeRef > 0) {
+  // 1. Spending (30) — every needs/wants budget still within its plan counts equally
+  const budgets = planRows.filter(r => r.bucket !== 'savings')
+  if (budgets.length > 0) {
+    const over = budgets.filter(r => r.status === 'over').length
+    breakdown.spendingControl = Math.round(30 * (budgets.length - over) / budgets.length)
+    notes.spendingControl = over === 0
+      ? `All ${plural(budgets.length, 'budget')} within plan`
+      : `${over} of ${plural(budgets.length, 'budget')} over plan`
+  } else if (incomeRef > 0) {
     const ratio = monthExpenses / incomeRef
-    if (ratio <= 0.55)      breakdown.spendingControl = 30
-    else if (ratio <= 0.70) breakdown.spendingControl = 25
-    else if (ratio <= 0.85) breakdown.spendingControl = 18
-    else if (ratio <= 1.0)  breakdown.spendingControl = 10
-    else                    breakdown.spendingControl = 0
+    breakdown.spendingControl =
+      ratio <= 0.55 ? 30 : ratio <= 0.70 ? 25 : ratio <= 0.85 ? 18 : ratio <= 1.0 ? 10 : 0
+    notes.spendingControl = `No budgets set · ${pct(ratio)} of income spent`
   } else {
-    breakdown.spendingControl = isEarlyMonth ? 20 : 10
+    breakdown.spendingControl = isEarlyCycle ? 20 : 10
+    notes.spendingControl = 'No budgets or income yet'
   }
 
-  // 2. Emergency fund (20 pts)
-  if (emergencyFund && emergencyFund.targetAmount > 0) {
-    breakdown.efProgress = Math.round(
-      Math.min(emergencyFund.currentBalance / emergencyFund.targetAmount, 1) * 20
-    )
-  }
-
-  // 3. Savings momentum (20 pts)
-  const incomeRef2 = Math.max(monthIncome, settings?.monthlyIncomeTarget ?? 0)
-  if (incomeRef2 > 0 && !isEarlyMonth) {
-    const rate = (monthIncome - monthExpenses) / incomeRef2
-    if (rate >= 0.25)      breakdown.savingsMomentum = 20
-    else if (rate >= 0.15) breakdown.savingsMomentum = 16
-    else if (rate >= 0.05) breakdown.savingsMomentum = 10
-    else if (rate >= 0)    breakdown.savingsMomentum = 5
-    else                   breakdown.savingsMomentum = 0
+  // 2. Emergency fund (20) — this cycle's plan for it; a full fund needs nothing more
+  const ef = emergencyFund && emergencyFund.targetAmount > 0 ? emergencyFund : null
+  const efRow = planRows.find(r => r.name === EMERGENCY_FUND_VEHICLE)
+  if (ef && ef.currentBalance >= ef.targetAmount) {
+    breakdown.efProgress = 20
+    notes.efProgress = 'Fully funded'
+  } else if (efRow) {
+    const ratio = Math.min(efRow.actual / efRow.planned, 1)
+    breakdown.efProgress = Math.round(20 * ratio)
+    notes.efProgress = ratio >= 1 ? 'This month’s plan met' : `${pct(ratio)} of this month’s plan added`
+  } else if (ef) {
+    const ratio = ef.currentBalance / ef.targetAmount
+    breakdown.efProgress = Math.round(20 * ratio)
+    notes.efProgress = `No monthly plan · ${pct(ratio)} of the goal`
   } else {
-    breakdown.savingsMomentum = isEarlyMonth ? 12 : 8
+    notes.efProgress = 'Not set up'
   }
 
-  // 4. Goals progress (15 pts) — do you have goals with any progress?
-  const activeProjects = projects.filter(p => p.status === 'active')
-  const hasGoals =
-    savingsGoals.length > 0 ||
-    activeProjects.length > 0 ||
-    (emergencyFund && emergencyFund.targetAmount > 0)
-
-  if (!hasGoals) {
-    breakdown.goalsProgress = 7  // neutral — no goals set
+  // 3. Savings (20) — the Saved tile on the Planning page: all savings plans together
+  if (totals.savePlanned > 0) {
+    const ratio = Math.min(totals.saved / totals.savePlanned, 1)
+    breakdown.savingsMomentum = Math.round(20 * ratio)
+    notes.savingsMomentum = ratio >= 1 ? 'Savings plan met' : `${pct(ratio)} of the savings plan saved`
+  } else if (incomeRef > 0 && !isEarlyCycle) {
+    const rate = (monthIncome - monthExpenses) / incomeRef
+    breakdown.savingsMomentum =
+      rate >= 0.25 ? 20 : rate >= 0.15 ? 16 : rate >= 0.05 ? 10 : rate >= 0 ? 5 : 0
+    notes.savingsMomentum = `No savings plan · ${pct(Math.max(rate, 0))} of income left over`
   } else {
-    const all = [
-      ...(emergencyFund && emergencyFund.targetAmount > 0
-        ? [emergencyFund.currentBalance > 0] : []),
-      ...savingsGoals.map(g => g.currentAmount > 0),
-      ...activeProjects.map(p => p.paid > 0),
-    ]
-    const ratio = all.length > 0 ? all.filter(Boolean).length / all.length : 0
-    breakdown.goalsProgress = Math.round(ratio * 15)
+    breakdown.savingsMomentum = isEarlyCycle ? 12 : 8
+    notes.savingsMomentum = 'No savings plan yet'
   }
 
-  // 5. Borrowing health (15 pts)
-  const pending = borrowings.filter(b => b.status !== 'repaid')
-  const overdue = pending.filter(b => b.dueDate && isBefore(parseISO(b.dueDate), now))
-  if (overdue.length > 0)   breakdown.borrowingHealth = 0
-  else if (pending.length > 0) breakdown.borrowingHealth = 10
-  else                      breakdown.borrowingHealth = 15
+  // 4. Goals (15) — share on track. A savings goal with a date is on track while it
+  // keeps up with the time passed (10% slack); without a date, once it has started.
+  // A project is on track while it stays within its budget.
+  const goalChecks = [
+    ...savingsGoals.filter(g => g.targetAmount > 0).map(g => {
+      if (g.currentAmount >= g.targetAmount) return true
+      if (g.targetDate) {
+        const span = differenceInCalendarDays(parseISO(g.targetDate), parseISO(g.createdAt))
+        if (span > 0) {
+          const pace = Math.min(Math.max(differenceInCalendarDays(now, parseISO(g.createdAt)) / span, 0), 1)
+          return g.currentAmount >= g.targetAmount * pace * 0.9
+        }
+      }
+      return g.currentAmount > 0
+    }),
+    ...projects.filter(p => p.status === 'active' && p.totalBudget > 0).map(p => p.paid <= p.totalBudget),
+  ]
+  if (goalChecks.length === 0) {
+    breakdown.goalsProgress = 15
+    notes.goalsProgress = 'No goals to track'
+  } else {
+    const onTrack = goalChecks.filter(Boolean).length
+    breakdown.goalsProgress = Math.round(15 * onTrack / goalChecks.length)
+    notes.goalsProgress = onTrack === goalChecks.length
+      ? `All ${plural(goalChecks.length, 'goal')} on track`
+      : `${goalChecks.length - onTrack} of ${plural(goalChecks.length, 'goal')} behind`
+  }
+
+  // 5. Debt (15) — only money you owe; money you lent is owed to you
+  const owed = borrowings.filter(b => b.type === 'borrowed' && b.status !== 'repaid' && b.amount - b.repaidAmount > 0)
+  const overdue = owed.filter(b => b.dueDate && isBefore(parseISO(b.dueDate), now))
+  if (overdue.length > 0) {
+    breakdown.borrowingHealth = 0
+    notes.borrowingHealth = `${plural(overdue.length, 'repayment')} overdue`
+  } else if (owed.length > 0) {
+    breakdown.borrowingHealth = 12
+    notes.borrowingHealth = `${plural(owed.length, 'repayment')} pending, none overdue`
+  } else {
+    breakdown.borrowingHealth = 15
+    notes.borrowingHealth = 'Nothing owed'
+  }
 
   const score = Math.min(
     breakdown.spendingControl + breakdown.efProgress + breakdown.savingsMomentum +
@@ -113,7 +170,7 @@ function computeHealthScore(
     score >= 65 ? 'good' :
     score >= 45 ? 'caution' : 'critical'
 
-  return { score, label, breakdown }
+  return { score, label, breakdown, notes }
 }
 
 // ── Allocations ──────────────────────────────────────────────────────────────
@@ -374,7 +431,8 @@ export function computePulse(
     dailyBudget,
   }
 
-  const health = computeHealthScore(snapshot, curSummary, now)
+  const plan   = buildBudgetPlan(transactions, snapshot.budgets, snapshot.settings, month)
+  const health = computeHealthScore(snapshot, plan, curSummary, now)
 
   // ── Upcoming items list ────────────────────────────────────────────────────
   const upcoming: PulseUpcoming[] = []

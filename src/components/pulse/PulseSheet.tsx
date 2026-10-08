@@ -74,7 +74,7 @@ function HealthSection({ health }: { health: FinancialPulse['health'] }) {
             {health.label.charAt(0).toUpperCase() + health.label.slice(1)}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>
-            Financial health this month
+            Scored against this month’s plan
           </div>
           {/* Overall bar */}
           <div style={{ marginTop: 8, width: 200 }}>
@@ -84,18 +84,27 @@ function HealthSection({ health }: { health: FinancialPulse['health'] }) {
       </div>
 
       {/* Breakdown */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {dims.map(d => {
           const val = health.breakdown[d.key]
+          // Each part is coloured by its own result: full is green, half or more amber
+          const bar = val >= d.max ? 'var(--good)' : val >= d.max / 2 ? 'var(--warn)' : 'var(--bad)'
           return (
-            <div key={d.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 12, color: 'var(--text-2)', width: 80, flexShrink: 0 }}>{d.label}</span>
-              <div style={{ flex: 1 }}>
-                <MiniBar pct={val} color={c.bar} max={d.max} />
+            <div key={d.key}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 12, color: 'var(--text-2)', width: 80, flexShrink: 0 }}>{d.label}</span>
+                <div style={{ flex: 1 }}>
+                  <MiniBar pct={val} color={bar} max={d.max} />
+                </div>
+                <span style={{ fontSize: 11.5, color: 'var(--text-3)', width: 36, textAlign: 'right', flexShrink: 0 }}>
+                  {val}/{d.max}
+                </span>
               </div>
-              <span style={{ fontSize: 11.5, color: 'var(--text-3)', width: 36, textAlign: 'right', flexShrink: 0 }}>
-                {val}/{d.max}
-              </span>
+              {health.notes?.[d.key] && (
+                <div style={{ fontSize: 11, color: 'var(--text-4)', marginLeft: 90, marginTop: 2 }}>
+                  {health.notes[d.key]}
+                </div>
+              )}
             </div>
           )
         })}

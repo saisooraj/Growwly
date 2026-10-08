@@ -23,36 +23,37 @@ import DashboardGoals    from '@/components/dashboard/DashboardGoals'
 import EmergencyFundCard    from '@/components/dashboard/EmergencyFundCard'
 import PulseCard            from '@/components/dashboard/PulseCard'
 import SummaryCards         from '@/components/dashboard/SummaryCards'
-import QuickActions         from '@/components/dashboard/QuickActions'
 import MonthlyRecap         from '@/components/dashboard/MonthlyRecap'
-import UpcomingCard         from '@/components/dashboard/UpcomingCard'
+import UpcomingCard, { hasPendingUpcoming } from '@/components/dashboard/UpcomingCard'
 import RecurringPromptModal from '@/components/dashboard/RecurringPromptModal'
-import TransactionList      from '@/components/transactions/TransactionList'
 
-import { CheckCircle2 } from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { formatCurrencyFull } from '@/lib/utils'
 import CardErrorBoundary from '@/components/ui/CardErrorBoundary'
 import { DEFAULT_CARD_ORDER } from '@/lib/dashboardConstants'
 
-function BorrowedStat() {
-  const { borrowings } = useAppStore()
-  const pending = borrowings
-    .filter(b => b.type === 'borrowed' && b.status !== 'repaid')
-    .reduce((s, b) => s + (b.amount - b.repaidAmount), 0)
-
+function BorrowedStat({ pending }: { pending: number }) {
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'relative', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <span className="h-eyebrow">Borrowed by me</span>
-        <CheckCircle2 size={14} style={{ color: pending > 0 ? 'var(--warn)' : 'var(--good)' }} />
+        <AlertCircle size={14} style={{ color: 'var(--warn)' }} />
       </div>
       <div className="display-num" style={{ fontSize: 30, lineHeight: 1, color: 'var(--text)' }}>
         {formatCurrencyFull(pending)}
       </div>
-      <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
-        {pending > 0 ? 'Pending repayment' : 'All clear'}
-      </div>
+      <div style={{ fontSize: 12, color: 'var(--text-3)' }}>Pending repayment</div>
+    </div>
+  )
+}
+
+// Upcoming and Borrowed side by side; each shows only when it has something
+function UpcomingBorrowedRow({ showUpcoming, pendingBorrowed }: { showUpcoming: boolean; pendingBorrowed: number }) {
+  return (
+    <div className="dash-bottom">
+      {showUpcoming && <CardErrorBoundary label="Upcoming"><UpcomingCard /></CardErrorBoundary>}
+      {pendingBorrowed > 0 && <CardErrorBoundary label="Borrowed"><BorrowedStat pending={pendingBorrowed} /></CardErrorBoundary>}
     </div>
   )
 }
@@ -79,6 +80,13 @@ export default function RootPage() {
 function DashboardPage() {
   const loading  = useAppStore((s) => s.loading)
   const settings = useAppStore((s) => s.settings)
+  const borrowings       = useAppStore((s) => s.borrowings)
+  const upcomingExpenses = useAppStore((s) => s.upcomingExpenses)
+  const upcomingPayments = useAppStore((s) => s.upcomingPayments)
+  const pendingBorrowed = borrowings
+    .filter(b => b.type === 'borrowed' && b.status !== 'repaid')
+    .reduce((s, b) => s + Math.max(0, b.amount - b.repaidAmount), 0)
+  const showUpcoming = hasPendingUpcoming(upcomingExpenses, upcomingPayments)
   // A saved order predates newer blocks (e.g. 'goals', 'savings') — append any
   // default block missing from it so new dashboard sections aren't silently hidden.
   const savedOrder = settings?.dashboardCardOrder
@@ -89,9 +97,13 @@ function DashboardPage() {
   const BLOCKS: Record<string, React.ReactNode> = {
     hero: (
       <div className="dash-hero">
-        <CardErrorBoundary label="Safe to Spend"><SafeToSpendCard /></CardErrorBoundary>
-        <CardErrorBoundary label="This Month"><ThisMonthCard /></CardErrorBoundary>
-        <CardErrorBoundary label="Money Streak"><MoneyStreakCard /></CardErrorBoundary>
+        <CardErrorBoundary label="Spent"><SafeToSpendCard /></CardErrorBoundary>
+        <div className="dash-hero-side">
+          <CardErrorBoundary label="This Month"><ThisMonthCard /></CardErrorBoundary>
+          <CardErrorBoundary label="Money Streak"><MoneyStreakCard /></CardErrorBoundary>
+          <div className="span-all"><CardErrorBoundary label="Emergency Fund"><EmergencyFundCard /></CardErrorBoundary></div>
+          <div className="span-all"><CardErrorBoundary label="Summary"><SummaryCards /></CardErrorBoundary></div>
+        </div>
       </div>
     ),
     insights: (
@@ -114,28 +126,11 @@ function DashboardPage() {
       </div>
     ),
     goals: <CardErrorBoundary label="Goals"><DashboardGoals /></CardErrorBoundary>,
-    transactions: (
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div className="h-eyebrow">Recent activity</div>
-            <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2, color: 'var(--text)', letterSpacing: '-0.02em' }}>Transactions</div>
-          </div>
-          <a href="/transactions" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>See all →</a>
-        </div>
-        <TransactionList filterMonth limit={6} />
-      </div>
-    ),
     pulse:   <CardErrorBoundary label="Pulse"><PulseCard /></CardErrorBoundary>,
-    summary: <CardErrorBoundary label="Summary"><SummaryCards /></CardErrorBoundary>,
-    'health-ef': <CardErrorBoundary label="Emergency Fund"><EmergencyFundCard /></CardErrorBoundary>,
-    weekly: (
-      <div className="dash-bottom">
-        <CardErrorBoundary label="Quick Actions"><QuickActions /></CardErrorBoundary>
-        <CardErrorBoundary label="Borrowed"><BorrowedStat /></CardErrorBoundary>
-      </div>
-    ),
-    upcoming: <CardErrorBoundary label="Upcoming"><UpcomingCard /></CardErrorBoundary>,
+    // The whole row is left out when neither card has anything to show
+    weekly: (showUpcoming || pendingBorrowed > 0)
+      ? <UpcomingBorrowedRow showUpcoming={showUpcoming} pendingBorrowed={pendingBorrowed} />
+      : null,
   }
 
   return (

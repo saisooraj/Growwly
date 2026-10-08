@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Pencil, Trash2, Home, Car, Landmark, CreditCard, Package, Wallet, Eye, EyeOff, ExternalLink, Plus, TrendingUp, BarChart2, Coins } from 'lucide-react'
 import { IconLifebuoy } from '@tabler/icons-react'
 import { useAppStore } from '@/store/appStore'
@@ -22,6 +22,7 @@ import LiabilityModal from './LiabilityModal'
 import MyAssetsSection from './MyAssetsSection'
 import MutualFundProjection from './MutualFundProjection'
 import MaskToggle from './MaskToggle'
+import EmergencyFundTransactions, { useEfTransactions } from './EmergencyFundTransactions'
 
 // ── EMI / Loan calculations ────────────────────────────────────────────────────
 
@@ -167,6 +168,18 @@ export default function NetWorthPage() {
     } catch { toast.error('Failed to save') }
     finally { setVehicleSaving(false) }
   }
+
+  // EF transactions — expanded and scrolled to when arriving from the home card (#emergency-fund)
+  const efTransactions = useEfTransactions(transactions)
+  const [efTxOpen, setEfTxOpen] = useState(false)
+  const efCardRef = useRef<HTMLDivElement>(null)
+  const efScrolled = useRef(false)
+  useEffect(() => {
+    if (efScrolled.current || !emergencyFund || window.location.hash !== '#emergency-fund') return
+    efScrolled.current = true
+    setEfTxOpen(true)
+    requestAnimationFrame(() => efCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }, [emergencyFund])
 
   // EF inline edit state
   const [efEditing, setEfEditing] = useState(false)
@@ -361,7 +374,7 @@ export default function NetWorthPage() {
       <MutualFundProjection assets={assets} masked={isMasked('projection')} onToggleMask={() => toggleCard('projection')} />
 
       {/* Emergency Fund */}
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div id="emergency-fund" ref={efCardRef} className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14, scrollMarginTop: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--warn-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -430,6 +443,12 @@ export default function NetWorthPage() {
                 transition: 'width .4s cubic-bezier(.4,0,.2,1)',
               }} />
             </div>
+            <EmergencyFundTransactions
+              transactions={efTransactions}
+              open={efTxOpen}
+              onToggle={() => setEfTxOpen(v => !v)}
+              masked={isMasked('ef')}
+            />
           </>
         )}
 

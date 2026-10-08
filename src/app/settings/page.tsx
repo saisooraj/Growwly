@@ -132,8 +132,9 @@ export default function SettingsPage() {
       // A saved order predates newer blocks — append any default block missing
       // from it so it shows up here and can be reordered (mirrors src/app/page.tsx).
       const saved = settings.dashboardCardOrder
+      // Blocks since removed from the home screen (e.g. 'upcoming') are dropped.
       setCardOrder(saved
-        ? [...saved, ...DEFAULT_CARD_ORDER.filter(id => !saved.includes(id))]
+        ? [...saved.filter(id => DEFAULT_CARD_ORDER.includes(id)), ...DEFAULT_CARD_ORDER.filter(id => !saved.includes(id))]
         : DEFAULT_CARD_ORDER)
     }
   }, [settings])
@@ -1054,17 +1055,13 @@ export default function SettingsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {cardOrder.map((id, idx) => {
               const labels: Record<string, string> = {
-                hero: 'Hero — Safe to Spend, This Month, Streak',
+                hero: 'Hero — Spent, This Month, Streak, Emergency Fund, KPIs',
                 insights: 'Smart Insights',
                 charts: 'Charts — Category Pie + Monthly Bar',
                 savings: 'Savings Trend + Breakdown',
                 goals: 'Savings Goals',
-                transactions: 'Recent Transactions',
                 pulse: 'Monthly Pulse & Financial Health',
-                summary: 'KPI Summary Cards',
-                'health-ef': 'Emergency Fund',
-                weekly: 'Quick Actions + Borrowed',
-                upcoming: 'Upcoming Bills',
+                weekly: 'Upcoming + Borrowed',
               }
               return (
                 <div key={id} style={{

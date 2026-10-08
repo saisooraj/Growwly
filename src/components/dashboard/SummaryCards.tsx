@@ -37,17 +37,18 @@ function Stat({ label, dateRange, value, sub, hint, tone = 'neutral', icon, mask
     'var(--text)'
 
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'relative', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <div>
-          <span className="h-eyebrow">{label}</span>
+    // Compact tile — sits four across (or 2×2) beside the Spent hero
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative', overflow: 'hidden', padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}>
+        <div style={{ minWidth: 0 }}>
+          <span className="h-eyebrow" style={{ whiteSpace: 'normal' }}>{label}</span>
           {dateRange && (
             <div style={{ fontSize: 10, color: 'var(--text-4)', marginTop: 2, fontWeight: 400, letterSpacing: 0 }}>
               {dateRange}
             </div>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           {maskable && (
             <button
               onClick={onToggleMask}
@@ -61,14 +62,14 @@ function Stat({ label, dateRange, value, sub, hint, tone = 'neutral', icon, mask
           <span style={{ color: accentColor }}>{icon}</span>
         </div>
       </div>
-      <div className="display-num" style={{ fontSize: 'clamp(18px, 5.5vw, 30px)', lineHeight: 1, color: valueColor }}>
+      <div className="display-num" style={{ fontSize: 'clamp(17px, 4.6vw, 21px)', lineHeight: 1.1, color: valueColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         {masked ? '₹ ••••••' : value}
       </div>
-      <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
+      <div style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.35 }}>
         {masked && maskSub ? '•••••••' : sub}
       </div>
       {hint && !masked && (
-        <div style={{ fontSize: 11, color: 'var(--info-ink)', marginTop: -8, fontStyle: 'italic' }}>
+        <div style={{ fontSize: 11, color: 'var(--info-ink)', marginTop: -4, fontStyle: 'italic' }}>
           {hint}
         </div>
       )}
@@ -117,7 +118,7 @@ export default function SummaryCards() {
   const isDeficit     = netCashflow < 0
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4" style={{ gap: 'var(--row-gap)' }}>
+    <div className="hero-kpis">
       <Stat
         label="Income"
         dateRange={cycleLabel ?? undefined}

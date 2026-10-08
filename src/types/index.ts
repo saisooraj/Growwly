@@ -150,13 +150,6 @@ export interface UserSettings {
   seenAnnouncements?: string[]                     // announcement ids already shown — "id:platform" when the announcement is oncePerPlatform, else just "id" (cross-device)
   featureUsage?: Record<string, { useCount: number; lastUsedAt: string }>  // per-feature usage counters, used to trigger nudges for unused features
   dashboardCardOrder?: string[]                   // ordered list of dashboard block IDs
-  dailyLivingCost?: number                        // legacy — superseded by dailyLivingSchedules
-  dailyLivingItems?: { label: string; amount: number }[]  // legacy
-  dailyLivingSchedules?: {                        // per-day-of-week schedules
-    days: number[]                               // 0=Sun 1=Mon … 6=Sat
-    items: { label: string; amount: number }[]
-    total: number
-  }[]
   createdAt: string
   updatedAt: string
 }
@@ -304,6 +297,7 @@ export interface PulseHealthScore {
     goalsProgress: number     // max 15
     borrowingHealth: number   // max 15
   }
+  notes: Record<keyof PulseHealthScore['breakdown'], string>  // one-line reason per part
 }
 
 export interface PulseCashPosition {

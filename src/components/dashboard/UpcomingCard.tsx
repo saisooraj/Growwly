@@ -6,6 +6,17 @@ import { format, parseISO, addMonths } from 'date-fns'
 import { CalendarClock, ArrowRight, CheckCircle2 } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { formatCurrencyFull, CATEGORY_COLORS } from '@/lib/utils'
+import type { UpcomingExpense, UpcomingPayment } from '@/types'
+
+// True when something due this or next month still has an amount left to pay or receive
+export function hasPendingUpcoming(items: UpcomingExpense[], payments: UpcomingPayment[], now = new Date()): boolean {
+  const months = [format(now, 'yyyy-MM'), format(addMonths(now, 1), 'yyyy-MM')]
+  return items.some(i => {
+    if (!months.includes(i.dueDate.slice(0, 7))) return false
+    const paid = payments.filter(p => p.upcomingId === i.id).reduce((s, p) => s + p.amount, 0)
+    return i.amount - paid > 0
+  })
+}
 
 export default function UpcomingCard() {
   const { upcomingExpenses, upcomingPayments } = useAppStore()

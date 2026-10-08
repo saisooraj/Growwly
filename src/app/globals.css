@@ -503,10 +503,32 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 }
 
 /* Dashboard responsive grids */
+/* Hero: Spent on the left; This Month + Streak, Emergency fund and the four KPI
+   tiles stacked on the right. Below 1280px the two halves stack. */
 .dash-hero {
   display: grid;
-  grid-template-columns: minmax(360px, 1.6fr) minmax(220px, 1fr) minmax(200px, 1fr);
+  grid-template-columns: minmax(360px, 1.25fr) minmax(0, 2fr);
   gap: var(--row-gap);
+}
+.dash-hero-side {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--row-gap);
+  align-content: start;
+  container-type: inline-size;
+}
+.dash-hero-side > .span-all { grid-column: 1 / -1; }
+/* KPI tiles: 2×2 when the side is narrow, one row of four when there's room */
+.hero-kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--row-gap);
+}
+@container (min-width: 600px) {
+  .hero-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 1279px) {
+  .dash-hero { grid-template-columns: 1fr; }
 }
 /* 3-equal-col row: pie | bar chart | smart insight */
 .dash-mid {
@@ -531,7 +553,6 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   gap: var(--row-gap);
 }
 @media (max-width: 1024px) {
-  .dash-hero    { grid-template-columns: 1fr; }
   .dash-mid     { grid-template-columns: 1fr; }
   .dash-charts  { grid-template-columns: 1fr; }
   .dash-bottom  { grid-template-columns: 1fr 1fr; }
@@ -539,6 +560,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 }
 @media (max-width: 640px) {
   .dash-bottom  { grid-template-columns: 1fr; }
+  .dash-hero-side { grid-template-columns: 1fr; }
 }
 
 /* ══════════════════════════════════════════

@@ -6,6 +6,7 @@ import type { FinancialPulse } from '@/types'
 export function usePulse(): FinancialPulse {
   const transactions      = useAppStore(s => s.transactions)
   const settings          = useAppStore(s => s.settings)
+  const budgets           = useAppStore(s => s.budgets)
   const emergencyFund     = useAppStore(s => s.emergencyFund)
   const savingsGoals      = useAppStore(s => s.savingsGoals)
   const projects          = useAppStore(s => s.projects)
@@ -15,7 +16,7 @@ export function usePulse(): FinancialPulse {
   const selectedMonth     = useAppStore(s => s.selectedMonth)
 
   return useMemo(
-    () => computePulse({ transactions, settings, emergencyFund, savingsGoals, projects, borrowings, upcomingExpenses, upcomingPayments, selectedMonth }),
-    [transactions, settings, emergencyFund, savingsGoals, projects, borrowings, upcomingExpenses, upcomingPayments, selectedMonth]
+    () => computePulse({ transactions, settings, budgets, emergencyFund, savingsGoals, projects, borrowings, upcomingExpenses, upcomingPayments, selectedMonth }),
+    [transactions, settings, budgets, emergencyFund, savingsGoals, projects, borrowings, upcomingExpenses, upcomingPayments, selectedMonth]
   )
 }
