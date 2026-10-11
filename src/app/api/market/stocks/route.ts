@@ -7,7 +7,7 @@ const HEADERS = {
 
 export async function GET(req: NextRequest) {
   const symbols = req.nextUrl.searchParams.get('symbols') ?? 'HDFCBANK.NS'
-  const syms = symbols.split(',').map(s => s.trim()).filter(Boolean).slice(0, 10)
+  const syms = symbols.split(',').map(s => s.trim()).filter(Boolean).slice(0, 30)
 
   try {
     const results = await Promise.allSettled(

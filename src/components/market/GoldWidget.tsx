@@ -1,10 +1,15 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { RefreshCw, TrendingUp, TrendingDown, Minus, ChevronDown } from 'lucide-react'
 import { IconCoin } from '@tabler/icons-react'
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from 'recharts'
 import { format, parseISO } from 'date-fns'
+import { useAppStore } from '@/store/appStore'
+import { computeValue } from '@/lib/assetValuation'
+import { legacyGoldPurchases, priceForKarat, type GoldPrices } from '@/lib/gold'
+import type { Asset } from '@/types'
+import { HoldingSummary, StatGrid, rupees, signedPct } from './HoldingStats'
 
 interface GoldData {
   price24kPerGram: number
@@ -28,6 +33,8 @@ const SIGNAL_STYLES = {
 export default function GoldWidget() {
   const [data, setData] = useState<GoldData | null>(null)
   const [loading, setLoading] = useState(true)
+  const assets = useAppStore(s => s.assets)
+  const goldAssets = useMemo(() => assets.filter(a => a.kind === 'gold_grams'), [assets])
 
   async function fetchGold() {
     setLoading(true)
@@ -96,6 +103,8 @@ export default function GoldWidget() {
         </div>
       </div>
 
+      {goldAssets.length > 0 && <YourGold assets={goldAssets} data={data} />}
+
       {/* Price grid */}
       <div className="grid grid-cols-2 gap-2">
         <div className="bg-yellow-50 rounded-xl p-3">
@@ -159,6 +168,123 @@ export default function GoldWidget() {
       <p className="text-xs text-slate-400 text-center">
         IBJA national rate · Local prices may vary by ₹50–200/10g · Refreshes every 5 min
       </p>
+    </div>
+  )
+}
+
+// ── The user's own gold ──────────────────────────────────────────────────────
+
+const KARATS = [24, 22, 18] as const
+const grams = (g: number) => `${g.toLocaleString('en-IN', { maximumFractionDigits: 3 })} g`
+
+function YourGold({ assets, data }: { assets: Asset[]; data: GoldData }) {
+  const [showLots, setShowLots] = useState(false)
+
+  // The same per-karat rates Net Worth values gold at
+  const prices: GoldPrices = {
+    price22k: data.price22kPerGram,
+    price24k: parseFloat((data.price22kPerGram * 24 / 22).toFixed(2)),
+    price18k: parseFloat((data.price22kPerGram * 18 / 22).toFixed(2)),
+  }
+
+  let invested = 0, current = 0
+  for (const a of assets) {
+    const v = computeValue(a, { gold: prices })
+    current += v.currentValue
+    invested += v.investedAmount ?? 0
+  }
+
+  const lots = assets
+    .flatMap(a => legacyGoldPurchases(a).map(p => ({ ...p, assetName: a.name })))
+    .filter(p => p.grams > 0)
+    .sort((a, b) => b.date.localeCompare(a.date))
+  const totalGrams = lots.reduce((s, p) => s + p.grams, 0)
+
+  const byKarat = KARATS.map(karat => {
+    const ks = lots.filter(p => p.karat === karat)
+    const g = ks.reduce((s, p) => s + p.grams, 0)
+    const paid = ks.reduce((s, p) => s + p.grams * p.pricePerGram, 0)
+    const rate = priceForKarat(karat, prices)
+    return { karat, grams: g, paid, avgPaid: g > 0 && paid > 0 ? paid / g : null, rate, value: g * rate }
+  }).filter(k => k.grams > 0)
+
+  // Every karat moves with the 22K rate, so the last day's 22K move scales the whole holding
+  const h = data.history
+  const prev = h.length >= 2 ? h[h.length - 2].price22k : 0
+  const last = h.length >= 1 ? h[h.length - 1].price22k : 0
+  const dayChange = prev > 0 && last > 0 ? current * (1 - prev / last) : 0
+
+  return (
+    <div className="space-y-3">
+      <HoldingSummary
+        title={`Your gold · ${grams(totalGrams)}`}
+        invested={invested}
+        current={current}
+        dayChange={dayChange}
+        note={invested === 0 ? 'Add purchase prices to your gold in Net Worth to see profit and loss.' : undefined}
+      />
+
+      {/* One row per karat held */}
+      <div className="space-y-2">
+        {byKarat.map(k => {
+          const gain = k.paid > 0 ? k.value - k.paid : null
+          return (
+            <div key={k.karat} className="bg-amber-50/60 rounded-xl p-3">
+              <p className="text-xs font-semibold text-amber-800 mb-2">{k.karat}K · {grams(k.grams)}</p>
+              <StatGrid cols={2} stats={[
+                { label: 'Avg paid / g', value: k.avgPaid ? rupees(k.avgPaid) : '—' },
+                { label: 'Today / g', value: rupees(k.rate) },
+                { label: 'Value', value: rupees(k.value) },
+                {
+                  label: 'Gain',
+                  value: gain !== null ? signedPct(gain / k.paid * 100) : '—',
+                  change: gain ?? undefined,
+                },
+              ]} />
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Purchase lots */}
+      {lots.length > 0 && (
+        <div>
+          <button onClick={() => setShowLots(v => !v)}
+            className="w-full flex items-center justify-between text-xs font-medium text-slate-500 hover:text-slate-700 py-1">
+            <span>{lots.length} {lots.length === 1 ? 'purchase' : 'purchases'}</span>
+            <ChevronDown size={14} className={`transition-transform ${showLots ? 'rotate-180' : ''}`} />
+          </button>
+          {showLots && (
+            <div className="divide-y divide-slate-100">
+              {lots.map((p, i) => {
+                const now = p.grams * priceForKarat(p.karat, prices)
+                const paid = p.grams * p.pricePerGram
+                const gain = paid > 0 ? now - paid : null
+                let date = p.date
+                try { date = format(parseISO(p.date), 'd MMM yyyy') } catch {}
+                return (
+                  <div key={`${p.id}-${i}`} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-700 truncate">{grams(p.grams)} · {p.karat}K</p>
+                      <p className="text-[11px] text-slate-400 truncate">
+                        {date}{p.pricePerGram > 0 && ` · paid ${rupees(p.pricePerGram)}/g`}{assets.length > 1 && ` · ${p.assetName}`}
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-xs font-semibold text-slate-800">{rupees(now)}</p>
+                      {gain !== null && (
+                        <p className="text-[11px] font-medium" style={{ color: gain >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
+                          {signedPct(gain / paid * 100)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
