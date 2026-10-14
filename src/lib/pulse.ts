@@ -31,6 +31,17 @@ export interface PulseSnapshot {
 // there scores full here. A part with nothing to keep (no goals, nothing owed)
 // scores full; without a plan, Spending and Savings fall back to income ratios.
 
+export const HEALTH_MAX: PulseHealthScore['breakdown'] = {
+  spendingControl: 30,
+  efProgress: 20,
+  savingsMomentum: 20,
+  goalsProgress: 15,
+  borrowingHealth: 15,
+}
+
+// Total overspend, as a share of the needs/wants plan, that takes Spending's amount half to zero
+const OVERSPEND_LIMIT = 0.10
+
 function pct(n: number): string {
   return `${Math.round(n * 100)}%`
 }
@@ -67,14 +78,19 @@ function computeHealthScore(
     borrowingHealth: '',
   }
 
-  // 1. Spending (30) — every needs/wants budget still within its plan counts equally
+  // 1. Spending (30) — half for the share of needs/wants budgets within plan, half for
+  // how much was spent past them in total: overspending 10% of the whole plan loses it all
   const budgets = planRows.filter(r => r.bucket !== 'savings')
   if (budgets.length > 0) {
-    const over = budgets.filter(r => r.status === 'over').length
-    breakdown.spendingControl = Math.round(30 * (budgets.length - over) / budgets.length)
-    notes.spendingControl = over === 0
+    const overRows = budgets.filter(r => r.status === 'over')
+    const overspent = overRows.reduce((s, r) => s + (r.actual - r.planned), 0)
+    const planned = budgets.reduce((s, r) => s + r.planned, 0)
+    const countPart = 15 * (budgets.length - overRows.length) / budgets.length
+    const amountPart = 15 * Math.max(1 - overspent / planned / OVERSPEND_LIMIT, 0)
+    breakdown.spendingControl = Math.round(countPart + amountPart)
+    notes.spendingControl = overRows.length === 0
       ? `All ${plural(budgets.length, 'budget')} within plan`
-      : `${over} of ${plural(budgets.length, 'budget')} over plan`
+      : `${overRows.length} of ${plural(budgets.length, 'budget')} over plan · ${formatCurrencyFull(overspent)} over (${pct(overspent / planned)} of plan)`
   } else if (incomeRef > 0) {
     const ratio = monthExpenses / incomeRef
     breakdown.spendingControl =

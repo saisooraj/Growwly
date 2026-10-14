@@ -6,6 +6,7 @@ import { X, TrendingDown, TrendingUp, Minus, Calendar, AlertCircle, Zap, Chevron
 import { format, parseISO } from 'date-fns'
 import type { FinancialPulse } from '@/types'
 import { formatCurrency, formatCurrencyFull } from '@/lib/utils'
+import { HEALTH_MAX } from '@/lib/pulse'
 import { CategoryIcon, getCategoryDisplayName, GoalIcon } from '@/lib/categoryIcons'
 
 // ── Color maps ───────────────────────────────────────────────────────────────
@@ -50,11 +51,11 @@ function MiniBar({ pct, color = 'var(--brand)', max = 100 }: { pct: number; colo
 function HealthSection({ health }: { health: FinancialPulse['health'] }) {
   const c = HEALTH_COLOR[health.label]
   const dims = [
-    { key: 'spendingControl',  label: 'Spending',    max: 30 },
-    { key: 'efProgress',       label: 'Emrg. Fund',  max: 20 },
-    { key: 'savingsMomentum',  label: 'Savings',     max: 20 },
-    { key: 'goalsProgress',    label: 'Goals',       max: 15 },
-    { key: 'borrowingHealth',  label: 'Debt',        max: 15 },
+    { key: 'spendingControl',  label: 'Spending',    max: HEALTH_MAX.spendingControl },
+    { key: 'efProgress',       label: 'Emrg. Fund',  max: HEALTH_MAX.efProgress },
+    { key: 'savingsMomentum',  label: 'Savings',     max: HEALTH_MAX.savingsMomentum },
+    { key: 'goalsProgress',    label: 'Goals',       max: HEALTH_MAX.goalsProgress },
+    { key: 'borrowingHealth',  label: 'Debt',        max: HEALTH_MAX.borrowingHealth },
   ] as const
 
   return (
