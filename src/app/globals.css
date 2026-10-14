@@ -752,3 +752,28 @@ button, a, [role="button"] {
   .flare-seg::before { opacity: .6; }
   .flare-seg::after { opacity: 0; }
 }
+
+/* ── Daily Spend heatmap: hover reveals the day's money in (above) and out (below) ── */
+.heat-day { position: relative; overflow: hidden; }
+.heat-day__in,
+.heat-day__out {
+  position: absolute; left: 3px; right: 3px;
+  font-size: 9px; font-weight: 600; line-height: 1;
+  font-family: 'Geist Mono', monospace;
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .16s ease-out, transform .22s cubic-bezier(.2, .8, .2, 1);
+}
+.heat-day__in  { top: 16%;    transform: translateY(-6px); }
+.heat-day__out { bottom: 16%; transform: translateY(6px); }
+.heat-day:not(:disabled):focus-visible .heat-day__in,
+.heat-day:not(:disabled):focus-visible .heat-day__out { opacity: 1; transform: translateY(0); }
+@media (hover: hover) {
+  .heat-day:not(:disabled):hover .heat-day__in,
+  .heat-day:not(:disabled):hover .heat-day__out { opacity: 1; transform: translateY(0); }
+  .heat-day:not(:disabled):hover .heat-day__out { transition-delay: .03s; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .heat-day__in, .heat-day__out { transform: none; transition: opacity .12s linear; }
+}

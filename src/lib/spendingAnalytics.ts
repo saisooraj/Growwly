@@ -1,6 +1,7 @@
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns'
 import type { Transaction, UserSettings } from '@/types'
 import { getCycleRange } from './cycle'
+import { getTransferDisplay } from './utils'
 
 export interface CategoryTrendResult {
   months: string[]                              // oldest → newest
@@ -150,6 +151,19 @@ export interface DailySpendPoint {
   date: string
   amount: number
   byCategory: [string, number][]   // that day's categories, sorted desc by amount
+  flow: DayFlow
+}
+
+// Same rules as the day headers in the transaction list, so a heatmap day and its
+// list group always agree: in = income + incoming transfers (repayments received,
+// savings withdrawals); out = expenses + outgoing non-savings transfers.
+// Refunds and savings contributions sit outside both.
+export interface DayFlow {
+  moneyIn: number
+  moneyOut: number
+  lent: number       // part of moneyOut that is a loan given
+  repaid: number     // part of moneyOut that is a loan repayment paid
+  refunded: number
 }
 export interface TopTransaction { id: string; date: string; category: string; amount: number; notes: string }
 
@@ -173,6 +187,7 @@ export function buildCurrentPeriodDetail(
 ): CurrentPeriodDetail {
   const dailyTotal = new Map<string, number>()
   const dailyByCategory = new Map<string, Map<string, number>>()
+  const dailyFlow = new Map<string, DayFlow>()
   const endDate = parseISO(end)
   for (let d = parseISO(start); d <= endDate; d = addDays(d, 1)) {
     const key = format(d, 'yyyy-MM-dd')
@@ -185,8 +200,22 @@ export function buildCurrentPeriodDetail(
   const expenseTxns: TopTransaction[] = []
 
   for (const t of transactions) {
-    if (t.type !== 'expense' && t.type !== 'refund') continue
     if (t.date < start || t.date > end) continue
+    const flow = dailyFlow.get(t.date) ?? (dailyFlow.set(t.date, { moneyIn: 0, moneyOut: 0, lent: 0, repaid: 0, refunded: 0 }), dailyFlow.get(t.date)!)
+    if (t.type === 'income') flow.moneyIn += t.amount
+    else if (t.type === 'expense') flow.moneyOut += t.amount
+    else if (t.type === 'refund') flow.refunded += t.amount
+    else {
+      const { dir, isSavings } = getTransferDisplay(t)
+      if (dir === 'in') flow.moneyIn += t.amount
+      else if (!isSavings) {
+        flow.moneyOut += t.amount
+        if (t.transferKind === 'loan_given') flow.lent += t.amount
+        else if (t.transferKind === 'loan_repayment_paid') flow.repaid += t.amount
+      }
+    }
+
+    if (t.type !== 'expense' && t.type !== 'refund') continue
     const signed = t.type === 'refund' ? -t.amount : t.amount
     dailyTotal.set(t.date, (dailyTotal.get(t.date) ?? 0) + signed)
     const catMap = dailyByCategory.get(t.date) ?? (dailyByCategory.set(t.date, new Map()), dailyByCategory.get(t.date)!)
@@ -208,6 +237,7 @@ export function buildCurrentPeriodDetail(
         byCategory: Array.from(dailyByCategory.get(date) ?? [])
           .filter(([, v]) => v > 0)
           .sort((a, b) => b[1] - a[1]),
+        flow: dailyFlow.get(date) ?? { moneyIn: 0, moneyOut: 0, lent: 0, repaid: 0, refunded: 0 },
       }))
       .sort((a, b) => a.date.localeCompare(b.date)),
     topTransactions: expenseTxns.slice(0, topN),
