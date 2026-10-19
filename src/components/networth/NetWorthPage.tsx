@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { Pencil, Trash2, Home, Car, Landmark, CreditCard, Package, Wallet, Eye, EyeOff, ExternalLink, Plus, TrendingUp, BarChart2, Coins } from 'lucide-react'
+import { Pencil, Trash2, Home, Car, Landmark, CreditCard, Package, Wallet, Eye, EyeOff, ExternalLink, Plus, TrendingUp, BarChart2, Coins, Mailbox } from 'lucide-react'
 import { IconLifebuoy } from '@tabler/icons-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
@@ -56,6 +56,7 @@ function monthsRemaining(tenureMonths: number, startDate: string): number {
 const ASSET_META: Record<AssetKind, { label: string; icon: React.ElementType; color: string }> = {
   cash:         { label: 'Cash & Savings',  icon: Wallet,     color: 'var(--good)' },
   fd_rd:        { label: 'FD / RD',         icon: Landmark,   color: 'var(--info)' },
+  post_office:  { label: 'Post Office',      icon: Mailbox,    color: 'var(--info)' },
   gold_grams:   { label: 'Gold (grams)',     icon: Coins,      color: '#f59e0b' },
   mutual_fund:  { label: 'Mutual Funds',     icon: TrendingUp, color: 'var(--brand)' },
   stocks:       { label: 'Stocks',           icon: BarChart2,  color: 'var(--brand-deep)' },

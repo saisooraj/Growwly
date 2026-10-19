@@ -13,7 +13,7 @@ import {
   IconBook, IconPlane, IconBarbell, IconHome, IconShield, IconGift,
   IconBuilding, IconBuildingEstate, IconTrendingUp, IconMedal, IconCrane,
   IconUsers, IconConfetti, IconHeartHandshake, IconAlertOctagon, IconHeart,
-  IconStar, IconBriefcase, IconDeviceLaptop, IconChartBar, IconCoin,
+  IconStar, IconBriefcase, IconDeviceLaptop, IconChartBar, IconCoin, IconMailbox,
   IconPackage, IconKey, IconCamera, IconTrophy, IconPill, IconBuildingBank,
   IconCar, IconTrain, IconMotorbike, IconBike, IconShip,
   IconMeat, IconSalad, IconCoffee, IconBeer, IconGlass, IconFish, IconCake,
@@ -284,6 +284,7 @@ const SAVINGS_VEHICLE_META: Record<string, SavingsVehicleMeta> = {
   'Gold':              { Icon: IconMedal,        color: '#f59e0b' },
   'Fixed Deposit':     { Icon: IconCoin,         color: '#8b5cf6' },
   'Recurring Deposit': { Icon: IconCoin,         color: '#a855f7' },
+  'Post Office':       { Icon: IconMailbox,      color: '#dc2626' },
   'NPS':               { Icon: IconShield,       color: '#06b6d4' },
   'Other Savings':     { Icon: IconPackage,      color: '#94a3b8' },
 }

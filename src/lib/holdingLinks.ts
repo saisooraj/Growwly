@@ -7,7 +7,7 @@ import { computePpfBalance } from '@/lib/retirement'
 // on the holding (a gold lot, a PPF deposit, or a contributions entry carrying the
 // transaction id), so linking and unlinking are single-document writes.
 
-export const LINKABLE_KINDS: AssetKind[] = ['mutual_fund', 'gold_grams', 'nps', 'ppf', 'epf', 'fd_rd', 'cash', 'other']
+export const LINKABLE_KINDS: AssetKind[] = ['mutual_fund', 'gold_grams', 'nps', 'ppf', 'epf', 'fd_rd', 'post_office', 'cash', 'other']
 
 const VEHICLE_KINDS: Record<string, AssetKind[]> = {
   'gold': ['gold_grams'],
@@ -17,6 +17,7 @@ const VEHICLE_KINDS: Record<string, AssetKind[]> = {
   'sip / investments': ['mutual_fund'],
   'fixed deposit': ['fd_rd'],
   'recurring deposit': ['fd_rd'],
+  'post office': ['post_office'],
 }
 
 // 'add' puts new money into the holding; 'included' attributes money the holding's balance

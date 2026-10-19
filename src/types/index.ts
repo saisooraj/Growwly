@@ -419,6 +419,7 @@ export type AssetKind =
   | 'epf'
   | 'ppf'
   | 'nps'
+  | 'post_office'
   | 'other'
 
 export interface NpsHolding {
@@ -489,6 +490,8 @@ export interface Asset {
   ppfDeposits?: PpfDeposit[]
   // NPS — valued live from daily scheme NAVs
   npsHoldings?: NpsHolding[]
+  // Post Office — which small savings scheme (see POST_OFFICE_SCHEMES); valued manually
+  postOfficeScheme?: string
   // Savings transactions linked to this holding (see AssetContribution)
   contributions?: AssetContribution[]
   createdAt: string

@@ -248,6 +248,7 @@ export const SAVINGS_VEHICLES: string[] = [
   'Gold',
   'Fixed Deposit',
   'Recurring Deposit',
+  'Post Office',
   'NPS',
   'Other Savings',
 ]

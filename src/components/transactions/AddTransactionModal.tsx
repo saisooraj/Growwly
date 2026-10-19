@@ -456,11 +456,16 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     setHoldingId(defaultHoldingFor(savingsVehicle, assets)?.id ?? '')
   }, [open, editTx, activeTab, savingsVehicle, assets])
 
+  // A vehicle that names a holding kind (Post Office, PPF, Gold…) only offers holdings of that
+  // kind; custom vehicles and Other Savings can go to any holding. The holding already chosen or
+  // linked always stays in the list, so an existing link is never hidden.
+  const vehicleHoldingKinds = useMemo(() => vehicleKinds(savingsVehicle), [savingsVehicle])
   const linkableAssets = useMemo(() => {
-    const preferred = vehicleKinds(savingsVehicle)
-    return assets.filter(isLinkable).sort((a, b) =>
-      Number(preferred.includes(b.kind)) - Number(preferred.includes(a.kind)) || a.name.localeCompare(b.name))
-  }, [assets, savingsVehicle])
+    const linkedId = editTx ? findLinkedAsset(assets, editTx.id)?.id : undefined
+    return assets
+      .filter(a => isLinkable(a) && (!vehicleHoldingKinds.length || vehicleHoldingKinds.includes(a.kind) || a.id === holdingId || a.id === linkedId))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [assets, vehicleHoldingKinds, holdingId, editTx])
 
   // Emergency Fund keeps its own tracker, so it is never linked to a holding
   const activeHoldingId = activeTab === 'savings' && savingsVehicle !== EMERGENCY_FUND_VEHICLE ? holdingId : ''
@@ -1404,6 +1409,11 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                       </div>
 
                       {/* Holding link */}
+                      {linkableAssets.length === 0 && vehicleHoldingKinds.length > 0 && savingsVehicle !== EMERGENCY_FUND_VEHICLE && (
+                        <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
+                          No {savingsVehicle} holding yet. This counts under Unlinked savings in Net Worth; add a {savingsVehicle} holding there to link it.
+                        </p>
+                      )}
                       {linkableAssets.length > 0 && savingsVehicle !== EMERGENCY_FUND_VEHICLE && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           <label className="label">Holding</label>

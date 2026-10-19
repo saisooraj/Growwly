@@ -16,10 +16,23 @@ const KINDS: { value: AssetKind; label: string }[] = [
   { value: 'ppf',         label: 'PPF'            },
   { value: 'nps',         label: 'NPS'            },
   { value: 'fd_rd',       label: 'FD / RD'         },
+  { value: 'post_office', label: 'Post Office'     },
   { value: 'cash',        label: 'Cash & Savings'  },
   { value: 'real_estate', label: 'Real Estate'     },
   { value: 'vehicle',     label: 'Vehicle'         },
   { value: 'other',       label: 'Other'           },
+]
+
+// Post Office small savings schemes (PPF at the post office is logged as PPF)
+export const POST_OFFICE_SCHEMES = [
+  'Recurring Deposit (RD)',
+  'Time Deposit (TD)',
+  'Monthly Income Scheme (MIS)',
+  'National Savings Certificate (NSC)',
+  'Kisan Vikas Patra (KVP)',
+  'Senior Citizens Savings Scheme (SCSS)',
+  'Sukanya Samriddhi Yojana (SSY)',
+  'Savings Account',
 ]
 
 interface MFResult   { schemeCode: string; schemeName: string }
@@ -55,6 +68,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
   const [avgBuyPrice, setAvgBuyPrice] = useState(item?.avgBuyPrice ? String(item.avgBuyPrice) : '')
 
   // Manual (cash, FD, real estate, vehicle, other, epf_ppf legacy)
+  const [postOfficeScheme, setPostOfficeScheme] = useState(item?.postOfficeScheme ?? '')
   const [manualValue, setManualValue] = useState(
     !['gold_grams','mutual_fund','stocks','epf','ppf','nps'].includes(item?.kind ?? '') ? (item?.value ? String(item.value) : '') : ''
   )
@@ -267,6 +281,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
       } else {
         payload = { ...base, value: parseFloat(manualValue) || 0,
           ...(investedAmount ? { investedAmount: parseFloat(investedAmount) } : {}),
+          ...(kind === 'post_office' && postOfficeScheme ? { postOfficeScheme } : {}),
         }
       }
 
@@ -657,15 +672,25 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                 <input className="input" placeholder={
                   kind === 'epf_ppf' ? 'e.g. EPF, PPF, NPS' :
                   kind === 'fd_rd'   ? 'e.g. SBI FD 2025' :
+                  kind === 'post_office' ? 'e.g. Post Office RD 2026' :
                   kind === 'cash'    ? 'e.g. HDFC Savings' :
                   'e.g. Flat in Mumbai'
                 } value={name} onChange={e => setName(e.target.value)} autoFocus required />
               </div>
+              {kind === 'post_office' && (
+                <div>
+                  <label className="label">Scheme</label>
+                  <select className="input" value={postOfficeScheme} onChange={e => setPostOfficeScheme(e.target.value)}>
+                    <option value="">Choose a scheme (optional)</option>
+                    {POST_OFFICE_SCHEMES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="label">Current Value (₹)</label>
                 <input className="input" type="number" min="0" placeholder="e.g. 500000" value={manualValue} onChange={e => setManualValue(e.target.value)} required />
               </div>
-              {(kind === 'epf_ppf' || kind === 'fd_rd') && (
+              {(kind === 'epf_ppf' || kind === 'fd_rd' || kind === 'post_office') && (
                 <div>
                   <label className="label">Invested / Principal (₹, optional)</label>
                   <input className="input" type="number" min="0" placeholder="Original amount invested" value={investedAmount} onChange={e => setInvestedAmount(e.target.value)} />

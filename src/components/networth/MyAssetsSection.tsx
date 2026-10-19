@@ -19,13 +19,14 @@ const KIND_META: Record<AssetKind, { label: string; color: string }> = {
   nps:          { label: 'NPS',               color: '#0891b2' },
   epf_ppf:      { label: 'EPF / PPF (legacy)', color: '#0ea5e9' },
   fd_rd:        { label: 'FD / RD',           color: '#10b981' },
+  post_office:  { label: 'Post Office',       color: '#dc2626' },
   cash:         { label: 'Cash & Savings',    color: '#22c55e' },
   real_estate:  { label: 'Real Estate',       color: '#f97316' },
   vehicle:      { label: 'Vehicle',           color: '#94a3b8' },
   other:        { label: 'Other',             color: '#94a3b8' },
 }
 
-const KIND_ORDER: AssetKind[] = ['mutual_fund','stocks','gold_grams','epf','ppf','nps','epf_ppf','fd_rd','cash','real_estate','vehicle','other']
+const KIND_ORDER: AssetKind[] = ['mutual_fund','stocks','gold_grams','epf','ppf','nps','epf_ppf','fd_rd','post_office','cash','real_estate','vehicle','other']
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
@@ -139,7 +140,8 @@ function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, inves
                    a.kind === 'gold_grams' ? `${a.value.toFixed(2)}g · ${goldLots.length} purchase${goldLots.length === 1 ? '' : 's'}` :
                    a.kind === 'epf' ? `est. from ${a.balanceAsOf ?? 'snapshot'}${a.monthlyContribution ? ` · +₹${a.monthlyContribution.toLocaleString('en-IN')}/mo` : ''}` :
                    a.kind === 'ppf' ? `${a.ppfDeposits?.filter(d => !d.interest).length ?? 0} deposit${(a.ppfDeposits?.filter(d => !d.interest).length ?? 0) === 1 ? '' : 's'} · ${a.annualRate ?? 7.1}%` :
-                   a.kind === 'nps' ? (a.npsHoldings?.length ? `${a.npsHoldings.length} scheme${a.npsHoldings.length === 1 ? '' : 's'} · live NAV` : 'manual corpus') : ''}
+                   a.kind === 'nps' ? (a.npsHoldings?.length ? `${a.npsHoldings.length} scheme${a.npsHoldings.length === 1 ? '' : 's'} · live NAV` : 'manual corpus') :
+                   a.kind === 'post_office' ? a.postOfficeScheme ?? '' : ''}
                   {a.investedAmount ? ` · invested ${masked ? '•••' : `₹${a.investedAmount.toLocaleString('en-IN')}`}` : ''}
                 </p>
                 {a.pendingTransactionIds.length > 0 && (
