@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { format, parseISO } from 'date-fns'
 import {
   Trash2, Edit2, CheckCircle, MessageCircle,
@@ -492,6 +492,7 @@ export default function BorrowingsList({ onEdit }: Props) {
   }
 
   function promptMarkRepaid(b: Borrowing) {
+    if (closingIds.current.has(b.id)) return
     const outstanding = b.amount - b.repaidAmount
     const isLent = b.type === 'lent'
     const who = b.person
@@ -512,8 +513,20 @@ export default function BorrowingsList({ onEdit }: Props) {
     })
   }
 
-  async function markRepaid(b: Borrowing) {
-    if (!user) return
+  // Borrowing ids with a close-out in flight. The confirm dialog closes before
+  // the writes land, so without this a second click on the still-visible
+  // "Mark repaid" button logs the same repayment twice.
+  const closingIds = useRef(new Set<string>())
+
+  async function markRepaid(stale: Borrowing) {
+    if (!user || closingIds.current.has(stale.id)) return
+    // Read the latest copy; the one the row handed us may predate an earlier close.
+    const b = useAppStore.getState().borrowings.find(x => x.id === stale.id) ?? stale
+    if (b.status === 'repaid') return
+    closingIds.current.add(b.id)
+    // Flip the row to settled right away so its button disappears.
+    const { borrowings: current, setBorrowings } = useAppStore.getState()
+    setBorrowings(current.map(x => x.id === b.id ? { ...x, repaidAmount: x.amount, status: 'repaid' as const } : x))
     try {
       const outstanding = b.amount - b.repaidAmount
       const today = format(new Date(), 'yyyy-MM-dd')
@@ -535,7 +548,12 @@ export default function BorrowingsList({ onEdit }: Props) {
       await updateBorrowing(b.id, { repaidAmount: b.amount, status: 'repaid' })
       await refresh()
       toast.success('Marked as repaid — transaction logged')
-    } catch { toast.error('Failed') }
+    } catch {
+      toast.error('Failed')
+      await refresh()
+    } finally {
+      closingIds.current.delete(b.id)
+    }
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────

@@ -18,6 +18,12 @@ interface Props {
 
 export default function ConfirmDialog({ open, title, message, confirmLabel = 'Delete', onConfirm, onClose, extraAction, tone = 'danger' }: Props) {
   const confirmRef = useRef<HTMLButtonElement>(null)
+  // A fast double-click can land twice before the dialog unmounts; act once.
+  const firedRef = useRef(false)
+
+  useEffect(() => {
+    if (open) firedRef.current = false
+  }, [open])
 
   useEffect(() => {
     if (open) confirmRef.current?.focus()
@@ -85,7 +91,11 @@ export default function ConfirmDialog({ open, title, message, confirmLabel = 'De
           <button
             ref={confirmRef}
             className={confirmClass}
-            onClick={() => { onConfirm(); onClose() }}
+            onClick={() => {
+              if (firedRef.current) return
+              firedRef.current = true
+              onConfirm(); onClose()
+            }}
           >
             {confirmLabel}
           </button>

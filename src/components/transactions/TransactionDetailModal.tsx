@@ -116,7 +116,17 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
           const { borrowings, setBorrowings } = useAppStore.getState()
           const b = borrowings.find(b => b.id === tx.borrowingId)
           if (b) {
-            const newRepaid = Math.max(0, b.repaidAmount - tx.amount)
+            // If the linked repayments add up to more than the record shows as
+            // repaid (e.g. a double-logged close-out), deleting the surplus one
+            // shouldn't reopen the record — only the part that was counted comes off.
+            // (tx is already out of the store by now, so add it back in.)
+            const { transactions: remainingTx } = useAppStore.getState()
+            const linkedTotal = tx.amount + remainingTx
+              .filter(t => t.id !== tx.id && t.borrowingId === b.id && t.transferKind === tx.transferKind)
+              .reduce((s, t) => s + t.amount, 0)
+            const surplus = Math.max(0, linkedTotal - b.repaidAmount)
+            const toRevert = Math.max(0, tx.amount - surplus)
+            const newRepaid = Math.max(0, b.repaidAmount - toRevert)
             const updated = {
               repaidAmount: newRepaid,
               status: (newRepaid <= 0 ? 'pending' : newRepaid >= b.amount ? 'repaid' : 'partial') as 'pending' | 'partial' | 'repaid',
