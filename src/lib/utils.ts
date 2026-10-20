@@ -89,9 +89,22 @@ export function buildMonthlySummary(
   let savingsContributed = 0  // cash moved into savings vehicles (out of pocket)
   let savingsWithdrawn   = 0  // cash pulled back out of savings (incl. legacy EF withdrawals)
 
+  // Per-person loan flows this cycle, so lending and getting it back in the same
+  // cycle can cancel out (see lentOut / repaymentIn below)
+  const borrowingPerson = new Map((borrowings ?? []).map(b => [b.id, b.person]))
+  const personKey = (name?: string) => name?.trim().toLowerCase() || '\0unknown'
+  const receivedByPerson = new Map<string, number>()
+  const addReceived = (name: string | undefined, amt: number) => {
+    const k = personKey(name)
+    receivedByPerson.set(k, (receivedByPerson.get(k) ?? 0) + amt)
+  }
+
   for (const t of monthTxs) {
     if (t.type === 'transfer') {
-      if (t.transferKind === 'loan_repayment_received') repaymentReceived += t.amount
+      if (t.transferKind === 'loan_repayment_received') {
+        repaymentReceived += t.amount
+        addReceived(t.loanPerson ?? (t.borrowingId ? borrowingPerson.get(t.borrowingId) : undefined), t.amount)
+      }
       if (t.transferKind === 'loan_repayment_paid')     repaymentPaid     += t.amount
       if (t.transferKind === 'savings_contribution' || t.transferKind === 'savings_transfer') savingsContributed += t.amount
       if (t.transferKind === 'savings_withdrawal'   || t.transferKind === 'ef_withdrawal')    savingsWithdrawn   += t.amount
@@ -110,6 +123,7 @@ export function buildMonthlySummary(
         // portion that settled debt as repayment received — the two cancel in cashNet,
         // giving a net-zero effect on cashflow. Any remainder stays a plain expense.
         repaymentReceived += t.settledAmount ?? t.amount
+        addReceived(t.settledPerson ?? (t.settledBorrowingId ? borrowingPerson.get(t.settledBorrowingId) : undefined), t.settledAmount ?? t.amount)
       }
     }
   }
@@ -118,17 +132,36 @@ export function buildMonthlySummary(
   let totalBorrowed = 0
   let lentOutstanding = 0
   let borrowedOutstanding = 0
+  const lentByPerson = new Map<string, number>()
   if (borrowings) {
     for (const b of borrowings) {
       if (b.date < start || b.date > end) continue
       if (b.type === 'lent') {
         totalLent += b.amount
         lentOutstanding += (b.amount - b.repaidAmount)
+        const k = personKey(b.person)
+        lentByPerson.set(k, (lentByPerson.get(k) ?? 0) + b.amount)
       } else {
         totalBorrowed += b.amount
         borrowedOutstanding += (b.amount - b.repaidAmount)
       }
     }
+  }
+
+  // Net each person's lending against their repayments within this cycle only, so a
+  // loan that came back the same cycle shows nowhere, while a repayment of an older
+  // loan shows as money in. lentOut − repaymentIn always equals totalLent − repaymentReceived,
+  // so In/Out breakdowns built from these add up to cashNet.
+  let lentOut = 0
+  let repaymentIn = 0
+  const people = Array.from(lentByPerson.keys())
+    .concat(Array.from(receivedByPerson.keys()).filter(k => !lentByPerson.has(k)))
+  for (const k of people) {
+    const lent = lentByPerson.get(k) ?? 0
+    const received = receivedByPerson.get(k) ?? 0
+    const netted = Math.min(lent, received)
+    lentOut += lent - netted
+    repaymentIn += received - netted
   }
 
   const net     = totalIncome - totalExpenses
@@ -147,6 +180,8 @@ export function buildMonthlySummary(
     borrowedOutstanding,
     repaymentReceived,
     repaymentPaid,
+    lentOut,
+    repaymentIn,
     savingsContributed,
     savingsWithdrawn,
     byCategory: byCategory as Record<Category, number>,

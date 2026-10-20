@@ -136,9 +136,9 @@ function Row({ label, sub, value, color, indent = false }: {
 
 function CashSection({ cash }: { cash: FinancialPulse['cashPosition'] }) {
   const positive  = cash.surplusNet >= 0
-  const totalIn   = cash.monthIncome + cash.carryForward
+  const totalIn   = cash.monthIncome + cash.repaymentIn + cash.carryForward
   const savingsNet = cash.savingsContributed - cash.savingsWithdrawn
-  const totalOut  = cash.monthExpenses + savingsNet + cash.lentOutstanding + cash.repaymentPaid + cash.upcomingTotal
+  const totalOut  = cash.monthExpenses + savingsNet + cash.lentOut + cash.repaymentPaid + cash.upcomingTotal
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -154,6 +154,9 @@ function CashSection({ cash }: { cash: FinancialPulse['cashPosition'] }) {
       {/* In sub-rows */}
       <Row label="↑ income" value={`+ ${formatCurrencyFull(cash.monthIncome)}`} color="var(--text-3)"
         sub={cash.borrowedIncome > 0 ? `incl. ${formatCurrencyFull(cash.borrowedIncome)} borrowed` : undefined} indent />
+      {cash.repaymentIn > 0 && (
+        <Row label="← repaid to you" value={`+ ${formatCurrencyFull(cash.repaymentIn)}`} color="var(--good-ink)" indent />
+      )}
       {cash.carryForward > 0 && (
         <Row label="↩ carried forward" value={`+ ${formatCurrencyFull(cash.carryForward)}`} color="var(--brand-ink)" indent />
       )}
@@ -179,8 +182,8 @@ function CashSection({ cash }: { cash: FinancialPulse['cashPosition'] }) {
           indent
         />
       )}
-      {cash.lentOutstanding > 0 && (
-        <Row label="→ lent out" value={`− ${formatCurrencyFull(cash.lentOutstanding)}`} color="var(--info-ink)" indent />
+      {cash.lentOut > 0 && (
+        <Row label="→ lent out" value={`− ${formatCurrencyFull(cash.lentOut)}`} color="var(--info-ink)" indent />
       )}
       {cash.repaymentPaid > 0 && (
         <Row label="→ loan repaid" value={`− ${formatCurrencyFull(cash.repaymentPaid)}`} color="var(--good-ink)" indent />

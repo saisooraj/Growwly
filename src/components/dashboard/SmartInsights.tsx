@@ -162,7 +162,8 @@ export default function SmartInsights() {
     TrendingUp
 
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    // height 100% so it matches the charts beside it on desktop; the insight panel takes up the extra height
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
       {/* ── Header row ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div style={{
@@ -198,7 +199,7 @@ export default function SmartInsights() {
       {/* ── Main insight card ── */}
       {alerts.length === 0 ? (
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 14,
+          display: 'flex', alignItems: 'center', gap: 14, flex: 1,
           padding: '14px 16px', borderRadius: 14,
           background: 'var(--good-soft)', border: '1px solid color-mix(in oklch, var(--good) 20%, transparent)',
         }}>
@@ -218,7 +219,7 @@ export default function SmartInsights() {
         </div>
       ) : (
         <div style={{
-          display: 'flex', gap: 14, alignItems: 'flex-start',
+          display: 'flex', gap: 14, alignItems: 'center', flex: 1,
           padding: '14px 16px', borderRadius: 14,
           background: accentSoft,
           border: `1px solid color-mix(in oklch, ${accent} 22%, transparent)`,
@@ -229,7 +230,6 @@ export default function SmartInsights() {
             width: 40, height: 40, borderRadius: 12, flexShrink: 0,
             background: accent, color: '#fff',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginTop: 2,
           }}>
             <Icon size={20} />
           </div>
@@ -251,7 +251,7 @@ export default function SmartInsights() {
               flexShrink: 0, padding: '6px 12px', borderRadius: 9,
               background: accent, color: '#fff',
               fontSize: 12.5, fontWeight: 700, textDecoration: 'none',
-              whiteSpace: 'nowrap', alignSelf: 'flex-start',
+              whiteSpace: 'nowrap',
             }}
           >
             {alert.cta} →

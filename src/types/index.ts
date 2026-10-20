@@ -258,6 +258,8 @@ export interface MonthlySummary {
   borrowedOutstanding: number
   repaymentReceived: number
   repaymentPaid: number
+  lentOut: number       // cash lent this cycle that didn't come back this cycle (netted per person)
+  repaymentIn: number   // repayments this cycle beyond what was lent to that person this cycle — money in
   savingsContributed: number   // cash moved into savings vehicles this period
   savingsWithdrawn: number     // cash pulled back out of savings this period
   byCategory: Record<Category, number>
@@ -307,7 +309,8 @@ export interface PulseCashPosition {
   savingsContributed: number
   savingsWithdrawn: number   // cash pulled back out of savings this cycle
   totalLent: number
-  lentOutstanding: number // portion of this cycle's new loans still unpaid (nets out same-cycle repayments)
+  lentOut: number         // cash lent this cycle that didn't come back this cycle
+  repaymentIn: number     // money you lent earlier that came back this cycle (real cash inflow)
   repaymentPaid: number   // borrowed money you paid back this month (real cash outflow)
   upcomingTotal: number   // expense outflows still owed in next 30 days
   upcomingIncome: number  // income still pending to arrive in next 30 days

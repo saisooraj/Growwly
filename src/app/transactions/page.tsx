@@ -90,7 +90,7 @@ function TransactionsInner() {
   const summary  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
   const monthTxs = getTransactionsForMonth(transactions, selectedMonth, settings)
   // True cash leaving the account: category spend + money still out on new loans this cycle + borrowed money repaid
-  const moneyOutTotal = summary.totalExpenses + summary.lentOutstanding + summary.repaymentPaid
+  const moneyOutTotal = summary.totalExpenses + summary.lentOut + summary.repaymentPaid
   // Net cash parked in savings this cycle (contributions minus anything pulled back out)
   const savingsNet = summary.savingsContributed - summary.savingsWithdrawn
 
@@ -270,10 +270,15 @@ function TransactionsInner() {
           <div className="grid grid-cols-3" style={{ gap: 10 }}>
             {/* Income */}
             <div className="card-sm" style={{ padding: '12px 14px' }}>
-              <div className="h-eyebrow" style={{ marginBottom: 6 }}>Income</div>
+              <div className="h-eyebrow" style={{ marginBottom: 6 }}>Money in</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--good-ink)', letterSpacing: '-0.015em', whiteSpace: 'nowrap' }}>
-                {mobileMasked ? <span style={{ letterSpacing: '0.05em', color: 'var(--text-4)' }}>••••</span> : formatCurrencyFull(summary.totalIncome + summary.totalBorrowed + carryForward)}
+                {mobileMasked ? <span style={{ letterSpacing: '0.05em', color: 'var(--text-4)' }}>••••</span> : formatCurrencyFull(summary.totalIncome + summary.totalBorrowed + summary.repaymentIn + carryForward)}
               </div>
+              {!mobileMasked && summary.repaymentIn > 0 && (
+                <div style={{ fontSize: 10, color: 'var(--good-ink)', fontWeight: 600, marginTop: 3 }}>
+                  ← {formatCurrencyFull(summary.repaymentIn)} repaid to you
+                </div>
+              )}
               {!mobileMasked && carryForward > 0 && (
                 <div style={{ fontSize: 10, color: 'var(--brand-ink)', fontWeight: 600, marginTop: 3 }}>
                   ↩ {formatCurrencyFull(carryForward)} CF
@@ -291,9 +296,9 @@ function TransactionsInner() {
                   {formatCurrencyFull(summary.totalExpenses)} spent
                 </div>
               )}
-              {!mobileMasked && summary.lentOutstanding > 0 && (
+              {!mobileMasked && summary.lentOut > 0 && (
                 <div style={{ fontSize: 10, color: 'var(--info-ink)', fontWeight: 600, marginTop: 3 }}>
-                  {formatCurrencyFull(summary.lentOutstanding)} lent out
+                  {formatCurrencyFull(summary.lentOut)} lent out
                 </div>
               )}
               {!mobileMasked && summary.repaymentPaid > 0 && (
@@ -631,10 +636,21 @@ function TransactionsInner() {
                     </button>
                   </div>
                   <div className="display-num" style={{ fontSize: 26, color: 'var(--good-ink)' }}>
-                    {showIncome ? formatCurrencyFull(summary.totalIncome + summary.totalBorrowed + carryForward) : '₹ •••'}
+                    {showIncome ? formatCurrencyFull(summary.totalIncome + summary.totalBorrowed + summary.repaymentIn + carryForward) : '₹ •••'}
                   </div>
                   {showIncome && summary.totalBorrowed > 0 && (
                     <div style={{ fontSize: 11, color: 'var(--info-ink)', marginTop: 3 }}>incl. {formatCurrencyFull(summary.totalBorrowed)} borrowed</div>
+                  )}
+                  {showIncome && summary.repaymentIn > 0 && (
+                    <div style={{
+                      marginTop: 6, marginRight: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
+                      fontSize: 11, fontWeight: 600, color: 'var(--good-ink)',
+                      background: 'var(--good-soft)',
+                      border: '1px solid color-mix(in oklch, var(--good) 20%, transparent)',
+                      borderRadius: 6, padding: '2px 8px',
+                    }}>
+                      ← {formatCurrencyFull(summary.repaymentIn)} repaid to you
+                    </div>
                   )}
                   {showIncome && carryForward > 0 && (
                     <div style={{
@@ -669,7 +685,7 @@ function TransactionsInner() {
                       {formatCurrencyFull(summary.totalExpenses)} spent
                     </div>
                   )}
-                  {showExpenses && summary.lentOutstanding > 0 && (
+                  {showExpenses && summary.lentOut > 0 && (
                     <div style={{
                       marginTop: 6, marginRight: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
                       fontSize: 11, fontWeight: 600, color: 'var(--info-ink)',
@@ -677,7 +693,7 @@ function TransactionsInner() {
                       border: '1px solid color-mix(in oklch, var(--info) 20%, transparent)',
                       borderRadius: 6, padding: '2px 8px',
                     }}>
-                      {formatCurrencyFull(summary.lentOutstanding)} lent out
+                      {formatCurrencyFull(summary.lentOut)} lent out
                     </div>
                   )}
                   {showExpenses && summary.repaymentPaid > 0 && (

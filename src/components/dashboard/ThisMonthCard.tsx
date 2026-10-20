@@ -4,6 +4,7 @@ import { useMemo, useState, useEffect } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { buildMonthlySummary, computeCarryForward, formatCurrencyFull, getLast6Months } from '@/lib/utils'
+import { isSavingsPlan } from '@/lib/budgetPlan'
 import { useCountUp } from '@/hooks/useCountUp'
 
 const MASK = '₹ •••'
@@ -40,13 +41,30 @@ function SavingsRing({ pct, size = 72 }: { pct: number; size?: number }) {
 // ── Card ───────────────────────────────────────────────────────────────────────
 
 export default function ThisMonthCard() {
-  const { transactions, selectedMonth, settings, borrowings } = useAppStore()
+  const { transactions, selectedMonth, settings, borrowings, budgets } = useAppStore()
   const [shown, setShown] = useState(false)
 
   const summary = useMemo(
     () => buildMonthlySummary(transactions, selectedMonth, settings, borrowings),
     [transactions, selectedMonth, settings, borrowings],
   )
+
+  // Context for "spent": against this month's spending budget if one is set, else vs last month
+  const spentNote = useMemo(() => {
+    const planned = budgets
+      .filter(b => b.month === selectedMonth && !isSavingsPlan(b))
+      .reduce((s, b) => s + b.planned, 0)
+    if (planned > 0) {
+      return { text: `of ${formatCurrencyFull(planned)} planned`, over: summary.totalExpenses > planned }
+    }
+    const months = getLast6Months()
+    const curIdx = months.indexOf(selectedMonth)
+    if (curIdx <= 0) return null
+    const prev = buildMonthlySummary(transactions, months[curIdx - 1], settings, borrowings)
+    if (prev.totalExpenses <= 0) return null
+    const pct = ((summary.totalExpenses - prev.totalExpenses) / prev.totalExpenses) * 100
+    return { text: `${pct > 0 ? '+' : '−'}${Math.abs(pct).toFixed(0)}% vs last month`, over: pct > 0 }
+  }, [budgets, selectedMonth, summary.totalExpenses, transactions, settings, borrowings])
 
   const carryForward = useMemo(() => {
     const months = getLast6Months()
@@ -55,7 +73,7 @@ export default function ThisMonthCard() {
     return computeCarryForward(months.slice(0, curIdx), transactions, settings, borrowings)
   }, [transactions, selectedMonth, settings, borrowings])
 
-  const totalIn     = summary.totalIncome + carryForward
+  const totalIn     = summary.totalIncome + summary.totalBorrowed + summary.repaymentIn + carryForward
   const netSaved    = summary.cashNet + carryForward
   const totalOut    = totalIn - netSaved
   const isPositive  = netSaved >= 0
@@ -124,6 +142,18 @@ export default function ThisMonthCard() {
             {shown ? formatCurrencyFull(animatedIn) : MASK}
           </span>
         </div>
+        {shown && summary.totalBorrowed > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, paddingLeft: 14 }}>
+            <span style={{ color: 'var(--text-4)' }}>borrowed</span>
+            <span style={{ fontWeight: 600, color: 'var(--info-ink)' }}>+{formatCurrencyFull(summary.totalBorrowed)}</span>
+          </div>
+        )}
+        {shown && summary.repaymentIn > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, paddingLeft: 14 }}>
+            <span style={{ color: 'var(--text-4)' }}>← repaid to you</span>
+            <span style={{ fontWeight: 600, color: 'var(--good-ink)' }}>+{formatCurrencyFull(summary.repaymentIn)}</span>
+          </div>
+        )}
         {shown && carryForward > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, paddingLeft: 14 }}>
             <span style={{ color: 'var(--text-4)' }}>↩ carried forward</span>
@@ -139,11 +169,32 @@ export default function ThisMonthCard() {
             {shown ? formatCurrencyFull(animatedOut) : MASK}
           </span>
         </div>
-        {shown && summary.savingsContributed > 0 && (<>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, paddingLeft: 14 }}>
-            <span style={{ color: 'var(--text-4)' }}>spent</span>
-            <span style={{ fontWeight: 600, color: 'var(--text-3)' }}>{formatCurrencyFull(summary.totalExpenses)}</span>
+        {shown && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 11.5, paddingLeft: 14 }}>
+            <span style={{ color: 'var(--text-4)', minWidth: 0 }}>
+              spent
+              {spentNote && (
+                <span style={{ marginLeft: 6, color: spentNote.over ? 'var(--bad-ink)' : 'var(--good-ink)', fontWeight: 600 }}>
+                  {spentNote.text}
+                </span>
+              )}
+            </span>
+            <span style={{ fontWeight: 600, color: 'var(--text-3)', flexShrink: 0 }}>{formatCurrencyFull(summary.totalExpenses)}</span>
           </div>
+        )}
+        {shown && summary.lentOut > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, paddingLeft: 14 }}>
+            <span style={{ color: 'var(--text-4)' }}>→ lent out</span>
+            <span style={{ fontWeight: 600, color: 'var(--info-ink)' }}>{formatCurrencyFull(summary.lentOut)}</span>
+          </div>
+        )}
+        {shown && summary.repaymentPaid > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, paddingLeft: 14 }}>
+            <span style={{ color: 'var(--text-4)' }}>→ loan repaid</span>
+            <span style={{ fontWeight: 600, color: 'var(--good-ink)' }}>{formatCurrencyFull(summary.repaymentPaid)}</span>
+          </div>
+        )}
+        {shown && (summary.savingsContributed > 0 || summary.savingsWithdrawn > 0) && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, paddingLeft: 14 }}>
             <span style={{ color: 'var(--text-4)' }}>
               → savings
@@ -155,7 +206,7 @@ export default function ThisMonthCard() {
             </span>
             <span style={{ fontWeight: 600, color: 'var(--brand-ink)' }}>{formatCurrencyFull(summary.savingsContributed - summary.savingsWithdrawn)}</span>
           </div>
-        </>)}
+        )}
       </div>
     </div>
   )

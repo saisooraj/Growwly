@@ -72,7 +72,7 @@ function SavingsSparkline() {
   const max = Math.max(...months.map(m => m.rate), 30)
   const min = Math.min(...months.map(m => m.rate), 0)
   const range = max - min || 1
-  const W = 120, H = 36, PAD = 4
+  const W = 120, H = 30, PAD = 4
 
   const points = months.map((m, i) => {
     const x = PAD + (i / (months.length - 1)) * (W - PAD * 2)
@@ -94,32 +94,32 @@ function SavingsSparkline() {
         <p style={{ fontSize: 16, fontWeight: 700, color: rateColor, margin: 0 }}>{latest.toFixed(1)}%</p>
         <p style={{ fontSize: 10, color: 'var(--text-4)', margin: '1px 0 0' }}>this month</p>
       </div>
-      <svg width={W} height={H} style={{ flex: 1 }}>
-        <polyline
-          points={points}
-          fill="none"
-          stroke={latest >= 20 ? 'var(--good)' : latest >= 10 ? 'var(--warn)' : 'var(--bad)'}
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        {/* Zero line */}
-        {min < 0 && (
-          <line
-            x1={PAD} y1={H - PAD - ((0 - min) / range) * (H - PAD * 2)}
-            x2={W - PAD} y2={H - PAD - ((0 - min) / range) * (H - PAD * 2)}
-            stroke="var(--bad)" strokeWidth={0.5} strokeDasharray="2 2" opacity={0.4}
+      {/* Line stretches to fill the strip; labels sit outside the SVG so they don't stretch or clip */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block' }}>
+          <polyline
+            points={points}
+            fill="none"
+            stroke={latest >= 20 ? 'var(--good)' : latest >= 10 ? 'var(--warn)' : 'var(--bad)'}
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
           />
-        )}
-        {/* Month labels */}
-        {months.map((m, i) => (
-          <text key={m.month}
-            x={PAD + (i / (months.length - 1)) * (W - PAD * 2)}
-            y={H}
-            textAnchor="middle" fontSize={8} fill="var(--text-4)"
-          >{m.label}</text>
-        ))}
-      </svg>
+          {/* Zero line */}
+          {min < 0 && (
+            <line
+              x1={PAD} y1={H - PAD - ((0 - min) / range) * (H - PAD * 2)}
+              x2={W - PAD} y2={H - PAD - ((0 - min) / range) * (H - PAD * 2)}
+              stroke="var(--bad)" strokeWidth={0.5} strokeDasharray="2 2" opacity={0.4}
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+        </svg>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, color: 'var(--text-4)' }}>
+          {months.map(m => <span key={m.month}>{m.label}</span>)}
+        </div>
+      </div>
     </div>
   )
 }
@@ -186,7 +186,7 @@ export default function PulseCard() {
         {/* 3 key metrics */}
         <div style={{ display: 'flex', gap: 8 }}>
           {[
-            { label: 'Income',  value: formatCurrencyFull(pulse.cashPosition.monthIncome),  color: 'var(--good)' },
+            { label: 'Money in', value: formatCurrencyFull(pulse.cashPosition.monthIncome + pulse.cashPosition.repaymentIn), color: 'var(--good)' },
             { label: 'Spent',   value: formatCurrencyFull(pulse.cashPosition.monthExpenses), color: 'var(--text)' },
             { label: 'Surplus', value: formatCurrencyFull(pulse.cashPosition.surplusNet),    color: c.bar },
           ].map(m => (

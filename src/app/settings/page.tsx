@@ -1055,13 +1055,13 @@ export default function SettingsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {cardOrder.map((id, idx) => {
               const labels: Record<string, string> = {
-                hero: 'Hero — Spent, This Month, Streak, Emergency Fund, KPIs',
+                hero: 'Hero — Spent, This Month, Streak, Emergency Fund',
                 insights: 'Smart Insights',
                 charts: 'Charts — Category Pie + Monthly Bar',
                 savings: 'Savings Trend + Breakdown',
                 goals: 'Savings Goals',
                 pulse: 'Monthly Pulse & Financial Health',
-                weekly: 'Upcoming + Borrowed',
+                weekly: 'Upcoming + Loans',
               }
               return (
                 <div key={id} style={{

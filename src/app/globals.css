@@ -518,15 +518,6 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   container-type: inline-size;
 }
 .dash-hero-side > .span-all { grid-column: 1 / -1; }
-/* KPI tiles: 2×2 when the side is narrow, one row of four when there's room */
-.hero-kpis {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--row-gap);
-}
-@container (min-width: 600px) {
-  .hero-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
 @media (max-width: 1279px) {
   .dash-hero { grid-template-columns: 1fr; }
 }
@@ -541,9 +532,12 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   grid-template-columns: 1.4fr 1fr;
   gap: var(--row-gap);
 }
+/* A dashboard block whose card renders nothing (e.g. Goals with no goals) shouldn't take a gap */
+.dash-block:empty { display: none; }
 .dash-bottom {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* Two side by side when both show; a lone card fills the row instead of leaving half of it empty */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: var(--row-gap);
 }
 /* 2-col row: net worth | existing cards */
@@ -555,11 +549,9 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 @media (max-width: 1024px) {
   .dash-mid     { grid-template-columns: 1fr; }
   .dash-charts  { grid-template-columns: 1fr; }
-  .dash-bottom  { grid-template-columns: 1fr 1fr; }
   .dash-pair    { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
-  .dash-bottom  { grid-template-columns: 1fr; }
   .dash-hero-side { grid-template-columns: 1fr; }
 }
 
