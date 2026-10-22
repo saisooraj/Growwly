@@ -258,3 +258,54 @@ export function bucketTopSlices(
   const otherTotal = rest.reduce((s, [, v]) => s + v, 0)
   return { top, rest, otherTotal }
 }
+
+export interface CategoryChange {
+  category: string
+  current: number
+  prevFull: number     // the whole previous cycle
+  prevToDate: number   // the previous cycle up to the same day as today
+}
+
+export interface CategoryChangesResult {
+  live: boolean        // `month` is the cycle in progress
+  elapsedDays: number  // days of the current cycle gone, today included (full length when not live)
+  prevMonth: string
+  rows: CategoryChange[]
+}
+
+// Per-category spend for `month` against the cycle before it. While a cycle is
+// in progress, comparing it to a whole previous cycle makes nearly everything
+// look like it went down, so `prevToDate` also keeps the previous cycle cut at
+// the same day — like for like. One pass, bounded to the two cycles.
+export function buildCategoryChanges(
+  transactions: Transaction[],
+  month: string,
+  settings?: UserSettings | null,
+  today: string = format(new Date(), 'yyyy-MM-dd'),
+): CategoryChangesResult {
+  const [prevMonth] = getMonthsEndingAt(month, 2)
+  const cur = getCycleRange(month, settings)
+  const prev = getCycleRange(prevMonth, settings)
+  const live = today >= cur.start && today <= cur.end
+  const elapsedDays = differenceInCalendarDays(parseISO(live ? today : cur.end), parseISO(cur.start)) + 1
+  const prevCutoff = format(addDays(parseISO(prev.start), elapsedDays - 1), 'yyyy-MM-dd')
+
+  const byCat = new Map<string, CategoryChange>()
+  const row = (cat: string) =>
+    byCat.get(cat) ?? (byCat.set(cat, { category: cat, current: 0, prevFull: 0, prevToDate: 0 }), byCat.get(cat)!)
+
+  for (const t of transactions) {
+    if (t.type !== 'expense' && t.type !== 'refund') continue
+    if (t.date < prev.start || t.date > cur.end) continue
+    const signed = t.type === 'refund' ? -t.amount : t.amount
+    const r = row(t.category)
+    if (t.date >= cur.start) {
+      r.current += signed
+    } else if (t.date <= prev.end) {
+      r.prevFull += signed
+      if (t.date <= prevCutoff) r.prevToDate += signed
+    }
+  }
+
+  return { live, elapsedDays, prevMonth, rows: Array.from(byCat.values()) }
+}

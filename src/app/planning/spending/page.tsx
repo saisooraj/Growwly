@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { differenceInCalendarDays, parseISO } from 'date-fns'
 import AppShell from '@/components/layout/AppShell'
 import { useAppStore } from '@/store/appStore'
-import { buildCategoryTrend, buildCurrentPeriodDetail, bucketTopSlices, getMonthsEndingAt, projectCycleSpend } from '@/lib/spendingAnalytics'
+import { buildCategoryChanges, buildCategoryTrend, buildCurrentPeriodDetail, bucketTopSlices, getMonthsEndingAt, projectCycleSpend } from '@/lib/spendingAnalytics'
 import { getCycleRange } from '@/lib/cycle'
 import { CATEGORY_COLORS, EXPENSE_CATEGORIES, buildMonthlySummary, getMonthLabel } from '@/lib/utils'
 import { DEFAULT_NEEDS, DEFAULT_RULE, DEFAULT_SAVINGS, isSavingsPlan } from '@/lib/budgetPlan'
@@ -20,6 +20,7 @@ import NeedsWantsSavingsSummary from '@/components/spending/NeedsWantsSavingsSum
 import RecurringSplitCard from '@/components/spending/RecurringSplitCard'
 import SpendingHeatmap from '@/components/spending/SpendingHeatmap'
 import TopTransactionsList from '@/components/spending/TopTransactionsList'
+import CategoryChangesCard from '@/components/spending/CategoryChangesCard'
 
 const MAX_DONUT_SLICES = 8
 const MAX_TREND_LINES = 8
@@ -130,6 +131,16 @@ export default function SpendingBreakdownPage() {
     }
   }, [allCategoryKeys, checkedCats, trend, months.length])
 
+  // ── What changed: this cycle vs the previous one, like-for-like while it's in progress ──
+  const changes = useMemo(
+    () => buildCategoryChanges(transactions, chartMonth, settings),
+    [transactions, chartMonth, settings]
+  )
+  const changeRows = useMemo(
+    () => checkedCats === 'all' ? changes.rows : changes.rows.filter(r => checkedCats.has(r.category)),
+    [changes, checkedCats]
+  )
+
   // ── KPIs ──
   const totalSpent = trend.totalsByMonth[currentIdx] ?? 0
   const prevTotal = trend.totalsByMonth[prevIdx] ?? 0
@@ -200,6 +211,16 @@ export default function SpendingBreakdownPage() {
           onToggleMasked={() => setMasked(v => !v)}
           projectedTotal={projectedTotal}
           plannedTotal={plannedTotal}
+        />
+
+        <CategoryChangesCard
+          rows={changeRows}
+          live={changes.live}
+          elapsedDays={changes.elapsedDays}
+          prevMonth={changes.prevMonth}
+          month={chartMonth}
+          masked={masked}
+          onCategoryClick={goToCategory}
         />
 
         <div className="spend-grid">

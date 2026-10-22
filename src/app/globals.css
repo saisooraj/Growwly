@@ -502,6 +502,40 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   .spend-grid { grid-template-columns: 1fr; }
 }
 
+/* Spending breakdown: "What changed" card */
+.changes-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 14px 0 8px;
+}
+.change-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.3fr) 74px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  box-sizing: content-box;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background .15s;
+}
+@media (hover: hover) {
+  .change-row:hover { background: var(--surface-2); }
+}
+.change-row:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+.change-track { position: relative; height: 26px; }
+@media (max-width: 480px) {
+  .changes-summary { gap: 6px; }
+  .change-row { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 64px; gap: 8px; }
+}
+
 /* Dashboard responsive grids */
 /* Hero: Spent on the left; This Month + Streak, Emergency fund and the four KPI
    tiles stacked on the right. Below 1280px the two halves stack. */
