@@ -15,6 +15,7 @@ import { useAppStore } from '@/store/appStore'
 import { isSavingsPlan } from '@/lib/budgetPlan'
 import CategoryPicker from '@/components/transactions/CategoryPicker'
 import TagPicker from '@/components/transactions/TagPicker'
+import AmountInput from '@/components/ui/AmountInput'
 import type { Asset, Transaction, TransactionType, TransferKind } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -1026,7 +1027,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
 
                     <div>
                       <label className="label">Refund amount</label>
-                      <input type="number" inputMode="decimal" className="input" value={amount} onChange={e => setAmount(e.target.value)} required min="0" step="0.01" />
+                      <AmountInput className="input" value={amount} onValueChange={setAmount} required />
                     </div>
                     <div>
                       <label className="label">Date</label>
@@ -1542,10 +1543,10 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                         </button>
                       )}
                     </div>
-                    <input
-                      type="number" step="0.01" min="0" placeholder="0"
+                    <AmountInput
+                      placeholder="0"
                       className="input" style={{ fontSize: 18, fontWeight: 600 }}
-                      value={amount} onChange={e => setAmount(e.target.value)} required
+                      value={amount} onValueChange={setAmount} required
                     />
                   </div>
 
@@ -1872,10 +1873,10 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                         showRefundForm ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
                             <div style={{ display: 'flex', gap: 8 }}>
-                              <input
-                                type="number" inputMode="decimal" className="input" placeholder={`Up to ${formatCurrencyFull(remainingRefundable)}`}
-                                value={refundAmount} onChange={e => setRefundAmount(e.target.value)}
-                                min="0" max={remainingRefundable} step="0.01" autoFocus
+                              <AmountInput
+                                className="input" placeholder={`Up to ${formatCurrencyFull(remainingRefundable)}`}
+                                value={refundAmount} onValueChange={setRefundAmount}
+                                autoFocus
                                 style={{ flex: 1, fontSize: 13 }}
                               />
                               <input
