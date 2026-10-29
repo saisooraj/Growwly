@@ -108,6 +108,37 @@ export interface BudgetPlan {
   }
 }
 
+// How much of the income a bucket really takes once spending is counted: each row
+// holds the larger of its plan and what was spent, so overspending eats into the
+// free money instead of hiding behind the plan. Once a cycle is over, an unspent
+// plan no longer holds anything.
+export interface GroupAllocation {
+  spent: number        // everything spent (or saved) in the bucket
+  inPlan: number       // spent within budgeted rows' plans
+  over: number         // spent past a row's plan
+  overCount: number    // rows spent past their plan
+  unbudgeted: number   // spent in rows with no plan
+  unspent: number      // planned but not spent
+  remaining: number    // unspent plans still holding money (0 once the cycle is past)
+  committed: number    // inPlan + over + unbudgeted + remaining
+}
+
+export function groupAllocation(group: PlanGroup, phase: PlanCycle['phase']): GroupAllocation {
+  const a = { spent: 0, inPlan: 0, over: 0, overCount: 0, unbudgeted: 0, unspent: 0 }
+  for (const r of group.rows) {
+    a.spent += r.actual
+    if (r.planned > 0) {
+      a.inPlan += Math.min(r.actual, r.planned)
+      a.unspent += Math.max(0, r.planned - r.actual)
+      if (r.actual > r.planned) { a.over += r.actual - r.planned; a.overCount++ }
+    } else {
+      a.unbudgeted += r.actual
+    }
+  }
+  const remaining = phase === 'past' ? 0 : a.unspent
+  return { ...a, remaining, committed: a.spent + remaining }
+}
+
 function roundSuggestion(n: number): number {
   if (n <= 0) return 0
   return Math.max(100, Math.round(n / 100) * 100)

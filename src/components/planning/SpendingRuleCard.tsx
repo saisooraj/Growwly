@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pencil, X, Check, Tags } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
@@ -8,7 +8,7 @@ import { useRefreshData } from '@/hooks/useData'
 import { EXPENSE_CATEGORIES, formatCurrencyFull } from '@/lib/utils'
 import { CategoryIcon, getCategoryDisplayName } from '@/lib/categoryIcons'
 import { setUserSettings } from '@/lib/firestore'
-import { BUCKETS, DEFAULT_NEEDS, DEFAULT_SAVINGS, type Bucket, type BudgetPlan } from '@/lib/budgetPlan'
+import { BUCKETS, DEFAULT_NEEDS, DEFAULT_SAVINGS, groupAllocation, type Bucket, type BudgetPlan, type GroupAllocation } from '@/lib/budgetPlan'
 import { BUCKET_META, MASK, money } from './bucketMeta'
 import { useCountUp } from '@/hooks/useCountUp'
 import toast from 'react-hot-toast'
@@ -35,6 +35,26 @@ const HERO_MINT  = 'rgba(160,255,205,0.95)'
 const HERO_AMBER = 'rgba(255,200,120,1)'
 const HERO_RED   = 'rgba(255,150,130,1)'
 
+// Bar fills: solid = spent, striped = spent with no budget, red stripes = spent
+// over budget, faded = planned but not spent yet.
+const stripes = (a: string, b: string) => `repeating-linear-gradient(135deg, ${a} 0 4px, ${b} 4px 7px)`
+const OVER_FILL = stripes(HERO_RED, 'var(--bad)')
+const faded = (c: string) => `color-mix(in oklch, ${c} 40%, transparent)`
+
+function barSegments(bucket: Bucket, a: GroupAllocation) {
+  const color = BUCKET_META[bucket].color
+  // Saving past the plan is good, so savings is never split out as over budget.
+  const segs = bucket === 'savings'
+    ? [{ key: 'spent', w: a.spent, bg: color, title: 'Saved' }]
+    : [
+        { key: 'spent', w: a.inPlan, bg: color, title: 'Spent within budget' },
+        { key: 'unbudgeted', w: a.unbudgeted, bg: stripes(color, faded(color)), title: 'Spent with no budget' },
+        { key: 'over', w: a.over, bg: OVER_FILL, title: 'Spent over budget' },
+      ]
+  segs.push({ key: 'left', w: a.remaining, bg: faded(color), title: 'Planned, not spent yet' })
+  return segs.filter(s => s.w > 0)
+}
+
 // How planned budgets split the month's income across Needs / Wants / Savings,
 // against the user's rule. Also hosts the rule and bucket-assignment editors.
 export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; masked: boolean }) {
@@ -48,6 +68,19 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
 
   const [editingRule, setEditingRule] = useState(false)
   const [editingCats, setEditingCats] = useState(false)
+  // Bar breakdown card: which bucket (or 'free') is open, and which segment is under the pointer
+  const [tip, setTip] = useState<{ key: string; seg?: string } | null>(null)
+  const barRef = useRef<HTMLDivElement>(null)
+
+  // A tapped-open breakdown closes on the next tap outside the bar
+  useEffect(() => {
+    if (!tip) return
+    const close = (e: PointerEvent) => {
+      if (!barRef.current?.contains(e.target as Node)) setTip(null)
+    }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [tip])
   const [ruleDraft, setRuleDraft]     = useState(rule)
   const [bucketDraft, setBucketDraft] = useState<{ needs: Set<string>; savings: Set<string> }>({
     needs: new Set(needsCats), savings: new Set(savingsCats),
@@ -114,15 +147,21 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
     setEditingCats(true)
   }
 
-  // ── Allocation ──
+  // ── Allocation: each category holds the larger of its plan and its spend ──
   const income = plan.income.amount
-  const totalPlanned = plan.groups.reduce((s, g) => s + g.planned, 0)
-  const scale = Math.max(income, totalPlanned, 1)
-  const unplanned = income - totalPlanned
+  const live = plan.cycle.phase !== 'past'
+  const allocs = plan.groups.map(g => ({ g, a: groupAllocation(g, plan.cycle.phase) }))
+  const committed = allocs.reduce((s, x) => s + x.a.committed, 0)
+  const spent = allocs.reduce((s, x) => s + x.a.spent, 0)
+  const stillPlanned = allocs.reduce((s, x) => s + x.a.remaining, 0)
+  const spendAllocs = allocs.filter(x => x.g.bucket !== 'savings')
+  const overCount = spendAllocs.reduce((s, x) => s + x.a.overCount, 0)
+  const scale = Math.max(income, committed, 1)
+  const free = income - committed
   // Treat anything within 1% of income as on target, so a few rupees don't flip the status.
   const tolerance = Math.max(500, income * 0.01)
 
-  const shownAmount = useCountUp(Math.abs(unplanned), 950)
+  const shownAmount = useCountUp(Math.abs(free), 950)
 
   /* Editing uses a regular card so form controls stay on a light background */
   if (editingRule || editingCats) {
@@ -207,9 +246,34 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
   }
 
   const status = income <= 0 ? null
-    : unplanned < 0 ? { label: 'Over-allotted', dot: HERO_RED }
-    : unplanned >= tolerance ? { label: 'Not fully allotted', dot: HERO_AMBER }
-    : { label: 'Fully allotted', dot: '#fff' }
+    : free <= -tolerance ? { label: 'Over your income', dot: HERO_RED }
+    : overCount > 0 ? { label: `Over budget in ${overCount} categor${overCount === 1 ? 'y' : 'ies'}`, dot: HERO_RED }
+    : free < tolerance ? { label: 'Fully allotted', dot: '#fff' }
+    : live ? { label: 'Not fully allotted', dot: HERO_AMBER }
+    : { label: 'Money left over', dot: HERO_MINT }
+
+  const legend = [
+    { key: 'spent', label: 'Spent', bg: 'rgba(255,255,255,0.9)', show: spent > 0 },
+    { key: 'unbudgeted', label: 'No budget', bg: stripes('rgba(255,255,255,0.9)', 'rgba(255,255,255,0.4)'), show: spendAllocs.some(x => x.a.unbudgeted > 0) },
+    { key: 'over', label: 'Over budget', bg: OVER_FILL, show: spendAllocs.some(x => x.a.over > 0) },
+    { key: 'left', label: 'Planned, not spent yet', bg: 'rgba(255,255,255,0.35)', show: stillPlanned > 0 },
+  ].filter(l => l.show)
+
+  const barGroups = allocs.filter(x => x.a.committed > 0)
+  const freeColor = !live ? HERO_MINT : free >= tolerance ? 'var(--warn-2)' : 'rgba(255,255,255,0.35)'
+
+  // Centre of each bar piece as a share of the bar, to anchor the breakdown card
+  const centers: Record<string, number> = {}
+  let barAcc = 0
+  for (const { g, a } of barGroups) { centers[g.bucket] = (barAcc + a.committed / 2) / scale; barAcc += a.committed }
+  if (free > 0) centers.free = (barAcc + free / 2) / scale
+
+  // Mouse opens on hover; touch and pen toggle on tap
+  const tipHandlers = (key: string) => ({
+    onPointerEnter: (e: React.PointerEvent) => { if (e.pointerType === 'mouse') setTip({ key }) },
+    onPointerUp: (e: React.PointerEvent) => { if (e.pointerType !== 'mouse') setTip(t => t?.key === key ? null : { key }) },
+  })
+  const tipGroup = tip && tip.key !== 'free' ? allocs.find(x => x.g.bucket === tip.key) : undefined
 
   /* ── Hero gradient card, same family as Safe to spend and Net worth ── */
   return (
@@ -252,17 +316,24 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
         </p>
       ) : (
         <>
-          {/* ── Primary number: what's left to allot ── */}
+          {/* ── Primary number: income not yet spent or held by a plan ── */}
           <div style={{ position: 'relative' }}>
             <div style={{
               fontSize: 'clamp(34px, 7vw, 48px)', fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1,
-              color: '#fff', fontFamily: "'Geist Mono', monospace",
+              color: free <= -tolerance ? HERO_RED : '#fff', fontFamily: "'Geist Mono', monospace",
             }}>
-              {masked ? MASK : `${unplanned < 0 ? '−' : ''}${formatCurrencyFull(Math.round(shownAmount))}`}
+              {masked ? MASK : `${free < 0 ? '−' : ''}${formatCurrencyFull(Math.round(shownAmount))}`}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 6, fontWeight: 500 }}>
-              {unplanned < 0 ? 'planned beyond' : unplanned >= tolerance ? 'not allotted yet, of' : 'left over, of'}{' '}
+              {free < 0 ? 'more than your income, of'
+                : !live ? 'left over when the cycle ended, of'
+                : free >= tolerance ? 'free, not planned or spent yet, of'
+                : 'left over, of'}{' '}
               {money(income, masked)} · {INCOME_LABEL[plan.income.source].toLowerCase()}
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 3, fontWeight: 500 }}>
+              {money(spent, masked)} spent or saved
+              {stillPlanned > 0 && <> · {money(stillPlanned, masked)} still planned</>}
             </div>
           </div>
 
@@ -272,48 +343,155 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
           <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <span style={heroEyebrow}>Against your {rule.needs}/{rule.wants}/{rule.savings} rule</span>
 
-            {/* Stacked bar: each bucket's planned share of income, then what's left unallotted.
-                A bucket past its target glows: mint for savings, red otherwise. */}
-            <div style={{ display: 'flex', height: 12, borderRadius: 999, gap: 3, background: 'rgba(255,255,255,0.18)' }}>
-              {[
-                ...plan.groups.filter(g => g.planned > 0).map(g => ({
-                  key: g.bucket as string,
-                  width: g.planned / scale,
-                  color: BUCKET_META[g.bucket].color,
-                  flare: g.planned - g.target >= tolerance ? (g.bucket === 'savings' ? 'flare-seg flare-good' : 'flare-seg flare-bad') : undefined,
-                })),
-                ...(unplanned > 0 ? [{
-                  key: 'unallotted',
-                  width: unplanned / scale,
-                  color: unplanned >= tolerance ? 'var(--warn-2)' : 'rgba(255,255,255,0.35)',
-                  flare: undefined,
-                }] : []),
-              ].map((seg, i, all) => (
-                <div key={seg.key} className={seg.flare} title={seg.key === 'unallotted' ? 'Not allotted' : BUCKET_META[seg.key as Bucket].label} style={{
-                  width: `${seg.width * 100}%`, background: seg.color,
-                  // White ring keeps bucket colours readable on any brand gradient
-                  boxShadow: '0 0 0 1.5px rgba(255,255,255,0.75)',
-                  borderRadius: `${i === 0 ? 999 : 2}px ${i === all.length - 1 ? 999 : 2}px ${i === all.length - 1 ? 999 : 2}px ${i === 0 ? 999 : 2}px`,
-                  transition: 'width .6s cubic-bezier(.22,1,.36,1)',
-                  ...(seg.flare?.includes('flare-good') ? { '--flare': HERO_MINT } as React.CSSProperties : {}),
-                }} />
-              ))}
+            {/* Stacked bar: what each bucket takes of income (spent, plus plans not spent yet),
+                then what's free. Overspending glows red; savings past target glows mint. */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div ref={barRef} onPointerLeave={e => { if (e.pointerType === 'mouse') setTip(null) }}
+                style={{ position: 'relative', display: 'flex', height: 14, borderRadius: 999, gap: 3, background: 'rgba(255,255,255,0.18)' }}>
+                {barGroups.map(({ g, a }, i) => {
+                  const first = i === 0
+                  const last = i === barGroups.length - 1 && free <= 0
+                  const flare = g.bucket === 'savings'
+                    ? (a.committed - g.target >= tolerance ? 'flare-seg flare-good' : undefined)
+                    : (a.over >= tolerance ? 'flare-seg flare-bad' : undefined)
+                  return (
+                    <div key={g.bucket} className={flare} {...tipHandlers(g.bucket)} style={{
+                      width: `${(a.committed / scale) * 100}%`, cursor: 'pointer',
+                      // White ring keeps bucket colours readable on any brand gradient
+                      boxShadow: '0 0 0 1.5px rgba(255,255,255,0.75)',
+                      borderRadius: `${first ? 999 : 2}px ${last ? 999 : 2}px ${last ? 999 : 2}px ${first ? 999 : 2}px`,
+                      opacity: tip && tip.key !== g.bucket ? 0.45 : 1,
+                      transition: 'width .6s cubic-bezier(.22,1,.36,1), opacity .15s',
+                      ...(flare?.includes('flare-good') ? { '--flare': HERO_MINT } as React.CSSProperties : {}),
+                    }}>
+                      <div style={{ display: 'flex', height: '100%', borderRadius: 'inherit', overflow: 'hidden' }}>
+                        {barSegments(g.bucket, a).map(s => (
+                          <div key={s.key}
+                            onPointerEnter={e => { if (e.pointerType === 'mouse') setTip({ key: g.bucket, seg: s.key }) }}
+                            style={{
+                              width: `${(s.w / a.committed) * 100}%`, background: s.bg,
+                              transition: 'width .6s cubic-bezier(.22,1,.36,1)',
+                            }} />
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+                {free > 0 && (
+                  <div {...tipHandlers('free')} style={{
+                    width: `${(free / scale) * 100}%`, cursor: 'pointer',
+                    background: freeColor,
+                    boxShadow: '0 0 0 1.5px rgba(255,255,255,0.75)',
+                    borderRadius: `${barGroups.length === 0 ? 999 : 2}px 999px 999px ${barGroups.length === 0 ? 999 : 2}px`,
+                    opacity: tip && tip.key !== 'free' ? 0.45 : 1,
+                    transition: 'width .6s cubic-bezier(.22,1,.36,1), opacity .15s',
+                  }} />
+                )}
+
+                {/* Breakdown card for the hovered / tapped piece */}
+                {tip && (tipGroup || tip.key === 'free') && (
+                  <div role="tooltip" style={{
+                    position: 'absolute', bottom: 'calc(100% + 10px)', zIndex: 5, pointerEvents: 'none',
+                    left: `clamp(120px, ${(centers[tip.key] ?? 0.5) * 100}%, calc(100% - 120px))`,
+                    transform: 'translateX(-50%)', width: 240, maxWidth: '100%',
+                    background: 'var(--surface)', color: 'var(--text)', borderRadius: 12, padding: '10px 12px',
+                    boxShadow: '0 14px 34px -10px rgba(0,0,0,.45)', border: '1px solid var(--border)',
+                    display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12,
+                  }}>
+                    {tipGroup ? (() => {
+                      const { g, a } = tipGroup
+                      const pct = Math.round((a.committed / income) * 100)
+                      return (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                            <span style={{ width: 9, height: 9, borderRadius: 3, background: BUCKET_META[g.bucket].color, flexShrink: 0 }} />
+                            <span style={{ fontWeight: 700, flex: 1 }}>{BUCKET_META[g.bucket].label}</span>
+                            <span style={{ fontWeight: 700 }}>{pct}% <span style={{ fontWeight: 500, color: 'var(--text-3)' }}>of income</span></span>
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {barSegments(g.bucket, a).map(s => (
+                              <div key={s.key} style={{
+                                display: 'flex', alignItems: 'center', gap: 7,
+                                opacity: tip.seg && tip.seg !== s.key ? 0.5 : 1,
+                                fontWeight: tip.seg === s.key ? 700 : 500,
+                              }}>
+                                <span style={{ width: 14, height: 8, borderRadius: 2, background: s.bg, flexShrink: 0 }} />
+                                <span style={{ flex: 1, color: 'var(--text-2)' }}>{s.title}</span>
+                                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{money(s.w, masked)}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{ height: 1, background: 'var(--border)' }} />
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+                            <span>Takes</span>
+                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{money(a.committed, masked)}</span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-3)', fontWeight: 500 }}>
+                            <span>{g.targetPct}% target</span>
+                            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{money(g.target, masked)}</span>
+                          </div>
+                        </>
+                      )
+                    })() : (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <span style={{ width: 9, height: 9, borderRadius: 3, background: freeColor, border: '1px solid var(--border)', flexShrink: 0 }} />
+                          <span style={{ fontWeight: 700, flex: 1 }}>{live ? 'Free' : 'Left over'}</span>
+                          <span style={{ fontWeight: 700 }}>{Math.round((free / income) * 100)}% <span style={{ fontWeight: 500, color: 'var(--text-3)' }}>of income</span></span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+                          <span style={{ fontWeight: 500, color: 'var(--text-2)' }}>{live ? 'Not planned or spent yet' : 'Not spent this cycle'}</span>
+                          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{money(free, masked)}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {legend.length > 1 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px' }}>
+                  {legend.map(l => (
+                    <span key={l.key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.75)' }}>
+                      <span style={{ width: 14, height: 7, borderRadius: 2, background: l.bg, flexShrink: 0 }} />
+                      {l.label}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Bucket tiles */}
+            {/* Bucket tiles: share of income against target, spend against plan, then the one thing to know */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-              {plan.groups.map(g => {
+              {allocs.map(({ g, a }) => {
                 const meta = BUCKET_META[g.bucket]
-                const pct = Math.round((g.planned / income) * 100)
-                const diff = g.target - g.planned
-                const onTarget = Math.abs(diff) < tolerance
-                const line = onTarget ? 'On target'
-                  : diff > 0 ? `${money(diff, masked)} unallocated`
-                  : g.bucket === 'savings' ? `${money(-diff, masked)} above target`
-                  : `${money(-diff, masked)} over target`
-                const dot = onTarget || (diff < 0 && g.bucket === 'savings') ? HERO_MINT
-                  : diff < 0 ? HERO_RED
-                  : HERO_AMBER
+                const isSavings = g.bucket === 'savings'
+                const pct = Math.round((a.committed / income) * 100)
+                const verb = isSavings ? 'saved' : 'spent'
+                const detail = g.planned > 0 ? `${money(a.spent, masked)} ${verb} of ${money(g.planned, masked)}`
+                  : a.spent > 0 ? `${money(a.spent, masked)} ${verb} · no budget`
+                  : 'Nothing planned yet'
+
+                let line: string
+                let dot: string
+                if (isSavings) {
+                  const beyond = a.over + a.unbudgeted
+                  if (g.planned <= 0)  { line = 'No savings plan yet'; dot = HERO_AMBER }
+                  else if (a.unspent > 0) { line = `${money(a.unspent, masked)} ${live ? 'to go' : 'short of plan'}`; dot = HERO_AMBER }
+                  else if (beyond >= tolerance) { line = `${money(beyond, masked)} beyond plan`; dot = HERO_MINT }
+                  else { line = 'Plan met'; dot = HERO_MINT }
+                } else if (a.over > 0) {
+                  line = `${money(a.over, masked)} over · ${a.overCount} categor${a.overCount === 1 ? 'y' : 'ies'}`; dot = HERO_RED
+                } else if (a.unbudgeted >= tolerance) {
+                  line = `${money(a.unbudgeted, masked)} with no budget`; dot = HERO_AMBER
+                } else if (a.unspent > 0) {
+                  line = `${money(a.unspent, masked)} ${live ? 'left in plan' : 'unspent'}`; dot = HERO_MINT
+                } else if (g.planned > 0) {
+                  line = 'Budget used up'; dot = '#fff'
+                } else {
+                  line = 'Nothing spent yet'; dot = '#fff'
+                }
+
                 return (
                   <div key={g.bucket} style={{ background: 'rgba(255,255,255,.16)', borderRadius: 14, padding: '12px 14px', backdropFilter: 'blur(6px)', minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -324,7 +502,10 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
                       <span style={{ fontSize: 22, fontWeight: 800, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1 }}>{pct}%</span>
                       <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', whiteSpace: 'nowrap' }}>of {g.targetPct}% target</span>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12, color: '#fff', fontWeight: 600 }}>
+                    <div style={{ marginTop: 6, fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {detail}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: 12, color: '#fff', fontWeight: 600 }}>
                       <span style={{ width: 6, height: 6, borderRadius: '50%', background: dot, flexShrink: 0 }} />
                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{line}</span>
                     </div>
