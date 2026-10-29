@@ -359,6 +359,10 @@ function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: Note
   const remaining = Math.max(0, item.amount - paid)
   const pct       = item.amount > 0 ? Math.min(100, (paid / item.amount) * 100) : 0
   const fulfilled = pct >= 100
+  // Settled on the date of the latest payment
+  const settledOn = fulfilled && payments.length > 0
+    ? payments.reduce((latest, p) => (p.date > latest ? p.date : latest), payments[0].date)
+    : null
 
   const [showPayments, setShowPayments]   = useState(false)
   const [editPay, setEditPay]             = useState<UpcomingPayment | null>(null)
@@ -497,9 +501,22 @@ function NoteCard({ item, paid, payments, onEdit, onDelete, onLogPayment }: Note
 
       {/* Footer */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-        <span style={{ fontSize: 11.5, color: urgencyColor, fontWeight: overdue || soon ? 500 : 400 }}>
-          {overdue && !fulfilled ? 'Overdue · ' : ''}{isIncome ? 'Expected by ' : ''}{format(due, 'dd MMM yyyy')}
-        </span>
+        {fulfilled ? (
+          <span style={{ fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ color: 'var(--text-3)', textDecoration: 'line-through' }}>
+              {format(due, 'dd MMM yyyy')}
+            </span>
+            {settledOn && (
+              <span style={{ color: 'var(--good-ink)', fontWeight: 500 }}>
+                {isIncome ? 'Received' : 'Settled'} {format(parseISO(settledOn), 'dd MMM yyyy')}
+              </span>
+            )}
+          </span>
+        ) : (
+          <span style={{ fontSize: 11.5, color: urgencyColor, fontWeight: overdue || soon ? 500 : 400 }}>
+            {overdue ? 'Overdue · ' : ''}{isIncome ? 'Expected by ' : ''}{format(due, 'dd MMM yyyy')}
+          </span>
+        )}
         {!fulfilled && (
           <button
             onClick={onLogPayment}
