@@ -1,7 +1,7 @@
 import { type ClassValue, clsx } from 'clsx'
 import { format, subDays, startOfWeek, endOfWeek, parseISO, isWithinInterval } from 'date-fns'
 import type { Transaction, MonthlySummary, Category, UserSettings, Borrowing } from '@/types'
-import { getCycleRange } from './cycle'
+import { getCycleRange, getCycleMonthForDate } from './cycle'
 
 export function cn(...inputs: ClassValue[]) {
   return clsx(inputs)
@@ -28,21 +28,7 @@ export function getCurrentMonth(): string {
 // Returns the budget-month label that today actually falls in, respecting the
 // salary cycle. e.g. on June 30 with a fixed-day-30 cycle, returns "2026-07".
 export function getCycleMonth(settings?: UserSettings | null): string {
-  const today = format(new Date(), 'yyyy-MM-dd')
-  const calendarMonth = format(new Date(), 'yyyy-MM')
-
-  if (!settings?.salaryCycleRule || settings.salaryCycleRule === 'none') {
-    return calendarMonth
-  }
-
-  // Check whether today has already entered the NEXT calendar month's cycle
-  const [year, month] = calendarMonth.split('-').map(Number)
-  const nextYear  = month === 12 ? year + 1 : year
-  const nextMonth = month === 12 ? 1 : month + 1
-  const nextBM    = `${nextYear}-${String(nextMonth).padStart(2, '0')}`
-  const { start: nextStart } = getCycleRange(nextBM, settings)
-
-  return today >= nextStart ? nextBM : calendarMonth
+  return getCycleMonthForDate(format(new Date(), 'yyyy-MM-dd'), settings)
 }
 
 export function getMonthLabel(month: string): string {

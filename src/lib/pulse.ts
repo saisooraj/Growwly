@@ -1,5 +1,5 @@
 import {
-  format, parseISO, getDaysInMonth, differenceInCalendarDays,
+  format, parseISO, differenceInCalendarDays,
   isAfter, isBefore, addDays,
 } from 'date-fns'
 import type {
@@ -10,7 +10,7 @@ import type {
   PulseGoal, PulseBorrowingAlert, MonthlySummary,
 } from '@/types'
 import { buildBudgetPlan, type BudgetPlan } from './budgetPlan'
-import { buildMonthlySummary, computeCarryForward, getTransactionsForMonth, getLast6Months, EMERGENCY_FUND_VEHICLE, formatCurrencyFull } from './utils'
+import { buildMonthlySummary, computeCarryForward, getCycleMonth, getTransactionsForMonth, getLast6Months, EMERGENCY_FUND_VEHICLE, formatCurrencyFull } from './utils'
 
 export interface PulseSnapshot {
   transactions: Transaction[]
@@ -378,7 +378,7 @@ export function computePulse(
 ): FinancialPulse {
   const { transactions, emergencyFund, savingsGoals, projects, borrowings, upcomingExpenses, upcomingPayments } = snapshot
   const now = new Date()
-  const month = snapshot.selectedMonth ?? format(now, 'yyyy-MM')
+  const month = snapshot.selectedMonth ?? getCycleMonth(snapshot.settings)
   const [y, m] = month.split('-').map(Number)
 
   const prevMonth   = format(new Date(y, m - 2, 1), 'yyyy-MM')
@@ -391,7 +391,9 @@ export function computePulse(
     ? computeCarryForward(allMonths.slice(0, curIdx), transactions, snapshot.settings, borrowings)
     : 0
 
-  const daysLeft    = Math.max(getDaysInMonth(now) - now.getDate(), 0)
+  // Days left in the salary cycle (counting today), same as the Planning page
+  const plan        = buildBudgetPlan(transactions, snapshot.budgets, snapshot.settings, month)
+  const daysLeft    = plan.cycle.daysLeft
   const thirtyDaysOut = addDays(now, 30)
 
   // Build paid amounts map
@@ -448,7 +450,6 @@ export function computePulse(
     dailyBudget,
   }
 
-  const plan   = buildBudgetPlan(transactions, snapshot.budgets, snapshot.settings, month)
   const health = computeHealthScore(snapshot, plan, curSummary, now)
 
   // ── Upcoming items list ────────────────────────────────────────────────────

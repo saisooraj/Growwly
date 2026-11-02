@@ -1,4 +1,4 @@
-import { format, parseISO, startOfMonth, endOfMonth, subDays } from 'date-fns'
+import { format, parseISO, startOfMonth, endOfMonth, subDays, addMonths } from 'date-fns'
 import type { UserSettings } from '@/types'
 
 // Last Mon–Fri of a given calendar month (month is 1-based)
@@ -49,6 +49,23 @@ export function getCycleRange(
   const end = format(subDays(parseISO(nextStart), 1), 'yyyy-MM-dd')
 
   return { start, end }
+}
+
+// The budget-month label a date (yyyy-MM-dd) falls in, respecting the salary cycle.
+// e.g. with a fixed-day-28 cycle, "2026-10-30" belongs to "2026-11". A cycle covers
+// its own calendar month or starts late in the previous one, so the date's calendar
+// month and its neighbours are the only candidates.
+export function getCycleMonthForDate(date: string, settings?: UserSettings | null): string {
+  const calendarMonth = date.slice(0, 7)
+  if (!settings?.salaryCycleRule || settings.salaryCycleRule === 'none') return calendarMonth
+
+  const base = parseISO(`${calendarMonth}-01`)
+  for (const offset of [0, 1, -1]) {
+    const m = format(addMonths(base, offset), 'yyyy-MM')
+    const { start, end } = getCycleRange(m, settings)
+    if (date >= start && date <= end) return m
+  }
+  return calendarMonth
 }
 
 // "May 29 – Jun 29"

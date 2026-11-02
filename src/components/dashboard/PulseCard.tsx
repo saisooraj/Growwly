@@ -215,7 +215,7 @@ export default function PulseCard() {
           <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
             {pulse.upcoming.length > 0
               ? `${pulse.upcoming.length} obligation${pulse.upcoming.length !== 1 ? 's' : ''} ahead`
-              : `${pulse.cashPosition.daysLeft} days left this month`
+              : `${pulse.cashPosition.daysLeft} days left this cycle`
             }
             {!masked && pulse.cashPosition.daysLeft > 0 && pulse.cashPosition.dailyBudget > 0 && (
               <> · {formatCurrency(pulse.cashPosition.dailyBudget)}/day</>

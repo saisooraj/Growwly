@@ -12,6 +12,7 @@ import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTran
 import { getSavingsVehicleMeta, getCategoryDisplayName } from '@/lib/categoryIcons'
 import { applyLink, removeLink, findLinkedAsset, linkedContribution, linkSummary, defaultHoldingFor, vehicleKinds, isLinkable, type LinkMode, type LinkInput } from '@/lib/holdingLinks'
 import { useAppStore } from '@/store/appStore'
+import { getCycleMonthForDate } from '@/lib/cycle'
 import { isSavingsPlan } from '@/lib/budgetPlan'
 import CategoryPicker from '@/components/transactions/CategoryPicker'
 import TagPicker from '@/components/transactions/TagPicker'
@@ -435,10 +436,11 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   // ── Budget alert ────────────────────────────────────────────────────────────
 
   function checkBudgetAlert(cat: string, addedAmount: number, d: string) {
-    const month = d.slice(0, 7)
+    // Budgets follow the salary cycle, so an expense after a late-month payday counts toward next month's plan
+    const month = getCycleMonthForDate(d, settings)
     const budget = budgets.find(b => b.month === month && b.category === cat && !isSavingsPlan(b))
     if (!budget || budget.planned === 0) return
-    const summary = buildMonthlySummary(transactions, month)
+    const summary = buildMonthlySummary(transactions, month, settings, borrowings)
     const alreadySpent = summary.byCategory[cat as keyof typeof summary.byCategory] ?? 0
     const newTotal = alreadySpent + addedAmount
     const pct = (newTotal / budget.planned) * 100
