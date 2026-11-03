@@ -14,12 +14,12 @@ import { buildBudgetPlan } from '@/lib/budgetPlan'
 import { formatCycleRange } from '@/lib/cycle'
 
 export default function PlanningPage() {
-  const { transactions, budgets, settings, selectedMonth } = useAppStore()
+  const { transactions, budgets, settings, selectedMonth, borrowings } = useAppStore()
   const [masked, setMasked] = useState(true)
 
   const plan = useMemo(
-    () => buildBudgetPlan(transactions, budgets, settings, selectedMonth),
-    [transactions, budgets, settings, selectedMonth]
+    () => buildBudgetPlan(transactions, budgets, settings, selectedMonth, borrowings),
+    [transactions, budgets, settings, selectedMonth, borrowings]
   )
 
   const { cycle } = plan

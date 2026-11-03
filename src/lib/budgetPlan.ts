@@ -1,7 +1,7 @@
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns'
-import type { Budget, Transaction, UserSettings } from '@/types'
+import type { Borrowing, Budget, Transaction, UserSettings } from '@/types'
 import { getCycleRange } from './cycle'
-import { EMERGENCY_FUND_VEHICLE, EXPENSE_CATEGORIES, SAVINGS_VEHICLES, getTransferDisplay, isSavingsTransfer } from './utils'
+import { EMERGENCY_FUND_VEHICLE, EXPENSE_CATEGORIES, SAVINGS_VEHICLES, buildMonthlySummary, computeCarryForward, getLast6Months, getTransferDisplay, isSavingsTransfer } from './utils'
 import { expectedRest, getMonthsEndingAt } from './spendingAnalytics'
 
 // ── Defaults ───────────────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ export interface PlanGroup {
   planned: number
   actual: number
   targetPct: number
-  target: number        // targetPct of income, in ₹
+  target: number        // targetPct of the money to plan (funds.total), in ₹
 }
 
 export interface PlanCycle {
@@ -88,6 +88,17 @@ export interface PlanCycle {
 export interface BudgetPlan {
   cycle: PlanCycle
   income: { amount: number; source: 'actual' | 'target' | 'last' | 'none' }
+  // Cash there is to plan this cycle: income plus other money in, less cash that
+  // left outside the plan. Matches the "In" and "Net cashflow" figures elsewhere.
+  funds: {
+    income: number          // income.amount
+    carryForward: number    // last cycle's leftover cash
+    repaidToYou: number     // older loans repaid to you this cycle
+    borrowed: number
+    lentOut: number         // lent this cycle and not back yet
+    repaidByYou: number     // your loan repayments this cycle
+    total: number
+  }
   rule: { needs: number; wants: number; savings: number }
   groups: PlanGroup[]
   totals: {
@@ -156,6 +167,7 @@ export function buildBudgetPlan(
   budgets: Budget[],
   settings: UserSettings | null | undefined,
   month: string,
+  borrowings?: Borrowing[] | null,
   today: string = format(new Date(), 'yyyy-MM-dd'),
 ): BudgetPlan {
   const rule = settings?.spendingRule ?? DEFAULT_RULE
@@ -332,6 +344,25 @@ export function buildBudgetPlan(
     : income[2] > 0 ? { amount: income[2], source: 'last' }
     : { amount: 0, source: 'none' }
 
+  // ── Money to plan: income, plus cash carried in or repaid, less cash lent or repaid out.
+  // Savings withdrawals aren't added here: they already reduce the Savings bucket.
+  const summary = buildMonthlySummary(transactions, month, settings, borrowings)
+  const cfMonths = getLast6Months()
+  const cfIdx = cfMonths.indexOf(month)
+  const fundsBase = {
+    income: incomeInfo.amount,
+    carryForward: cfIdx > 0 ? computeCarryForward(cfMonths.slice(0, cfIdx), transactions, settings, borrowings) : 0,
+    repaidToYou: summary.repaymentIn,
+    borrowed: summary.totalBorrowed,
+    lentOut: summary.lentOut,
+    repaidByYou: summary.repaymentPaid,
+  }
+  const funds: BudgetPlan['funds'] = {
+    ...fundsBase,
+    total: Math.max(0, fundsBase.income + fundsBase.carryForward + fundsBase.repaidToYou + fundsBase.borrowed
+      - fundsBase.lentOut - fundsBase.repaidByYou),
+  }
+
   // ── Groups ──
   const groups: PlanGroup[] = BUCKETS.map(bucket => {
     const all = rows.filter(r => r.bucket === bucket)
@@ -345,7 +376,7 @@ export function buildBudgetPlan(
       planned: visible.reduce((s, r) => s + r.planned, 0),
       actual: visible.reduce((s, r) => s + r.actual, 0),
       targetPct: rule[bucket],
-      target: Math.round(incomeInfo.amount * rule[bucket] / 100),
+      target: Math.round(funds.total * rule[bucket] / 100),
     }
   })
 
@@ -375,6 +406,7 @@ export function buildBudgetPlan(
   return {
     cycle,
     income: incomeInfo,
+    funds,
     rule,
     groups,
     totals: {

@@ -14,10 +14,10 @@ import { useCountUp } from '@/hooks/useCountUp'
 import toast from 'react-hot-toast'
 
 const INCOME_LABEL: Record<BudgetPlan['income']['source'], string> = {
-  actual: 'Income this cycle',
-  target: 'Income target',
-  last: 'Last cycle’s income',
-  none: 'Income',
+  actual: 'income',
+  target: 'income target',
+  last: 'last cycle’s income',
+  none: 'income',
 }
 
 // White-on-gradient styling shared with the Safe to spend and Net worth hero cards
@@ -55,7 +55,7 @@ function barSegments(bucket: Bucket, a: GroupAllocation) {
   return segs.filter(s => s.w > 0)
 }
 
-// How planned budgets split the month's income across Needs / Wants / Savings,
+// How planned budgets split the cycle's money (income plus carried-in cash) across Needs / Wants / Savings,
 // against the user's rule. Also hosts the rule and bucket-assignment editors.
 export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; masked: boolean }) {
   const { user } = useAuth()
@@ -148,7 +148,8 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
   }
 
   // ── Allocation: each category holds the larger of its plan and its spend ──
-  const income = plan.income.amount
+  // Measured against all the money there is to plan, not just income
+  const toPlan = plan.funds.total
   const live = plan.cycle.phase !== 'past'
   const allocs = plan.groups.map(g => ({ g, a: groupAllocation(g, plan.cycle.phase) }))
   const committed = allocs.reduce((s, x) => s + x.a.committed, 0)
@@ -156,10 +157,10 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
   const stillPlanned = allocs.reduce((s, x) => s + x.a.remaining, 0)
   const spendAllocs = allocs.filter(x => x.g.bucket !== 'savings')
   const overCount = spendAllocs.reduce((s, x) => s + x.a.overCount, 0)
-  const scale = Math.max(income, committed, 1)
-  const free = income - committed
-  // Treat anything within 1% of income as on target, so a few rupees don't flip the status.
-  const tolerance = Math.max(500, income * 0.01)
+  const scale = Math.max(toPlan, committed, 1)
+  const free = toPlan - committed
+  // Treat anything within 1% of the total as on target, so a few rupees don't flip the status.
+  const tolerance = Math.max(500, toPlan * 0.01)
 
   const shownAmount = useCountUp(Math.abs(free), 950)
 
@@ -245,12 +246,23 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
     )
   }
 
-  const status = income <= 0 ? null
-    : free <= -tolerance ? { label: 'Over your income', dot: HERO_RED }
+  const status = toPlan <= 0 ? null
+    : free <= -tolerance ? { label: 'Over what you have', dot: HERO_RED }
     : overCount > 0 ? { label: `Over budget in ${overCount} categor${overCount === 1 ? 'y' : 'ies'}`, dot: HERO_RED }
     : free < tolerance ? { label: 'Fully allotted', dot: '#fff' }
     : live ? { label: 'Not fully allotted', dot: HERO_AMBER }
     : { label: 'Money left over', dot: HERO_MINT }
+
+  // Where the money to plan comes from; the income line alone when there's nothing else
+  const f = plan.funds
+  const fundParts = [
+    { amount: f.income, label: INCOME_LABEL[plan.income.source], sign: '' },
+    { amount: f.carryForward, label: 'carried forward', sign: '+ ' },
+    { amount: f.repaidToYou, label: 'repaid to you', sign: '+ ' },
+    { amount: f.borrowed, label: 'borrowed', sign: '+ ' },
+    { amount: f.lentOut, label: 'lent out', sign: '− ' },
+    { amount: f.repaidByYou, label: 'repaid by you', sign: '− ' },
+  ].filter((x, i) => i === 0 || x.amount > 0)
 
   const legend = [
     { key: 'spent', label: 'Spent', bg: 'rgba(255,255,255,0.9)', show: spent > 0 },
@@ -293,7 +305,7 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
 
       {/* ── Top row: eyebrow + status + tools ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', position: 'relative' }}>
-        <span style={heroEyebrow}>How your income is allocated</span>
+        <span style={heroEyebrow}>How your money is allocated</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           {status && (
             <span style={{ ...glass, borderRadius: 999, padding: '3px 10px' }}>
@@ -310,13 +322,13 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
         </div>
       </div>
 
-      {income <= 0 ? (
+      {toPlan <= 0 ? (
         <p style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.8)', margin: 0, position: 'relative', lineHeight: 1.5 }}>
-          No income recorded for this cycle yet. Log your salary, or set a monthly income target in Settings, to compare your plan against the rule.
+          No money to plan for this cycle yet. Log your salary, or set a monthly income target in Settings, to compare your plan against the rule.
         </p>
       ) : (
         <>
-          {/* ── Primary number: income not yet spent or held by a plan ── */}
+          {/* ── Primary number: money not yet spent or held by a plan ── */}
           <div style={{ position: 'relative' }}>
             <div style={{
               fontSize: 'clamp(34px, 7vw, 48px)', fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1,
@@ -325,11 +337,16 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
               {masked ? MASK : `${free < 0 ? '−' : ''}${formatCurrencyFull(Math.round(shownAmount))}`}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', marginTop: 6, fontWeight: 500 }}>
-              {free < 0 ? 'more than your income, of'
+              {free < 0 ? 'more than you have, of'
                 : !live ? 'left over when the cycle ended, of'
                 : free >= tolerance ? 'free, not planned or spent yet, of'
                 : 'left over, of'}{' '}
-              {money(income, masked)} · {INCOME_LABEL[plan.income.source].toLowerCase()}
+              {money(toPlan, masked)} to plan this cycle
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 3, fontWeight: 500 }}>
+              {fundParts.map((x, i) => (
+                <span key={x.label}>{i > 0 && ' '}{x.sign}{money(x.amount, masked)} {x.label}</span>
+              ))}
             </div>
             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 3, fontWeight: 500 }}>
               {money(spent, masked)} spent or saved
@@ -343,7 +360,7 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
           <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 12 }}>
             <span style={heroEyebrow}>Against your {rule.needs}/{rule.wants}/{rule.savings} rule</span>
 
-            {/* Stacked bar: what each bucket takes of income (spent, plus plans not spent yet),
+            {/* Stacked bar: what each bucket takes of the money to plan (spent, plus plans not spent yet),
                 then what's free. Overspending glows red; savings past target glows mint. */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div ref={barRef} onPointerLeave={e => { if (e.pointerType === 'mouse') setTip(null) }}
@@ -400,13 +417,13 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
                   }}>
                     {tipGroup ? (() => {
                       const { g, a } = tipGroup
-                      const pct = Math.round((a.committed / income) * 100)
+                      const pct = Math.round((a.committed / toPlan) * 100)
                       return (
                         <>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                             <span style={{ width: 9, height: 9, borderRadius: 3, background: BUCKET_META[g.bucket].color, flexShrink: 0 }} />
                             <span style={{ fontWeight: 700, flex: 1 }}>{BUCKET_META[g.bucket].label}</span>
-                            <span style={{ fontWeight: 700 }}>{pct}% <span style={{ fontWeight: 500, color: 'var(--text-3)' }}>of income</span></span>
+                            <span style={{ fontWeight: 700 }}>{pct}% <span style={{ fontWeight: 500, color: 'var(--text-3)' }}>of total</span></span>
                           </div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                             {barSegments(g.bucket, a).map(s => (
@@ -437,7 +454,7 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
                         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                           <span style={{ width: 9, height: 9, borderRadius: 3, background: freeColor, border: '1px solid var(--border)', flexShrink: 0 }} />
                           <span style={{ fontWeight: 700, flex: 1 }}>{live ? 'Free' : 'Left over'}</span>
-                          <span style={{ fontWeight: 700 }}>{Math.round((free / income) * 100)}% <span style={{ fontWeight: 500, color: 'var(--text-3)' }}>of income</span></span>
+                          <span style={{ fontWeight: 700 }}>{Math.round((free / toPlan) * 100)}% <span style={{ fontWeight: 500, color: 'var(--text-3)' }}>of total</span></span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
                           <span style={{ fontWeight: 500, color: 'var(--text-2)' }}>{live ? 'Not planned or spent yet' : 'Not spent this cycle'}</span>
@@ -461,12 +478,12 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
               )}
             </div>
 
-            {/* Bucket tiles: share of income against target, spend against plan, then the one thing to know */}
+            {/* Bucket tiles: share of the money to plan against target, spend against plan, then the one thing to know */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
               {allocs.map(({ g, a }) => {
                 const meta = BUCKET_META[g.bucket]
                 const isSavings = g.bucket === 'savings'
-                const pct = Math.round((a.committed / income) * 100)
+                const pct = Math.round((a.committed / toPlan) * 100)
                 const verb = isSavings ? 'saved' : 'spent'
                 const detail = g.planned > 0 ? `${money(a.spent, masked)} ${verb} of ${money(g.planned, masked)}`
                   : a.spent > 0 ? `${money(a.spent, masked)} ${verb} · no budget`

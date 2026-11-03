@@ -392,7 +392,7 @@ export function computePulse(
     : 0
 
   // Days left in the salary cycle (counting today), same as the Planning page
-  const plan        = buildBudgetPlan(transactions, snapshot.budgets, snapshot.settings, month)
+  const plan        = buildBudgetPlan(transactions, snapshot.budgets, snapshot.settings, month, borrowings)
   const daysLeft    = plan.cycle.daysLeft
   const thirtyDaysOut = addDays(now, 30)
 
