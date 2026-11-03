@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { Pencil, Trash2, Home, Car, Landmark, CreditCard, Package, Wallet, Eye, EyeOff, ExternalLink, Plus, TrendingUp, BarChart2, Coins, Mailbox } from 'lucide-react'
+import { Pencil, Trash2, Home, Car, Landmark, CreditCard, Package, Wallet, Eye, EyeOff, ExternalLink, Plus, TrendingUp, TrendingDown, BarChart2, Coins, Mailbox } from 'lucide-react'
 import { IconLifebuoy } from '@tabler/icons-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
 import { useRefreshData } from '@/hooks/useData'
 import { addAsset, updateAsset, deleteAsset, addLiability, updateLiability, deleteLiability, setEmergencyFund, setUserSettings } from '@/lib/firestore'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
-import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE, getLast6Months } from '@/lib/utils'
+import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE, getLast6Months, getCycleMonth } from '@/lib/utils'
 import { linkedTransactionIds } from '@/lib/holdingLinks'
 import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import { computeValue } from '@/lib/assetValuation'
@@ -234,6 +234,12 @@ export default function NetWorthPage() {
     })
   }, [transactions, settings])
 
+  // Savings put in this salary cycle, less anything pulled back out: what this cycle added to net worth
+  const savedThisCycle = useMemo(() => {
+    const s = buildMonthlySummary(transactions, getCycleMonth(settings), settings)
+    return s.savingsContributed - s.savingsWithdrawn
+  }, [transactions, settings])
+
   const totalAssets = holdingsValue + (emergencyFund?.currentBalance ?? 0) + savingsTotal
 
   const totalLiabilities = useMemo(() =>
@@ -246,10 +252,13 @@ export default function NetWorthPage() {
   , [liabilities])
 
   const netWorth = totalAssets - totalLiabilities
+  // This cycle's savings as a share of net worth before them (hidden when that base isn't positive)
+  const netWorthBefore = netWorth - savedThisCycle
+  const savedPct = netWorthBefore > 0 && savedThisCycle !== 0 ? (savedThisCycle / netWorthBefore) * 100 : null
   const nwColor = netWorth >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'
 
   function fmt(v: number, prefix = '') {
-    return masked ? MASK : `${prefix}${formatCurrencyFull(v)}`
+    return masked ? MASK : `${prefix}${formatCurrencyFull(Math.round(v))}`
   }
   const fmtFor = (card: string) => (v: number, prefix = '') => isMasked(card) ? MASK : `${prefix}${formatCurrencyFull(v)}`
   const fmtEf = fmtFor('ef'), fmtSav = fmtFor('savings'), fmtLiab = fmtFor('liabilities')
@@ -321,17 +330,26 @@ export default function NetWorthPage() {
             fontSize: 40, fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 6px',
             color: '#fff', lineHeight: 1,
           }}>
-            {masked ? '₹ •••••' : `${netWorth >= 0 ? '' : '−'}${formatCurrencyFull(Math.abs(netWorth))}`}
+            {masked ? '₹ •••••' : `${netWorth >= 0 ? '' : '−'}${formatCurrencyFull(Math.round(Math.abs(netWorth)))}`}
           </p>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
             <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '4px 12px', borderRadius: 999,
-              background: 'rgba(255,255,255,.22)', color: '#fff',
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              padding: '5px 12px', borderRadius: 999,
+              background: '#fff', boxShadow: '0 4px 14px -6px rgba(0,0,0,.35)',
               fontSize: 12.5, fontWeight: 700,
+              // Fixed colours (not theme tokens) so they read on the white pill in every theme
+              color: savedThisCycle > 0 ? 'oklch(0.52 0.15 152)' : savedThisCycle < 0 ? 'oklch(0.55 0.19 25)' : 'oklch(0.5 0 0)',
             }}>
-              {netWorth >= 0 ? '↑' : '↓'} {formatCurrencyFull(Math.abs(netWorth - totalLiabilities))} assets
+              {savedThisCycle >= 0 ? <TrendingUp size={14} strokeWidth={2.5} /> : <TrendingDown size={14} strokeWidth={2.5} />}
+              {masked ? '₹ •••' : formatCurrencyFull(Math.round(Math.abs(savedThisCycle)))}{' '}
+              {savedThisCycle >= 0 ? 'saved' : 'withdrawn from savings'} this month
+              {!masked && savedPct !== null && (
+                <span style={{ paddingLeft: 7, marginLeft: 1, borderLeft: '1px solid color-mix(in oklch, currentColor 30%, transparent)' }}>
+                  {savedPct > 0 ? '+' : '−'}{Math.abs(savedPct) < 0.1 ? '<0.1' : Math.abs(savedPct).toFixed(1)}%
+                </span>
+              )}
             </span>
           </div>
 

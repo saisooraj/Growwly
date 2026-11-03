@@ -18,7 +18,7 @@ export function formatCurrency(amount: number, currency = '₹'): string {
 }
 
 export function formatCurrencyFull(amount: number, currency = '₹'): string {
-  return `${currency}${amount.toLocaleString('en-IN')}`
+  return `${currency}${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
 }
 
 export function getCurrentMonth(): string {
