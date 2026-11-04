@@ -39,8 +39,10 @@ export default function EmergencyFundCard() {
   const [balance, setBalance] = useState('') // only used during first-time setup
   const [target, setTarget] = useState('')
 
-  const pct = emergencyFund
-    ? Math.min((emergencyFund.currentBalance / emergencyFund.targetAmount) * 100, 100)
+  // A fund can be saved without a target; then there is no percentage to show
+  const hasTarget = !!emergencyFund && emergencyFund.targetAmount > 0
+  const pct = hasTarget
+    ? Math.max(0, Math.min((emergencyFund!.currentBalance / emergencyFund!.targetAmount) * 100, 100))
     : 0
   const efTone = pct >= 75 ? 'good' : pct >= 40 ? 'warn' : 'bad'
 
@@ -116,7 +118,7 @@ export default function EmergencyFundCard() {
           {isSetup ? (
             <div>
               <label className="label">Starting balance (₹)</label>
-              <input className="input" type="number" value={balance} onChange={e => setBalance(e.target.value)} placeholder="0" />
+              <input className="input" type="number" inputMode="decimal" value={balance} onChange={e => setBalance(e.target.value)} placeholder="0" />
               <p style={{ fontSize: 11.5, color: 'var(--text-4)', marginTop: 4 }}>
                 Your current emergency fund balance before you start tracking contributions.
               </p>
@@ -133,7 +135,7 @@ export default function EmergencyFundCard() {
 
           <div>
             <label className="label">Goal (₹)</label>
-            <input className="input" type="number" value={target} onChange={e => setTarget(e.target.value)} placeholder="0" />
+            <input className="input" type="number" inputMode="decimal" value={target} onChange={e => setTarget(e.target.value)} placeholder="0" />
           </div>
         </div>
 
@@ -176,7 +178,9 @@ export default function EmergencyFundCard() {
             <div className="h-eyebrow">Emergency fund</div>
             {emergencyFund && (
               <div style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 2 }}>
-                Target {masked ? '₹ ••••' : formatCurrencyFull(emergencyFund.targetAmount)} · 6 mo runway
+                {hasTarget
+                  ? <>Target {masked ? '₹ ••••' : formatCurrencyFull(emergencyFund.targetAmount)} · 6 mo runway</>
+                  : 'No target set'}
               </div>
             )}
           </div>
@@ -230,16 +234,26 @@ export default function EmergencyFundCard() {
                 </div>
               )}
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div className="num" style={{ fontSize: 16, fontWeight: 500, color: 'var(--warn-ink)' }}>
-                {Math.round(pct)}%
+            {hasTarget ? (
+              <div style={{ textAlign: 'right' }}>
+                <div className="num" style={{ fontSize: 16, fontWeight: 500, color: 'var(--warn-ink)' }}>
+                  {Math.round(pct)}%
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
+                  funded <ChevronRight size={12} />
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
-                funded <ChevronRight size={12} />
-              </div>
-            </div>
+            ) : (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); startEdit() }}
+                style={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 12, fontWeight: 500, color: 'var(--brand-ink)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Set target <ChevronRight size={12} />
+              </button>
+            )}
           </div>
-          <Bar value={pct} tone={efTone} height={6} />
+          {hasTarget && <Bar value={pct} tone={efTone} height={6} />}
         </>
       ) : (
         <p style={{ fontSize: 13, color: 'var(--text-3)' }}>

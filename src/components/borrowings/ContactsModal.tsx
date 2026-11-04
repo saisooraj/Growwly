@@ -135,16 +135,16 @@ export default function ContactsModal({ open, onClose }: Props) {
       <Transition appear show={open} as={Fragment}>
         <Dialog as="div" className="relative z-50" onClose={onClose}>
           <Transition.Child as={Fragment}
-            enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-            leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0">
+            enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
+            leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0">
             <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
           </Transition.Child>
 
-          <div className="fixed inset-0 overflow-y-auto">
+          <div className="fixed inset-0 overflow-y-auto overscroll-contain">
             <div className="flex min-h-full items-end sm:items-center justify-center p-4">
               <Transition.Child as={Fragment}
-                enter="ease-out duration-200" enterFrom="opacity-0 translate-y-4" enterTo="opacity-100 translate-y-0"
-                leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0">
+                enter="ease-out-strong duration-200" enterFrom="opacity-0 translate-y-4" enterTo="opacity-100 translate-y-0"
+                leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0">
                 <Dialog.Panel className="w-full max-w-md bg-white dark:bg-[#0F1120] border border-transparent dark:border-[#1E2140] rounded-2xl shadow-xl overflow-hidden">
 
                   {/* Header */}
@@ -170,7 +170,7 @@ export default function ContactsModal({ open, onClose }: Props) {
                     </div>
                   </div>
 
-                  <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '70vh', overflowY: 'auto' }}>
+                  <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '70vh', overflowY: 'auto', overscrollBehavior: 'contain' }}>
 
                     {/* Add form */}
                     {addOpen && (

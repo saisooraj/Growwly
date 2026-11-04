@@ -116,7 +116,7 @@ export default function CategoryPicker({ value, onChange, type }: Props) {
               background: isActive(cat) ? 'var(--brand-soft)' : 'var(--surface-2)',
               color: isActive(cat) ? 'var(--brand-ink)' : 'var(--text-2)',
               fontSize: 12.5, fontWeight: isActive(cat) ? 600 : 400,
-              cursor: 'pointer', transition: 'all .12s', whiteSpace: 'nowrap',
+              cursor: 'pointer', transition: 'background .12s, border-color .12s, color .12s', whiteSpace: 'nowrap',
             }}
           >
             <CategoryIcon category={cat} size={13} color={isActive(cat) ? 'var(--brand-ink)' : 'var(--text-3)'} />
@@ -135,7 +135,7 @@ export default function CategoryPicker({ value, onChange, type }: Props) {
             background: showCustom ? 'var(--brand-soft)' : 'var(--surface-2)',
             color: showCustom ? 'var(--brand-ink)' : 'var(--text-3)',
             fontSize: 12.5, fontWeight: showCustom ? 600 : 400,
-            cursor: 'pointer', transition: 'all .12s', whiteSpace: 'nowrap',
+            cursor: 'pointer', transition: 'background .12s, border-color .12s, color .12s', whiteSpace: 'nowrap',
           }}
         >
           <Pencil size={12} />
@@ -158,7 +158,7 @@ export default function CategoryPicker({ value, onChange, type }: Props) {
                 background: showIconGrid ? 'var(--brand-soft)' : 'var(--surface-2)',
                 cursor: 'pointer', display: 'flex',
                 alignItems: 'center', justifyContent: 'center',
-                transition: 'all .12s',
+                transition: 'background .12s, border-color .12s, color .12s',
                 color: showIconGrid ? 'var(--brand-ink)' : 'var(--text-3)',
               }}
             >
@@ -169,7 +169,7 @@ export default function CategoryPicker({ value, onChange, type }: Props) {
             </button>
 
             {/* Name input */}
-            <input
+            <input maxLength={40}
               ref={nameRef}
               type="text"
               className="input"
@@ -239,7 +239,7 @@ export default function CategoryPicker({ value, onChange, type }: Props) {
                   })}
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 280, overflowY: 'auto' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 280, overflowY: 'auto', overscrollBehavior: 'contain' }}>
                   {PALETTE_GROUPS.map(group => {
                     const groupIcons = ICON_PALETTE.filter(p => p.group === group)
                     if (groupIcons.length === 0) return null

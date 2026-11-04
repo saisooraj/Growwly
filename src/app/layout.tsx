@@ -18,7 +18,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
+  // Pinch-zoom stays on; input zoom is prevented by 16px touch inputs in globals.css
+  viewportFit: 'cover',                 // paint under the notch, pad with env(safe-area-inset-*)
+  interactiveWidget: 'resizes-content', // Android keyboard shrinks the layout like iOS
   themeColor: '#16a34a',
 }
 
@@ -39,6 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
             <Toaster
               position="top-right"
+              containerStyle={{ top: 'calc(16px + env(safe-area-inset-top, 0px))' }}
               toastOptions={{
                 duration: 2000,
                 style: {

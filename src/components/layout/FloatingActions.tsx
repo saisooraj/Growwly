@@ -23,13 +23,13 @@ export default function FloatingActions() {
       `}</style>
 
       {/*
-        Mobile : right-3.5 (14px), bottom-[100px] — clears the floating nav pill
+        Mobile : right-3.5 (14px), 100px up (more above a home indicator) — clears the floating nav pill
         Desktop: lg:right-6 (24px), lg:bottom-6 (24px)
       */}
       <button
         onClick={() => router.push('/chat')}
         aria-label="Open Groowtt AI"
-        className="gw-ai-fab fixed z-40 right-3.5 bottom-[100px] lg:right-6 lg:bottom-6 flex items-center justify-center"
+        className="gw-ai-fab fixed z-40 right-3.5 bottom-[max(100px,calc(env(safe-area-inset-bottom,0px)+80px))] lg:right-6 lg:bottom-6 flex items-center justify-center"
         style={{
           width: 50, height: 50,
           borderRadius: 16,

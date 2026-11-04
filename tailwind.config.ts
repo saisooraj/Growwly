@@ -9,6 +9,10 @@ const config: Config = {
   darkMode: 'class',
   theme: {
     extend: {
+      transitionTimingFunction: {
+        'out-strong': 'cubic-bezier(0.23, 1, 0.32, 1)',
+        drawer: 'cubic-bezier(0.32, 0.72, 0, 1)',
+      },
       colors: {
         brand: {
           50:  '#f0fdf4',
@@ -43,6 +47,8 @@ const config: Config = {
       },
     },
   },
+  // hover: utilities only apply on devices with a real pointer — no stuck hover after a tap
+  future: { hoverOnlyWhenSupported: true },
   plugins: [],
 }
 export default config

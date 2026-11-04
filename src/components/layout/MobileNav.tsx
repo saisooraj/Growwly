@@ -84,7 +84,7 @@ function MoreSheet({
     } else if (mounted) {
       setClosing(true)
       document.body.style.overflow = ''
-      const t = setTimeout(() => { setMounted(false); setClosing(false) }, 340)
+      const t = setTimeout(() => { setMounted(false); setClosing(false) }, 220)
       return () => clearTimeout(t)
     }
     return () => { document.body.style.overflow = '' }
@@ -228,9 +228,9 @@ export default function MobileNav() {
         className="flex lg:hidden"
         style={{
           position: 'fixed',
-          bottom: 20,
-          left: 14,
-          right: 14,
+          bottom: 'max(20px, env(safe-area-inset-bottom, 0px))',
+          left: 'max(14px, env(safe-area-inset-left, 0px))',
+          right: 'max(14px, env(safe-area-inset-right, 0px))',
           zIndex: 50,
           pointerEvents: 'none',
         }}

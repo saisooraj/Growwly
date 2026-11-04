@@ -1001,23 +1001,23 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
         <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={onClose}>
           <Transition.Child
             as={Fragment}
-            enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-            leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
+            enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
+            leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
           >
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
           </Transition.Child>
 
-          <div style={{ position: 'fixed', inset: 0, overflowY: 'auto' }}>
+          <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
             <div
               style={{ display: 'flex', minHeight: '100%', alignItems: 'flex-end', justifyContent: 'center' }}
               className="sm:items-center sm:p-4"
             >
               <Transition.Child
                 as={Fragment}
-                enter="ease-out duration-300"
+                enter="ease-drawer duration-300"
                 enterFrom="opacity-0 translate-y-full sm:translate-y-4 sm:opacity-0"
                 enterTo="opacity-100 translate-y-0"
-                leave="ease-in duration-200"
+                leave="ease-out-strong duration-200"
                 leaveFrom="opacity-100 translate-y-0"
                 leaveTo="opacity-0 translate-y-full sm:translate-y-4 sm:opacity-0"
               >
@@ -1049,7 +1049,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                     </button>
                   </div>
 
-                  <form id="edit-refund-form" onSubmit={handleRefundSave} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', flex: 1 }}>
+                  <form id="edit-refund-form" onSubmit={handleRefundSave} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', overscrollBehavior: 'contain', flex: 1 }}>
                     {linkedOriginal && (
                       <button
                         type="button"
@@ -1078,7 +1078,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                     </div>
                     <div>
                       <label className="label">Notes (optional)</label>
-                      <input type="text" className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. Cancellation refund" />
+                      <input maxLength={200} type="text" className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. Cancellation refund" />
                     </div>
                   </form>
 
@@ -1110,14 +1110,14 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={onClose}>
         <Transition.Child
           as={Fragment}
-          enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-          leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
+          enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
+          leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
         >
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
         </Transition.Child>
 
         {/* ── Sheet wrapper ── */}
-        <div style={{ position: 'fixed', inset: 0, overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
           {/*
             Mobile  : flex-end  → sheet anchors to bottom, no side padding, flush edge
             Desktop : center    → centred modal with padding
@@ -1128,10 +1128,10 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           >
             <Transition.Child
               as={Fragment}
-              enter="ease-out duration-300"
+              enter="ease-drawer duration-300"
               enterFrom="opacity-0 translate-y-full sm:translate-y-4 sm:opacity-0"
               enterTo="opacity-100 translate-y-0"
-              leave="ease-in duration-200"
+              leave="ease-out-strong duration-200"
               leaveFrom="opacity-100 translate-y-0"
               leaveTo="opacity-0 translate-y-full sm:translate-y-4 sm:opacity-0"
             >
@@ -1167,7 +1167,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                   </button>
                 </div>
 
-                <form id="add-tx-form" onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', flex: 1 }}>
+                <form id="add-tx-form" onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', overscrollBehavior: 'contain', flex: 1 }}>
 
                   {/* Type tabs */}
                   <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 12, background: 'var(--surface-2)' }}>
@@ -1182,7 +1182,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                             ? tab.id === 'expense' ? 'var(--bad-ink)' : tab.id === 'income' ? 'var(--good-ink)' : tab.id === 'savings' ? 'var(--brand-ink)' : 'var(--info-ink)'
                             : 'var(--text-3)',
                           boxShadow: activeTab === tab.id ? 'var(--shadow-sm)' : 'none',
-                          transition: 'all .15s',
+                          transition: 'background .15s, color .15s, box-shadow .15s',
                         }}>
                         {tab.icon}{tab.label}
                       </button>
@@ -1201,7 +1201,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                               padding: '10px 14px', borderRadius: 10,
                               border: `1px solid ${transferKind === k.id ? 'var(--brand)' : 'var(--border)'}`,
                               background: transferKind === k.id ? 'var(--brand-soft)' : 'var(--surface)',
-                              cursor: 'pointer', textAlign: 'left', transition: 'all .15s',
+                              cursor: 'pointer', textAlign: 'left', transition: 'background .15s, border-color .15s',
                             }}>
                             <div style={{
                               width: 32, height: 32, borderRadius: 8, flexShrink: 0,
@@ -1230,7 +1230,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                            transferKind === 'loan_repayment_received' ? 'Who paid you back?' :
                            'Who are you repaying?'}
                         </label>
-                        <input
+                        <input maxLength={60}
                           ref={personInputRef}
                           type="text"
                           className="input"
@@ -1359,6 +1359,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                                     <span style={{ fontSize: 12, color: 'var(--text-3)' }}>₹</span>
                                     <input
                                       type="number"
+                                      inputMode="decimal"
                                       min={0}
                                       max={outstanding}
                                       value={applied}
@@ -1411,7 +1412,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                               background: savingsKind === d.id ? 'var(--surface)' : 'transparent',
                               color: savingsKind === d.id ? (d.id === 'savings_withdrawal' ? 'var(--good-ink)' : 'var(--text)') : 'var(--text-3)',
                               boxShadow: savingsKind === d.id ? 'var(--shadow-sm)' : 'none',
-                              transition: 'all .15s',
+                              transition: 'background .15s, color .15s, box-shadow .15s',
                             }}>
                             <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 500 }}>{d.icon}{d.label}</span>
                             <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{d.sub}</span>
@@ -1434,7 +1435,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                                   border: `1.5px solid ${active ? 'var(--brand)' : 'var(--border)'}`,
                                   background: active ? 'var(--brand-soft)' : 'var(--surface-2)',
                                   color: active ? 'var(--brand-ink)' : 'var(--text-2)',
-                                  fontSize: 12.5, fontWeight: 500, cursor: 'pointer', transition: 'all .12s', whiteSpace: 'nowrap',
+                                  fontSize: 12.5, fontWeight: 500, cursor: 'pointer', transition: 'background .12s, border-color .12s, color .12s', whiteSpace: 'nowrap',
                                 }}>
                                 <meta.Icon size={13} color={active ? 'var(--brand-ink)' : meta.color} stroke={1.5} />
                                 {v}
@@ -1442,7 +1443,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                             )
                           })}
                         </div>
-                        <input
+                        <input maxLength={40}
                           type="text"
                           className="input"
                           style={{ fontSize: 13, marginTop: 2 }}
@@ -1477,7 +1478,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
 
                           {showUnits && (
                             <div style={{ display: 'flex', gap: 8 }}>
-                              <input className="input" style={{ fontSize: 13 }} type="number" min="0" step="0.0001"
+                              <input className="input" style={{ fontSize: 13 }} type="number" inputMode="decimal" min="0" step="0.0001"
                                 placeholder={savingsKind === 'savings_contribution' ? 'Units allotted' : 'Units redeemed'}
                                 value={linkUnits} onChange={e => setLinkUnits(e.target.value)} />
                               {npsSchemes.length > 1 && (
@@ -1506,7 +1507,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                                     background: linkMode === m.id ? 'var(--surface)' : 'transparent',
                                     color: linkMode === m.id ? 'var(--text)' : 'var(--text-3)',
                                     boxShadow: linkMode === m.id ? 'var(--shadow-sm)' : 'none',
-                                    transition: 'all .15s',
+                                    transition: 'background .15s, color .15s, box-shadow .15s',
                                   }}>
                                   <span style={{ fontSize: 12.5, fontWeight: 500 }}>{m.label}</span>
                                   <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{m.sub}</span>
@@ -1549,9 +1550,9 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                             ))}
                           </div>
                           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                            <input className="input" type="number" min="0" step="0.001" placeholder="Grams"
+                            <input className="input" type="number" inputMode="decimal" min="0" step="0.001" placeholder="Grams"
                               value={goldGrams} onChange={e => setGoldGrams(e.target.value)} />
-                            <input className="input" type="number" min="0" step="0.01" placeholder="₹/gram"
+                            <input className="input" type="number" inputMode="decimal" min="0" step="0.01" placeholder="₹/gram"
                               value={goldPricePerGram} onChange={e => setGoldPricePerGram(e.target.value)} />
                           </div>
                           {parseFloat(goldGrams) > 0 && parseFloat(goldPricePerGram) > 0 && (
@@ -1578,7 +1579,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                             background: splitEnabled ? 'var(--brand)' : 'var(--surface-2)',
                             color: splitEnabled ? '#fff' : 'var(--text-3)',
                             border: `1px solid ${splitEnabled ? 'var(--brand)' : 'var(--border)'}`,
-                            cursor: 'pointer', transition: 'all .15s',
+                            cursor: 'pointer', transition: 'background .15s, border-color .15s, color .15s',
                           }}
                         >
                           <Split size={11} />
@@ -1627,7 +1628,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                               <button key={m} type="button" onClick={() => setSplitMode(m)}
                                 style={{
                                   flex: 1, padding: '5px 0', borderRadius: 7, border: 'none', cursor: 'pointer',
-                                  fontSize: 11.5, fontWeight: 500, transition: 'all .15s',
+                                  fontSize: 11.5, fontWeight: 500, transition: 'background .15s, color .15s, box-shadow .15s',
                                   background: splitMode === m ? 'var(--surface)' : 'transparent',
                                   color: splitMode === m ? 'var(--text)' : 'var(--text-3)',
                                   boxShadow: splitMode === m ? 'var(--shadow-sm)' : 'none',
@@ -1675,7 +1676,8 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                                   {/* Value input (percentage or manual) */}
                                   {splitMode !== 'equal' && (
                                     <input
-                                      type="number" min="0"
+                                      type="number"
+                                      inputMode="decimal" min="0"
                                       max={splitMode === 'percentage' ? 100 : undefined}
                                       step={splitMode === 'percentage' ? 1 : 0.01}
                                       value={p.value || ''}
@@ -1707,7 +1709,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                                             ? k === 'lent' ? 'var(--warn)' : 'var(--text-3)'
                                             : 'transparent',
                                           color: p.kind === k ? '#fff' : 'var(--text-3)',
-                                          transition: 'all .15s',
+                                          transition: 'background .15s, color .15s',
                                         }}>
                                         {k === 'lent' ? 'Lent' : 'Absorbed'}
                                       </button>
@@ -1729,7 +1731,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                           {/* Add person */}
                           <div style={{ display: 'flex', gap: 6 }}>
                             <div style={{ flex: 1, position: 'relative' }}>
-                              <input
+                              <input maxLength={60}
                                 type="text"
                                 list="split-people"
                                 placeholder="Add person..."
@@ -1757,7 +1759,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                                 padding: '7px 12px', borderRadius: 9, border: 'none', cursor: 'pointer',
                                 background: newName.trim() ? 'var(--brand)' : 'var(--surface-2)',
                                 color: newName.trim() ? '#fff' : 'var(--text-3)',
-                                fontSize: 12, fontWeight: 500, flexShrink: 0, transition: 'all .15s',
+                                fontSize: 12, fontWeight: 500, flexShrink: 0, transition: 'background .15s, color .15s',
                               }}>
                               <UserPlus size={13} /> Add
                             </button>
@@ -1794,7 +1796,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                     <label className="label">
                       {activeTab === 'savings' ? 'Note' : 'Description'}
                     </label>
-                    <input
+                    <input maxLength={200}
                       type="text"
                       placeholder={
                         activeTab === 'savings'
@@ -1932,7 +1934,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                                 style={{ flex: 1, fontSize: 13 }}
                               />
                             </div>
-                            <input
+                            <input maxLength={200}
                               type="text" className="input" placeholder="Notes (optional)"
                               value={refundNotes} onChange={e => setRefundNotes(e.target.value)}
                               style={{ fontSize: 13 }}

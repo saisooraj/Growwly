@@ -182,7 +182,7 @@ function DashboardPage() {
           ))}
         </div>
       ) : (
-        <div className="anim-page gw-stagger" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+        <div className="gw-stagger" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
           {cardOrder.map(id => BLOCKS[id] ? <div key={id} className={`dash-block ${BLOCK_CLASS[id] ?? ''}`}>{BLOCKS[id]}</div> : null)}
         </div>
       )}

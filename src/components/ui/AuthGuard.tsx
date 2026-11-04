@@ -12,7 +12,7 @@ import LoadingScreen from '@/components/ui/LoadingScreen'
 
 function PrivacyConsentSheet({ onAgree, saving }: { onAgree: () => void; saving: boolean }) {
   return (
-    <div className="min-h-screen bg-[#06030F] flex flex-col items-center justify-end p-4 pb-8">
+    <div className="min-h-dvh bg-[#06030F] flex flex-col items-center justify-end p-4 pb-8">
       <div className="pointer-events-none fixed inset-0 bg-violet-700/10 blur-[130px]" />
 
       <div className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-7 shadow-2xl relative z-10">

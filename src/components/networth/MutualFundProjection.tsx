@@ -228,7 +228,7 @@ export default function MutualFundProjection({ assets, masked, onToggleMask }: P
                 borderColor: active ? m.border : 'transparent',
                 background: active ? m.soft : 'transparent',
                 color: active ? m.ink : 'var(--text-3)',
-                transition: 'all .15s ease',
+                transition: 'background .15s ease, border-color .15s ease, color .15s ease',
               }}
             >
               {m.label}
@@ -250,7 +250,7 @@ export default function MutualFundProjection({ assets, masked, onToggleMask }: P
                 borderRadius: 8, border: '1px solid var(--border)',
                 background: active ? 'var(--text)' : 'var(--surface-2)',
                 color: active ? 'var(--bg)' : 'var(--text-3)',
-                transition: 'all .15s ease',
+                transition: 'background .15s ease, color .15s ease',
               }}
             >
               {y} yr

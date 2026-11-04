@@ -159,7 +159,8 @@ function SpendList({ txs, showDate }: { txs: Transaction[]; showDate: boolean })
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 172, overflowY: 'auto', marginRight: -4, paddingRight: 4 }}>
       {txs.map(t => {
         const name = getCategoryDisplayName(t.category)
-        const sub = [t.notes ? name : '', showDate ? format(parseISO(t.date), 'EEE, MMM d') : ''].filter(Boolean).join(' · ')
+        const notes = t.notes?.trim()
+        const sub = [notes ? name : '', showDate ? format(parseISO(t.date), 'EEE, MMM d') : ''].filter(Boolean).join(' · ')
         return (
           <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0' }}>
             <div style={{
@@ -170,8 +171,8 @@ function SpendList({ txs, showDate }: { txs: Transaction[]; showDate: boolean })
               <CategoryIcon category={t.category} size={14} color="#fff" />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {t.notes || name}
+              <div dir="auto" style={{ fontSize: 12.5, fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {notes || name}
               </div>
               {sub && (
                 <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -215,6 +216,7 @@ export default function SafeToSpendCard() {
   , [transactions, from, to])
   const rangeTotal = rangeTxs.reduce((s, t) => s + t.amount, 0)
   const animatedTotal = useCountUp(rangeTotal, 950)
+  const heroTotalText = formatCurrencyFull(rangeTotal)
 
   const eyebrow = range === 'today' ? 'Spent today'
     : range === 'custom' ? `Spent · ${format(parseISO(from), 'MMM d')} – ${format(parseISO(to), 'MMM d')}`
@@ -305,14 +307,17 @@ export default function SafeToSpendCard() {
       {/* ── Total (left) + that range's transactions (right) ──
           flexGrow takes up any extra height when the hero side column is taller */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', position: 'relative', flexGrow: 1, alignContent: 'flex-start' }}>
-        <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+        <div style={{ flex: '1 1 160px', minWidth: 0, containerType: 'inline-size' }}>
           <div style={{
-            fontSize: 'clamp(36px, 7vw, 52px)',
+            // Never truncate the amount: shrink the type so the final figure fits its column
+            // (Geist Mono at this tracking is ~0.58em per character)
+            fontSize: `min(clamp(36px, 7vw, 52px), ${(100 / (heroTotalText.length * 0.58)).toFixed(2)}cqi)`,
+            whiteSpace: 'nowrap',
             fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1,
             color: '#fff',
             fontFamily: "'Geist Mono', monospace",
           }}>
-            {formatCurrencyFull(animatedTotal)}
+            {formatCurrencyFull(Number.isInteger(rangeTotal) ? Math.round(animatedTotal) : animatedTotal)}
           </div>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 6, fontWeight: 500 }}>
             {rangeTxs.length} transaction{rangeTxs.length !== 1 ? 's' : ''}

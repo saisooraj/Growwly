@@ -46,8 +46,11 @@ function dayLabel(dateStr: string): string {
   const d = parseISO(dateStr)
   if (isToday(d))     return `Today · ${format(d, 'MMM d')}`
   if (isYesterday(d)) return `Yesterday · ${format(d, 'MMM d')}`
-  return format(d, 'EEE, MMM d')
+  // Search and date filters span every month, so older rows need the year to be unambiguous
+  return format(d, d.getFullYear() === new Date().getFullYear() ? 'EEE, MMM d' : 'EEE, MMM d, yyyy')
 }
+
+const MAX_TAGS = 3
 
 // ── Single transaction row ───────────────────────────────────────────────────
 
@@ -68,6 +71,9 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
     const vehicles = s.settings?.vehicles ?? []
     return isFill && vehicles.length > 1 ? vehicles.find(v => v.id === tx.vehicleId)?.name : undefined
   })
+
+  const notes = tx.notes?.trim()
+  const hasBadges = isBorrowing || isTransfer || !!tx.settledPerson || !!tx.isRecurring || !!tx._refundedAmount
 
   let color: string, icon: React.ReactNode, label: string, amountColor: string, prefix: string
 
@@ -137,10 +143,11 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {label}
-          </span>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {label}
+        </div>
+        {hasBadges && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 3, minWidth: 0 }}>
           {isBorrowing && (
             <span
               className="pill"
@@ -159,8 +166,8 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
               : <span className="pill info" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0 }}>transfer</span>
           )}
           {tx.settledPerson && (
-            <span className="pill" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0, background: 'var(--warn-soft)', color: 'var(--warn-ink)', border: 'none' }}>
-              via {tx.settledPerson}
+            <span className="pill" style={{ fontSize: 10.5, padding: '1px 7px', minWidth: 0, maxWidth: '100%', background: 'var(--warn-soft)', color: 'var(--warn-ink)', border: 'none' }}>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>via {tx.settledPerson}</span>
             </span>
           )}
           {tx.isRecurring && (
@@ -176,9 +183,11 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
             </span>
           )}
         </div>
-        {tx.notes && (
-          <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {tx.notes}
+        )}
+        {/* 9, 10 — whitespace-only notes don't render; RTL notes keep their own direction */}
+        {notes && (
+          <div dir="auto" style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {notes}
           </div>
         )}
         {!!tx.goldGrams && (
@@ -200,19 +209,24 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
           </div>
         )}
         {tx.tags && tx.tags.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-            {tx.tags.map(tag => (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, minWidth: 0 }}>
+            {tx.tags.slice(0, MAX_TAGS).map(tag => (
               <span
                 key={tag}
                 style={{
                   fontSize: 10, fontWeight: 500, padding: '1px 6px', borderRadius: 20,
                   border: '1px solid var(--border)', color: 'var(--text-3)', background: 'var(--surface-2)',
-                  whiteSpace: 'nowrap',
+                  whiteSpace: 'nowrap', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis',
                 }}
               >
                 #{tag}
               </span>
             ))}
+            {tx.tags.length > MAX_TAGS && (
+              <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 4px', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+                +{tx.tags.length - MAX_TAGS}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -278,27 +292,28 @@ function DayGroup({ date, txs, defaultOpen, onSelect }: {
           ? <ChevronDown  size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} />
           : <ChevronRight size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} />
         }
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-2)', flex: 1, textAlign: 'left' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-2)', flexShrink: 0, whiteSpace: 'nowrap', textAlign: 'left' }}>
           {dayLabel(date)}
         </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        {/* Totals take the remaining width and wrap onto a second line on narrow screens */}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', columnGap: 10, rowGap: 2 }}>
           {income > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: 'var(--good-ink)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--good-ink)' }}>
               <ArrowDown size={11} />{formatCurrencyFull(income)}
             </span>
           )}
           {refunded > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: 'var(--good-ink)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--good-ink)' }}>
               <RotateCcw size={11} />{formatCurrencyFull(refunded)}
             </span>
           )}
           {expenses > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: 'var(--bad-ink)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--bad-ink)' }}>
               <ArrowUp size={11} />{formatCurrencyFull(expenses)}
             </span>
           )}
           {saved > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: 'var(--warn-ink)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--warn-ink)' }}>
               <ArrowUp size={11} />{formatCurrencyFull(saved)}
             </span>
           )}

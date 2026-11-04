@@ -210,7 +210,7 @@ export default function MoneyStreakCard() {
                       ? 'color-mix(in oklch, var(--warn) 60%, transparent)'
                       : 'color-mix(in oklch, var(--warn) 22%, transparent)'}`,
                     fontFamily: 'inherit',
-                    transition: 'all .15s',
+                    transition: 'background .15s, border-color .15s',
                   }}
                 >
                   <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--warn-ink)' }}>
@@ -250,7 +250,7 @@ export default function MoneyStreakCard() {
                 fontSize: 12.5, fontWeight: 700,
                 cursor: selected.size > 0 && !saving ? 'pointer' : 'not-allowed',
                 fontFamily: 'inherit', opacity: saving ? 0.7 : 1,
-                transition: 'all .15s',
+                transition: 'background .15s, color .15s, opacity .15s',
               }}
             >
               {saving ? 'Saving…' : `Restore${selected.size > 0 ? ` (${selected.size})` : ''}`}

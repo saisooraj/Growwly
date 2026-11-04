@@ -98,7 +98,7 @@ function TaskRow({ task, onEdit, onDeleted }: TaskRowProps) {
             border: `2px solid ${isDone ? 'var(--good)' : 'var(--border-strong)'}`,
             background: isDone ? 'var(--good)' : 'transparent',
             cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all .15s',
+            transition: 'background .15s, border-color .15s',
           }}
         >
           {isDone && <Check size={11} color="#fff" strokeWidth={3} />}

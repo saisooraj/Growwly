@@ -275,8 +275,8 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
         <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={onClose}>
           <Transition.Child
             as={Fragment}
-            enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-            leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
+            enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
+            leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
           >
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
           </Transition.Child>
@@ -285,8 +285,8 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
                className="sm:items-center">
             <Transition.Child
               as={Fragment}
-              enter="ease-out duration-200" enterFrom="opacity-0 translate-y-4" enterTo="opacity-100 translate-y-0"
-              leave="ease-in duration-150" leaveFrom="opacity-100 translate-y-0" leaveTo="opacity-0 translate-y-4"
+              enter="ease-out-strong duration-200" enterFrom="opacity-0 translate-y-4" enterTo="opacity-100 translate-y-0"
+              leave="ease-out-strong duration-150" leaveFrom="opacity-100 translate-y-0" leaveTo="opacity-0 translate-y-4"
             >
               <Dialog.Panel style={{
                 width: '100%', maxWidth: 420,

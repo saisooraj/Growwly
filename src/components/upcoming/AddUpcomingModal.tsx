@@ -93,19 +93,19 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
       <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={onClose}>
         <Transition.Child
           as={Fragment}
-          enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-          leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
+          enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
+          leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
         >
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
         </Transition.Child>
 
-        <div style={{ position: 'fixed', inset: 0, overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
           <div style={{ display: 'flex', minHeight: '100%', alignItems: 'flex-end', justifyContent: 'center', padding: 16 }}
                className="sm:items-center">
             <Transition.Child
               as={Fragment}
-              enter="ease-out duration-200" enterFrom="opacity-0 translate-y-4" enterTo="opacity-100 translate-y-0"
-              leave="ease-in duration-150" leaveFrom="opacity-100 translate-y-0" leaveTo="opacity-0 translate-y-4"
+              enter="ease-out-strong duration-200" enterFrom="opacity-0 translate-y-4" enterTo="opacity-100 translate-y-0"
+              leave="ease-out-strong duration-150" leaveFrom="opacity-100 translate-y-0" leaveTo="opacity-0 translate-y-4"
             >
               <Dialog.Panel style={{
                 width: '100%', maxWidth: 420,
@@ -148,7 +148,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
                             background: active ? activeBg : 'var(--surface-2)',
                             color: active ? activeColor : 'var(--text-3)',
                             fontSize: 13, fontWeight: 600,
-                            transition: 'all .15s',
+                            transition: 'background .15s, border-color .15s, color .15s, opacity .15s',
                             opacity: editItem ? 0.7 : 1,
                           }}
                         >
@@ -161,7 +161,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
 
                   <div>
                     <label className="label">{isIncome ? "What's coming in?" : 'What is it?'}</label>
-                    <input
+                    <input maxLength={80}
                       type="text"
                       className="input"
                       placeholder={isIncome ? 'e.g. Security deposit, Freelance payout…' : 'e.g. Rent, Credit card bill, Flight…'}
@@ -176,9 +176,10 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
                     <label className="label">Amount (₹)</label>
                     <input
                       type="number"
+                      inputMode="decimal"
                       step="0.01"
                       min="0"
-                      className="input"
+                      className="input input-lg"
                       style={{ fontSize: 18, fontWeight: 600 }}
                       placeholder="0"
                       value={amount}
@@ -219,7 +220,7 @@ export default function AddUpcomingModal({ open, onClose, editItem }: Props) {
 
                   <div>
                     <label className="label">Notes (optional)</label>
-                    <input
+                    <input maxLength={200}
                       type="text"
                       className="input"
                       placeholder="Any extra detail…"

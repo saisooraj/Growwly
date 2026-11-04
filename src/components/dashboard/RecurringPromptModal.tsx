@@ -91,19 +91,19 @@ export default function RecurringPromptModal() {
     <Transition appear show={open} as={Fragment}>
       <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={dismiss}>
         <Transition.Child as={Fragment}
-          enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-          leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
+          enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
+          leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
         >
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,20,.42)', backdropFilter: 'blur(4px)' }} />
         </Transition.Child>
 
-        <div style={{ position: 'fixed', inset: 0, overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
           <div style={{ display: 'flex', minHeight: '100%', alignItems: 'flex-end', justifyContent: 'center', padding: 16 }}
                className="sm:items-center">
             <Transition.Child as={Fragment}
-              enter="ease-out duration-200" enterFrom="opacity-0 translate-y-4"
+              enter="ease-out-strong duration-200" enterFrom="opacity-0 translate-y-4"
               enterTo="opacity-100 translate-y-0"
-              leave="ease-in duration-150" leaveFrom="opacity-100 translate-y-0"
+              leave="ease-out-strong duration-150" leaveFrom="opacity-100 translate-y-0"
               leaveTo="opacity-0 translate-y-4"
             >
               <Dialog.Panel style={{

@@ -415,11 +415,11 @@ export default function NetWorthPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Current Balance (₹)</label>
-              <input className="input" type="number" value={efBalance} onChange={e => setEfBalance(e.target.value)} autoFocus />
+              <input className="input" type="number" inputMode="decimal" value={efBalance} onChange={e => setEfBalance(e.target.value)} autoFocus />
             </div>
             <div>
               <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Target Amount (₹)</label>
-              <input className="input" type="number" value={efTarget} onChange={e => setEfTarget(e.target.value)} />
+              <input className="input" type="number" inputMode="decimal" value={efTarget} onChange={e => setEfTarget(e.target.value)} />
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={saveEf} disabled={efSaving} className="btn-primary" style={{ flex: 1, justifyContent: 'center', fontSize: 13 }}>
@@ -513,7 +513,7 @@ export default function NetWorthPage() {
                       <div style={{ flex: 1 }}>
                         <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4 }}>Prior balance (₹) — what you had before tracking</label>
                         <input
-                          className="input" style={{ fontSize: 13 }} type="number" min="0"
+                          className="input" style={{ fontSize: 13 }} type="number" inputMode="decimal" min="0"
                           placeholder="e.g. 250000"
                           value={editingPrior}
                           onChange={e => setEditingPrior(e.target.value)}

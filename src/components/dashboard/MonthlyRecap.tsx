@@ -222,18 +222,18 @@ export default function MonthlyRecap() {
     <Transition appear show={open} as={Fragment}>
       <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={close}>
         <Transition.Child as={Fragment}
-          enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-          leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
+          enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
+          leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
         >
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,20,.5)', backdropFilter: 'blur(4px)' }} />
         </Transition.Child>
 
-        <div style={{ position: 'fixed', inset: 0, overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
           <div style={{ display: 'flex', minHeight: '100%', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
             <Transition.Child as={Fragment}
-              enter="ease-out duration-300" enterFrom="opacity-0 scale-90"
+              enter="ease-out-strong duration-300" enterFrom="opacity-0 scale-90"
               enterTo="opacity-100 scale-100"
-              leave="ease-in duration-200" leaveFrom="opacity-100 scale-100"
+              leave="ease-out-strong duration-200" leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-90"
             >
               <Dialog.Panel style={{
@@ -252,7 +252,7 @@ export default function MonthlyRecap() {
                           height: 6, borderRadius: 999, border: 'none', cursor: 'pointer',
                           width: i === slide ? 20 : 6,
                           background: i === slide ? 'var(--brand)' : 'var(--surface-3)',
-                          transition: 'all .25s cubic-bezier(.22,1,.36,1)',
+                          transition: 'width .25s cubic-bezier(.22,1,.36,1), background .25s cubic-bezier(.22,1,.36,1)',
                         }}
                       />
                     ))}

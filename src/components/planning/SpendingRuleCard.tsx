@@ -215,7 +215,7 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
               {BUCKETS.map(key => (
                 <div key={key}>
                   <label style={{ fontSize: 11, color: 'var(--text-3)', display: 'block', marginBottom: 4, textTransform: 'capitalize' }}>{key} %</label>
-                  <input type="number" min={0} max={100} value={ruleDraft[key]}
+                  <input type="number" inputMode="decimal" min={0} max={100} value={ruleDraft[key]}
                     onChange={e => setRuleDraft(d => ({ ...d, [key]: Number(e.target.value) }))}
                     className="input" style={{ textAlign: 'center', fontWeight: 600, fontSize: 16 }} />
                 </div>
@@ -257,7 +257,7 @@ export default function SpendingRuleCard({ plan, masked }: { plan: BudgetPlan; m
                         const active = current === b
                         return (
                           <button key={b} onClick={() => assignBucket(cat, b)}
-                            style={{ padding: '3px 8px', fontSize: 11, fontWeight: active ? 600 : 400, border: 'none', cursor: 'pointer', background: active ? meta.color : 'transparent', color: active ? '#fff' : 'var(--text-3)', transition: 'all .12s' }}>
+                            style={{ padding: '3px 8px', fontSize: 11, fontWeight: active ? 600 : 400, border: 'none', cursor: 'pointer', background: active ? meta.color : 'transparent', color: active ? '#fff' : 'var(--text-3)', transition: 'background .12s, color .12s' }}>
                             {meta.label[0]}
                           </button>
                         )

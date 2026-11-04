@@ -8,6 +8,8 @@
    Design tokens
 ══════════════════════════════════════════ */
 :root {
+  --ease-out:     cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer:  cubic-bezier(0.32, 0.72, 0, 1);
   --bg:           #F6F5F0;
   --surface:      #FFFFFF;
   --surface-2:    #EFEEE7;
@@ -191,8 +193,10 @@
 .dark .bg-slate-50  { background-color: var(--surface-2) !important; }
 .dark .bg-slate-100 { background-color: var(--surface-2) !important; }
 .dark .bg-slate-200 { background-color: var(--surface-3) !important; }
-.dark .hover\:bg-slate-100:hover { background-color: var(--surface-3) !important; }
-.dark .hover\:bg-slate-50:hover  { background-color: var(--surface-2) !important; }
+@media (hover: hover) and (pointer: fine) {
+  .dark .hover\:bg-slate-100:hover { background-color: var(--surface-3) !important; }
+  .dark .hover\:bg-slate-50:hover  { background-color: var(--surface-2) !important; }
+}
 
 .dark .bg-red-50    { background-color: var(--bad-soft)  !important; }
 .dark .bg-green-50  { background-color: var(--good-soft) !important; }
@@ -215,8 +219,10 @@
 .dark .text-blue-600 { color: var(--info-ink) !important; }
 .dark .text-blue-500 { color: var(--info-ink) !important; }
 
-.dark .hover\:bg-red-100:hover   { background-color: var(--bad-soft)  !important; }
-.dark .hover\:bg-green-100:hover { background-color: var(--good-soft) !important; }
+@media (hover: hover) and (pointer: fine) {
+  .dark .hover\:bg-red-100:hover   { background-color: var(--bad-soft)  !important; }
+  .dark .hover\:bg-green-100:hover { background-color: var(--good-soft) !important; }
+}
 
 /* Density */
 body[data-density="compact"] { --pad: 14px; --row-gap: 10px; }
@@ -228,7 +234,19 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
-  html { color-scheme: light dark; }
+  html {
+    color-scheme: light dark;
+    -webkit-text-size-adjust: 100%;          /* no font inflation in landscape */
+    -webkit-tap-highlight-color: transparent; /* no gray flash on tap */
+  }
+  /* Controls fire on tap without the double-tap-zoom wait, and a long-press
+     doesn't select their label. Content text stays selectable. */
+  button, a, [role="button"], [role="tab"], summary {
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  button, [role="button"], [role="tab"] { -webkit-touch-callout: none; }
   body {
     background: var(--bg);
     color: var(--text);
@@ -251,6 +269,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   display: grid;
   grid-template-columns: 248px 1fr;
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
 }
 @media (max-width: 1023px) {
@@ -307,7 +326,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
     white-space: nowrap;
     line-height: 1;
   }
-  .btn:hover { background: var(--surface-2); }
+  @media (hover: hover) and (pointer: fine) { .btn:hover { background: var(--surface-2); } }
   .btn:active { transform: scale(0.96); }
   .btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 
@@ -319,7 +338,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
     color: var(--bg);
     border-color: var(--text);
   }
-  .btn-primary:hover { background: color-mix(in oklch, var(--text) 88%, var(--bg)); }
+  @media (hover: hover) and (pointer: fine) { .btn-primary:hover { background: color-mix(in oklch, var(--text) 88%, var(--bg)); } }
 
   .btn-brand {
     @apply btn;
@@ -327,7 +346,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
     color: white;
     border-color: var(--brand);
   }
-  .btn-brand:hover { background: var(--brand-deep); border-color: var(--brand-deep); }
+  @media (hover: hover) and (pointer: fine) { .btn-brand:hover { background: var(--brand-deep); border-color: var(--brand-deep); } }
 
   .btn-ghost {
     @apply btn;
@@ -335,7 +354,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
     border-color: transparent;
     color: var(--text-2);
   }
-  .btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+  @media (hover: hover) and (pointer: fine) { .btn-ghost:hover { background: var(--surface-2); color: var(--text); } }
 
   .btn-secondary {
     @apply btn;
@@ -343,7 +362,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
     color: var(--text);
     border-color: var(--border);
   }
-  .btn-secondary:hover { background: var(--surface-3); }
+  @media (hover: hover) and (pointer: fine) { .btn-secondary:hover { background: var(--surface-3); } }
 
   .btn-danger {
     @apply btn;
@@ -351,7 +370,7 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
     color: var(--bad-ink);
     border-color: transparent;
   }
-  .btn-danger:hover { filter: brightness(0.96); }
+  @media (hover: hover) and (pointer: fine) { .btn-danger:hover { filter: brightness(0.96); } }
 
   /* Pills */
   .pill {
@@ -469,7 +488,12 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 /* Header */
 .app-header { padding: 18px 28px; }
 @media (max-width: 1024px) {
-  .app-header { padding: 12px 16px; }
+  .app-header {
+    padding: calc(12px + env(safe-area-inset-top, 0px))
+             max(16px, env(safe-area-inset-right, 0px))
+             12px
+             max(16px, env(safe-area-inset-left, 0px));
+  }
 }
 
 /* Main content area */
@@ -480,6 +504,8 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 @media (max-width: 1024px) {
   .main-content {
     padding: 16px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
     padding-bottom: 120px; /* clear FAB nav */
   }
 }
@@ -660,9 +686,9 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 @keyframes gw-fade-in  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes gw-fade-out { from { opacity: 1; } to { opacity: 0; } }
 .gw-sheet-enter  { animation: gw-sheet-up   .38s cubic-bezier(.22,1,.36,1) both; }
-.gw-sheet-exit   { animation: gw-sheet-down .32s cubic-bezier(.4,0,1,1) both; }
+.gw-sheet-exit   { animation: gw-sheet-down .2s var(--ease-out) both; }
 .gw-overlay-in   { animation: gw-fade-in    .25s ease both; }
-.gw-overlay-out  { animation: gw-fade-out   .28s ease both; }
+.gw-overlay-out  { animation: gw-fade-out   .2s ease both; }
 
 /* Pop (modal entrance) */
 @keyframes gw-pop {
@@ -680,13 +706,22 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 @keyframes gw-spark-draw { to { stroke-dashoffset: 0; } }
 
 /* Stagger children */
-.gw-stagger > * { animation: fadeUp .4s cubic-bezier(.22,1,.36,1) both; }
-.gw-stagger > *:nth-child(1) { animation-delay: .04s; }
-.gw-stagger > *:nth-child(2) { animation-delay: .08s; }
-.gw-stagger > *:nth-child(3) { animation-delay: .12s; }
-.gw-stagger > *:nth-child(4) { animation-delay: .16s; }
-.gw-stagger > *:nth-child(5) { animation-delay: .20s; }
-.gw-stagger > *:nth-child(6) { animation-delay: .24s; }
+.gw-stagger > * { animation: fadeUp 250ms var(--ease-out) both; }
+.gw-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.gw-stagger > *:nth-child(2) { animation-delay: 30ms; }
+.gw-stagger > *:nth-child(3) { animation-delay: 60ms; }
+.gw-stagger > *:nth-child(4) { animation-delay: 90ms; }
+.gw-stagger > *:nth-child(5) { animation-delay: 120ms; }
+.gw-stagger > *:nth-child(6) { animation-delay: 150ms; }
+.gw-stagger > *:nth-child(n+7) { animation-delay: 180ms; }
+
+/* Reduced motion: keep the fades, drop the movement */
+@media (prefers-reduced-motion: reduce) {
+  .anim-in, .gw-stagger > *, .gw-in-right, .gw-in-left, .pulse-sheet-enter, .gw-sheet-enter {
+    animation-name: gw-fade-in;
+  }
+  .gw-sheet-exit { animation-name: gw-fade-out; }
+}
 
 /* ══════════════════════════════════════════
    Global tap / press feedback
@@ -701,16 +736,18 @@ button, a, [role="button"] {
   cursor: pointer;
   transition: transform .14s cubic-bezier(.2,.8,.2,1), box-shadow .14s;
 }
-.card-press:hover  { box-shadow: var(--elev-lg); }
+@media (hover: hover) and (pointer: fine) {
+  .card-press:hover { box-shadow: var(--elev-lg); }
+}
 .card-press:active { transform: scale(0.985); }
 
 /* Page entrance */
 @keyframes anim-page {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 .anim-page {
-  animation: anim-page .38s cubic-bezier(.22,1,.36,1) both;
+  animation: anim-page 150ms var(--ease-out) both;
 }
 
 /* ══════════════════════════════════════════
@@ -727,7 +764,8 @@ button, a, [role="button"] {
 
 /* Chat input bar — extra bottom padding on mobile to clear the floating nav pill */
 @media (max-width: 1024px) {
-  .chat-input-bar { padding-bottom: 96px !important; }
+  /* nav pill sits at max(20px, safe-area) — keep the same 76px clearance above it */
+  .chat-input-bar { padding-bottom: max(96px, calc(env(safe-area-inset-bottom, 0px) + 76px)) !important; }
 }
 
 @keyframes shake {
@@ -825,6 +863,19 @@ button, a, [role="button"] {
 }
 @media (prefers-reduced-motion: reduce) {
   .heat-day__in, .heat-day__out { transform: none; transition: opacity .12s linear; }
+}
+
+/* ══════════════════════════════════════════
+   Touch input sizing — iOS Safari zooms into any field under 16px on focus
+   and doesn't zoom back out. Many inputs set a smaller inline font-size,
+   hence !important. .input-lg opts out a field that's already larger.
+══════════════════════════════════════════ */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not(.input-lg),
+  textarea:not(.input-lg),
+  select:not(.input-lg) {
+    font-size: 16px !important;
+  }
 }
 
 /* ══════════════════════════════════════════

@@ -189,19 +189,19 @@ export default function SavingsGoals() {
       <Transition appear show={open} as={Fragment}>
         <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={() => setOpen(false)}>
           <Transition.Child as={Fragment}
-            enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-            leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
+            enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
+            leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
           >
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,20,.46)', backdropFilter: 'blur(4px)' }} />
           </Transition.Child>
 
-          <div style={{ position: 'fixed', inset: 0, overflowY: 'auto' }}>
+          <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
             <div style={{ display: 'flex', minHeight: '100%', alignItems: 'flex-end', justifyContent: 'center', padding: 16 }}
                  className="sm:items-center">
               <Transition.Child as={Fragment}
-                enter="ease-out duration-200" enterFrom="opacity-0 translate-y-4"
+                enter="ease-out-strong duration-200" enterFrom="opacity-0 translate-y-4"
                 enterTo="opacity-100 translate-y-0"
-                leave="ease-in duration-150" leaveFrom="opacity-100 translate-y-0"
+                leave="ease-out-strong duration-150" leaveFrom="opacity-100 translate-y-0"
                 leaveTo="opacity-0 translate-y-4"
               >
                 <Dialog.Panel style={{
@@ -239,7 +239,7 @@ export default function SavingsGoals() {
                               style={{
                                 width: 36, height: 36, borderRadius: 10, border: 'none',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                cursor: 'pointer', transition: 'all .12s',
+                                cursor: 'pointer', transition: 'background .12s, color .12s, outline-color .12s',
                                 background: active ? 'var(--brand-soft)' : 'var(--surface-2)',
                                 color: active ? 'var(--brand-ink)' : 'var(--text-3)',
                                 outline: active ? '2px solid var(--brand)' : '2px solid transparent',
@@ -255,19 +255,19 @@ export default function SavingsGoals() {
 
                     <div>
                       <label className="label">Goal Name</label>
-                      <input className="input" placeholder="e.g. Trip to Bali" value={form.name}
+                      <input maxLength={60} className="input" placeholder="e.g. Trip to Bali" value={form.name}
                         onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div>
                         <label className="label">Target Amount (₹)</label>
-                        <input className="input" type="number" min="1" placeholder="50000" value={form.targetAmount}
+                        <input className="input" type="number" inputMode="decimal" min="1" placeholder="50000" value={form.targetAmount}
                           onChange={e => setForm(f => ({ ...f, targetAmount: e.target.value }))} />
                       </div>
                       <div>
                         <label className="label">Saved So Far (₹)</label>
-                        <input className="input" type="number" min="0" placeholder="0" value={form.currentAmount}
+                        <input className="input" type="number" inputMode="decimal" min="0" placeholder="0" value={form.currentAmount}
                           onChange={e => setForm(f => ({ ...f, currentAmount: e.target.value }))} />
                       </div>
                     </div>

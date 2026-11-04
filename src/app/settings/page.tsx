@@ -579,7 +579,7 @@ export default function SettingsPage() {
                   textAlign: 'left', padding: 12, borderRadius: 12,
                   border: `2px solid ${mode === opt.value ? 'var(--brand)' : 'var(--border)'}`,
                   background: mode === opt.value ? 'var(--brand-soft)' : 'var(--surface)',
-                  cursor: 'pointer', transition: 'all .15s',
+                  cursor: 'pointer', transition: 'background .15s, border-color .15s',
                 }}
               >
                 <opt.Icon size={22} style={{ color: opt.color, marginBottom: 4 }} />
@@ -628,15 +628,15 @@ export default function SettingsPage() {
             <>
               <div>
                 <label className="label">Monthly Income Target (₹)</label>
-                <input type="number" className="input" placeholder="e.g. 80000" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} autoFocus />
+                <input type="number" inputMode="decimal" className="input" placeholder="e.g. 80000" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} autoFocus />
               </div>
               <div>
                 <label className="label">Weekly Spending Budget (₹)</label>
-                <input type="number" className="input" placeholder="e.g. 3000" value={weeklyBudget} onChange={(e) => setWeeklyBudget(e.target.value)} />
+                <input type="number" inputMode="decimal" className="input" placeholder="e.g. 3000" value={weeklyBudget} onChange={(e) => setWeeklyBudget(e.target.value)} />
               </div>
               <div>
                 <label className="label">Emergency Fund Target (₹)</label>
-                <input type="number" className="input" placeholder="e.g. 200000" value={efTarget} onChange={(e) => setEfTarget(e.target.value)} />
+                <input type="number" inputMode="decimal" className="input" placeholder="e.g. 200000" value={efTarget} onChange={(e) => setEfTarget(e.target.value)} />
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
@@ -711,6 +711,7 @@ export default function SettingsPage() {
                     <label className="label">Day of month (1–31)</label>
                     <input
                       type="number"
+                      inputMode="decimal"
                       className="input"
                       min={1} max={31}
                       value={cycleFixedDay}
@@ -951,7 +952,7 @@ export default function SettingsPage() {
                     display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
                     padding: '14px 8px', borderRadius: 16, border: `2px solid ${on ? swatch : 'var(--border)'}`,
                     background: on ? soft : 'var(--surface)', cursor: 'pointer',
-                    transition: 'all .15s', fontFamily: 'inherit',
+                    transition: 'background .15s, border-color .15s', fontFamily: 'inherit',
                   }}
                 >
                   <div style={{
@@ -1007,7 +1008,7 @@ export default function SettingsPage() {
                   padding: '12px 14px', borderRadius: 12,
                   background: value ? 'var(--brand-soft)' : 'var(--surface-2)',
                   border: `1px solid ${value ? 'var(--brand)' : 'var(--border)'}`,
-                  transition: 'all .15s',
+                  transition: 'background .15s, border-color .15s',
                 }}
               >
                 <div style={{
@@ -1015,7 +1016,7 @@ export default function SettingsPage() {
                   background: value ? 'var(--brand)' : 'var(--surface-3)',
                   color: value ? '#fff' : 'var(--text-3)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'all .15s',
+                  transition: 'background .15s, color .15s',
                 }}>
                   <Icon size={15} />
                 </div>
@@ -1036,7 +1037,7 @@ export default function SettingsPage() {
                     color: value ? '#fff' : 'var(--text-3)',
                     fontSize: 12, fontWeight: 600, cursor: savingTabs ? 'default' : 'pointer',
                     opacity: savingTabs ? 0.6 : 1, flexShrink: 0,
-                    transition: 'all .15s',
+                    transition: 'background .15s, color .15s, opacity .15s',
                   }}
                 >
                   {value ? 'On' : 'Off'}

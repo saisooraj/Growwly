@@ -332,7 +332,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                 border: `1.5px solid ${kind === k.value ? 'var(--brand)' : 'var(--border)'}`,
                 background: kind === k.value ? 'var(--brand-soft)' : 'var(--surface-2)',
                 color: kind === k.value ? 'var(--brand-ink)' : 'var(--text-2)',
-                transition: 'all .12s',
+                transition: 'background .12s, border-color .12s, color .12s',
               }}
             >
               {k.label}
@@ -359,7 +359,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                   {mfLoading && <Loader2 size={14} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-4)', animation: 'spin 1s linear infinite' }} />}
                 </div>
                 {mfOpen && mfResults.length > 0 && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: 'var(--shadow-lg)', maxHeight: 220, overflowY: 'auto', marginTop: 4 }}>
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: 'var(--shadow-lg)', maxHeight: 220, overflowY: 'auto', overscrollBehavior: 'contain', marginTop: 4 }}>
                     {mfResults.map(r => (
                       <button key={r.schemeCode} type="button" onClick={() => selectMF(r)}
                         style={{ display: 'block', width: '100%', padding: '10px 14px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
@@ -381,11 +381,11 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label className="label">Units held</label>
-                  <input className="input" type="number" min="0" step="0.001" placeholder="e.g. 1234.567" value={units} onChange={e => setUnits(e.target.value)} />
+                  <input className="input" type="number" inputMode="decimal" min="0" step="0.001" placeholder="e.g. 1234.567" value={units} onChange={e => setUnits(e.target.value)} />
                 </div>
                 <div>
                   <label className="label">Invested amount (₹)</label>
-                  <input className="input" type="number" min="0" placeholder="e.g. 150000" value={investedAmount} onChange={e => setInvestedAmount(e.target.value)} />
+                  <input className="input" type="number" inputMode="decimal" min="0" placeholder="e.g. 150000" value={investedAmount} onChange={e => setInvestedAmount(e.target.value)} />
                 </div>
               </div>
             </>
@@ -408,7 +408,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                   {stockLoading && <Loader2 size={14} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-4)', animation: 'spin 1s linear infinite' }} />}
                 </div>
                 {stockOpen && stockResults.length > 0 && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: 'var(--shadow-lg)', maxHeight: 220, overflowY: 'auto', marginTop: 4 }}>
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: 'var(--shadow-lg)', maxHeight: 220, overflowY: 'auto', overscrollBehavior: 'contain', marginTop: 4 }}>
                     {stockResults.map(r => (
                       <button key={r.symbol} type="button" onClick={() => selectStock(r)}
                         style={{ display: 'block', width: '100%', padding: '10px 14px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
@@ -430,11 +430,11 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label className="label">Quantity (shares)</label>
-                  <input className="input" type="number" min="0" step="1" placeholder="e.g. 50" value={quantity} onChange={e => setQuantity(e.target.value)} />
+                  <input className="input" type="number" inputMode="numeric" min="0" step="1" placeholder="e.g. 50" value={quantity} onChange={e => setQuantity(e.target.value)} />
                 </div>
                 <div>
                   <label className="label">Avg buy price (₹)</label>
-                  <input className="input" type="number" min="0" step="0.01" placeholder="e.g. 2450" value={avgBuyPrice} onChange={e => setAvgBuyPrice(e.target.value)} />
+                  <input className="input" type="number" inputMode="decimal" min="0" step="0.01" placeholder="e.g. 2450" value={avgBuyPrice} onChange={e => setAvgBuyPrice(e.target.value)} />
                 </div>
               </div>
               {parseFloat(quantity) > 0 && parseFloat(avgBuyPrice) > 0 && (
@@ -479,9 +479,9 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                         ))}
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                        <input className="input" type="number" min="0" step="0.001" placeholder="Grams" value={p.grams || ''}
+                        <input className="input" type="number" inputMode="decimal" min="0" step="0.001" placeholder="Grams" value={p.grams || ''}
                           onChange={e => setGoldPurchases(list => list.map((x, j) => j === i ? { ...x, grams: parseFloat(e.target.value) || 0 } : x))} />
-                        <input className="input" type="number" min="0" step="0.01" placeholder="₹/gram paid" value={p.pricePerGram || ''}
+                        <input className="input" type="number" inputMode="decimal" min="0" step="0.01" placeholder="₹/gram paid" value={p.pricePerGram || ''}
                           onChange={e => setGoldPurchases(list => list.map((x, j) => j === i ? { ...x, pricePerGram: parseFloat(e.target.value) || 0 } : x))} />
                       </div>
                     </div>
@@ -513,7 +513,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label className="label">Balance (₹)</label>
-                  <input className="input" type="number" min="0" placeholder="From passbook" value={epfBalance} onChange={e => setEpfBalance(e.target.value)} autoFocus />
+                  <input className="input" type="number" inputMode="decimal" min="0" placeholder="From passbook" value={epfBalance} onChange={e => setEpfBalance(e.target.value)} autoFocus />
                 </div>
                 <div>
                   <label className="label">Balance as of</label>
@@ -523,16 +523,16 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div>
                   <label className="label">Monthly credit (₹, optional)</label>
-                  <input className="input" type="number" min="0" placeholder="Employee + employer" value={epfContribution} onChange={e => setEpfContribution(e.target.value)} />
+                  <input className="input" type="number" inputMode="decimal" min="0" placeholder="Employee + employer" value={epfContribution} onChange={e => setEpfContribution(e.target.value)} />
                 </div>
                 <div>
                   <label className="label">Interest rate (% p.a.)</label>
-                  <input className="input" type="number" min="0" step="0.05" value={epfRate} onChange={e => setEpfRate(e.target.value)} />
+                  <input className="input" type="number" inputMode="decimal" min="0" step="0.05" value={epfRate} onChange={e => setEpfRate(e.target.value)} />
                 </div>
               </div>
               <div>
                 <label className="label">Interest so far (₹, optional)</label>
-                <input className="input" type="number" min="0" placeholder="Total interest shown in your passbook" value={epfInterest} onChange={e => setEpfInterest(e.target.value)} />
+                <input className="input" type="number" inputMode="decimal" min="0" placeholder="Total interest shown in your passbook" value={epfInterest} onChange={e => setEpfInterest(e.target.value)} />
               </div>
               {parseFloat(epfBalance) > 0 && parseFloat(epfInterest) > 0 && (
                 <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--good-soft)', fontSize: 12, color: 'var(--good-ink)' }}>
@@ -559,7 +559,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                 </div>
                 <div>
                   <label className="label">Interest rate (% p.a.)</label>
-                  <input className="input" type="number" min="0" step="0.05" value={ppfRate} onChange={e => setPpfRate(e.target.value)} />
+                  <input className="input" type="number" inputMode="decimal" min="0" step="0.05" value={ppfRate} onChange={e => setPpfRate(e.target.value)} />
                 </div>
               </div>
               <div>
@@ -569,7 +569,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                     <div key={i} style={{ display: 'flex', gap: 8 }}>
                       <input className="input" type="date" max={todayISO()} value={d.date}
                         onChange={e => setPpfDeposits(list => list.map((x, j) => j === i ? { ...x, date: e.target.value } : x))} />
-                      <input className="input" type="number" min="0" placeholder="₹ amount" value={d.amount || ''}
+                      <input className="input" type="number" inputMode="decimal" min="0" placeholder="₹ amount" value={d.amount || ''}
                         onChange={e => setPpfDeposits(list => list.map((x, j) => j === i ? { ...x, amount: parseFloat(e.target.value) || 0 } : x))} />
                       {d.transactionId && linkedTag}
                       <button type="button" onClick={() => setPpfDeposits(list => list.length > 1 ? list.filter((_, j) => j !== i) : list)}
@@ -586,7 +586,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
               </div>
               <div>
                 <label className="label">Interest credited so far (₹, optional)</label>
-                <input className="input" type="number" min="0" placeholder="Total interest in your passbook" value={ppfInterest} onChange={e => setPpfInterest(e.target.value)} />
+                <input className="input" type="number" inputMode="decimal" min="0" placeholder="Total interest in your passbook" value={ppfInterest} onChange={e => setPpfInterest(e.target.value)} />
               </div>
               {ppfPreview.totalDeposited > 0 && (
                 <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--good-soft)', fontSize: 12, color: 'var(--good-ink)' }}>
@@ -615,7 +615,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                     value={npsQuery} onChange={e => setNpsQuery(e.target.value)} />
                 </div>
                 {npsMatches.length > 0 && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: 'var(--shadow-lg)', maxHeight: 220, overflowY: 'auto', marginTop: 4 }}>
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, boxShadow: 'var(--shadow-lg)', maxHeight: 220, overflowY: 'auto', overscrollBehavior: 'contain', marginTop: 4 }}>
                     {npsMatches.map(s => (
                       <button key={s.schemeCode} type="button" onClick={() => addNpsHolding(s)}
                         style={{ display: 'block', width: '100%', padding: '10px 14px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
@@ -636,7 +636,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
                       {npsNavByCode[h.schemeCode] ? `NAV ₹${npsNavByCode[h.schemeCode].toFixed(4)}` : h.schemeCode}
                     </p>
                   </div>
-                  <input className="input" style={{ width: 110, flexShrink: 0 }} type="number" min="0" step="0.0001" placeholder="units"
+                  <input className="input" style={{ width: 110, flexShrink: 0 }} type="number" inputMode="decimal" min="0" step="0.0001" placeholder="units"
                     value={h.units || ''} onChange={e => setNpsUnits(h.schemeCode, parseFloat(e.target.value) || 0)} />
                   <button type="button" onClick={() => removeNpsHolding(h.schemeCode)}
                     style={{ flexShrink: 0, padding: 8, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-4)', cursor: 'pointer' }}>
@@ -651,12 +651,12 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
               ) : (
                 <div>
                   <label className="label">Or enter corpus manually (₹)</label>
-                  <input className="input" type="number" min="0" placeholder="From your CRA statement" value={npsCorpusManual} onChange={e => setNpsCorpusManual(e.target.value)} />
+                  <input className="input" type="number" inputMode="decimal" min="0" placeholder="From your CRA statement" value={npsCorpusManual} onChange={e => setNpsCorpusManual(e.target.value)} />
                 </div>
               )}
               <div>
                 <label className="label">Total contributed (₹, optional)</label>
-                <input className="input" type="number" min="0" placeholder="For gain tracking" value={investedAmount} onChange={e => setInvestedAmount(e.target.value)} />
+                <input className="input" type="number" inputMode="decimal" min="0" placeholder="For gain tracking" value={investedAmount} onChange={e => setInvestedAmount(e.target.value)} />
               </div>
               <p style={{ fontSize: 11, color: 'var(--text-4)', margin: 0 }}>
                 Unit counts come from your CRA statement (login-only). Once entered, the corpus is valued live from daily NAVs.
@@ -688,12 +688,12 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
               )}
               <div>
                 <label className="label">Current Value (₹)</label>
-                <input className="input" type="number" min="0" placeholder="e.g. 500000" value={manualValue} onChange={e => setManualValue(e.target.value)} required />
+                <input className="input" type="number" inputMode="decimal" min="0" placeholder="e.g. 500000" value={manualValue} onChange={e => setManualValue(e.target.value)} required />
               </div>
               {(kind === 'epf_ppf' || kind === 'fd_rd' || kind === 'post_office') && (
                 <div>
                   <label className="label">Invested / Principal (₹, optional)</label>
-                  <input className="input" type="number" min="0" placeholder="Original amount invested" value={investedAmount} onChange={e => setInvestedAmount(e.target.value)} />
+                  <input className="input" type="number" inputMode="decimal" min="0" placeholder="Original amount invested" value={investedAmount} onChange={e => setInvestedAmount(e.target.value)} />
                 </div>
               )}
             </>

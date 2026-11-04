@@ -81,18 +81,18 @@ export default function AddProjectModal({ open, onClose, editProject }: Props) {
       <Dialog as="div" className="relative z-50" onClose={onClose}>
         <Transition.Child
           as={Fragment}
-          enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-          leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
+          enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
+          leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
         >
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(8,6,20,.44)', backdropFilter: 'blur(4px)' }} />
         </Transition.Child>
-        <div className="fixed inset-0 overflow-y-auto">
+        <div className="fixed inset-0 overflow-y-auto overscroll-contain">
           <div className="flex min-h-full items-end sm:items-center justify-center p-4">
             <Transition.Child
               as={Fragment}
-              enter="ease-out duration-200" enterFrom="opacity-0 translate-y-4"
+              enter="ease-out-strong duration-200" enterFrom="opacity-0 translate-y-4"
               enterTo="opacity-100 translate-y-0"
-              leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
+              leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
             >
               <Dialog.Panel style={{
                 width: '100%', maxWidth: 440,
@@ -120,7 +120,7 @@ export default function AddProjectModal({ open, onClose, editProject }: Props) {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                     <div>
                       <label className="label">Total Budget (₹)</label>
-                      <input type="number" className="input" {...register('totalBudget', { required: true })} />
+                      <input type="number" inputMode="decimal" className="input" {...register('totalBudget', { required: true })} />
                     </div>
                     <div>
                       <label className="label">Paid So Far</label>

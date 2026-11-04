@@ -7,18 +7,45 @@ export function cn(...inputs: ClassValue[]) {
   return clsx(inputs)
 }
 
-export function formatCurrency(amount: number, currency = '₹'): string {
-  if (amount >= 100000) {
-    return `${currency}${(amount / 100000).toFixed(1)}L`
-  }
-  if (amount >= 1000) {
-    return `${currency}${(amount / 1000).toFixed(1)}K`
-  }
-  return `${currency}${amount.toFixed(0)}`
+// Compact amounts for tight spots: ₹950, ₹12.5K, ₹4.8L, ₹2.35Cr. Negatives get a leading minus
+// ("−₹1.8L"). A value that would round up to the next tier's threshold moves up a tier, so
+// 99,999 reads "₹1L", not "₹100K".
+const COMPACT_TIERS = [
+  { div: 1e7, suffix: 'Cr', dp: 2 },
+  { div: 1e5, suffix: 'L', dp: 1 },
+  { div: 1e3, suffix: 'K', dp: 1 },
+] as const
+
+function roundTo(n: number, dp: number) {
+  const f = 10 ** dp
+  return Math.round(n * f) / f
 }
 
+export function formatCurrency(amount: number, currency = '₹'): string {
+  if (!Number.isFinite(amount)) amount = 0
+  const sign = amount < 0 && roundTo(Math.abs(amount), 0) !== 0 ? '−' : ''
+  const a = Math.abs(amount)
+  let i: number = COMPACT_TIERS.findIndex(t => a >= t.div)
+  if (i === -1) {
+    if (roundTo(a, 0) < 1000) return `${sign}${currency}${roundTo(a, 0)}`
+    i = COMPACT_TIERS.length - 1
+  }
+  while (i > 0 && roundTo(a / COMPACT_TIERS[i].div, COMPACT_TIERS[i].dp) * COMPACT_TIERS[i].div >= COMPACT_TIERS[i - 1].div) i--
+  const t = COMPACT_TIERS[i]
+  return `${sign}${currency}${roundTo(a / t.div, t.dp)}${t.suffix}`
+}
+
+// Exact amounts: whole rupees show no decimals (₹500), anything else shows exactly two (₹1,234.50).
+// Float noise like 0.1 + 0.2 is rounded away first.
 export function formatCurrencyFull(amount: number, currency = '₹'): string {
-  return `${currency}${amount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
+  if (!Number.isFinite(amount)) amount = 0
+  const a = roundTo(Math.abs(amount), 2)
+  const sign = amount < 0 && a !== 0 ? '−' : ''
+  const whole = Number.isInteger(a)
+  return `${sign}${currency}${a.toLocaleString('en-IN', {
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`
 }
 
 export function getCurrentMonth(): string {

@@ -96,18 +96,18 @@ export default function LiabilityModal({ item, onSave, onClose }: Props) {
           </div>
           <div>
             <label className="label">{isCreditCard ? 'Outstanding Balance (₹)' : 'Loan Amount (₹)'}</label>
-            <input className="input" type="number" min="0" value={principal} onChange={e => setPrincipal(e.target.value)} placeholder="e.g. 2500000" required />
+            <input className="input" type="number" inputMode="decimal" min="0" value={principal} onChange={e => setPrincipal(e.target.value)} placeholder="e.g. 2500000" required />
           </div>
           {!isCreditCard && (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>
                   <label className="label">Interest Rate (% p.a.)</label>
-                  <input className="input" type="number" min="0" step="0.01" value={rate} onChange={e => setRate(e.target.value)} placeholder="e.g. 8.5" />
+                  <input className="input" type="number" inputMode="decimal" min="0" step="0.01" value={rate} onChange={e => setRate(e.target.value)} placeholder="e.g. 8.5" />
                 </div>
                 <div>
                   <label className="label">Tenure (months)</label>
-                  <input className="input" type="number" min="1" value={tenure} onChange={e => setTenure(e.target.value)} placeholder="e.g. 240" />
+                  <input className="input" type="number" inputMode="decimal" min="1" value={tenure} onChange={e => setTenure(e.target.value)} placeholder="e.g. 240" />
                 </div>
               </div>
               <div>

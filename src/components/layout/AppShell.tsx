@@ -461,7 +461,7 @@ export default function AppShell({ title, children, fillPage }: Props) {
     <AuthGuard>
       <div className="app">
         <Sidebar />
-        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: '100vh' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: '100dvh' }}>
           <Header title={title} scrolled={scrolled} onAdd={() => setAddOpen(true)} onScan={() => setScanOpen(true)} />
           <AdminAuthAlertBanner />
           <main

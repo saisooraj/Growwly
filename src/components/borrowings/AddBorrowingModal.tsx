@@ -126,16 +126,16 @@ export default function AddBorrowingModal({ open, onClose, editBorrowing }: Prop
     <Transition appear show={open} as={Fragment}>
       <Dialog as="div" className="relative z-50" onClose={onClose}>
         <Transition.Child as={Fragment}
-          enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-          leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0">
+          enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
+          leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0">
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" />
         </Transition.Child>
-        <div className="fixed inset-0 overflow-y-auto">
+        <div className="fixed inset-0 overflow-y-auto overscroll-contain">
           <div className="flex min-h-full items-end sm:items-center justify-center p-4">
             <Transition.Child as={Fragment}
-              enter="ease-out duration-200" enterFrom="opacity-0 translate-y-4"
+              enter="ease-out-strong duration-200" enterFrom="opacity-0 translate-y-4"
               enterTo="opacity-100 translate-y-0"
-              leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0">
+              leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0">
               <Dialog.Panel className="w-full max-w-md bg-white dark:bg-[#0F1120] border border-transparent dark:border-[#1E2140] rounded-2xl shadow-xl overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-slate-800">
                   <Dialog.Title className="text-base font-semibold text-slate-800 dark:text-white">
@@ -168,11 +168,11 @@ export default function AddBorrowingModal({ open, onClose, editBorrowing }: Prop
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="label">Amount (₹)</label>
-                      <input type="number" className="input" {...register('amount', { required: true })} />
+                      <input type="number" inputMode="decimal" className="input" {...register('amount', { required: true })} />
                     </div>
                     <div>
                       <label className="label">Repaid So Far (₹)</label>
-                      <input type="number" className="input" {...register('repaidAmount')} />
+                      <input type="number" inputMode="decimal" className="input" {...register('repaidAmount')} />
                     </div>
                   </div>
 
@@ -190,15 +190,15 @@ export default function AddBorrowingModal({ open, onClose, editBorrowing }: Prop
                       <div className="grid grid-cols-3 gap-3">
                         <div>
                           <label className="label">Rate (%/yr)</label>
-                          <input type="number" step="0.1" className="input" placeholder="8.5" {...register('interestRate')} />
+                          <input type="number" inputMode="decimal" step="0.1" className="input" placeholder="8.5" {...register('interestRate')} />
                         </div>
                         <div>
                           <label className="label">Tenure (mo)</label>
-                          <input type="number" className="input" placeholder="60" {...register('tenureMonths')} />
+                          <input type="number" inputMode="decimal" className="input" placeholder="60" {...register('tenureMonths')} />
                         </div>
                         <div>
                           <label className="label">EMI (₹)</label>
-                          <input type="number" className="input" placeholder="auto" {...register('emiAmount')} />
+                          <input type="number" inputMode="decimal" className="input" placeholder="auto" {...register('emiAmount')} />
                         </div>
                       </div>
                       <p style={{ fontSize: 11, color: 'var(--text-4)' }}>
@@ -210,13 +210,13 @@ export default function AddBorrowingModal({ open, onClose, editBorrowing }: Prop
                   {/* Person */}
                   <div>
                     <label className="label">{isLoan ? 'Bank / Lender' : 'Person / Source'}</label>
-                    <input className="input" placeholder={isLoan ? 'e.g. HDFC Bank' : 'Name of person'} {...register('person', { required: true })} />
+                    <input maxLength={60} className="input" placeholder={isLoan ? 'e.g. HDFC Bank' : 'Name of person'} {...register('person', { required: true })} />
                   </div>
 
                   {/* Description */}
                   <div>
                     <label className="label">Description</label>
-                    <input className="input" placeholder="Reason..." {...register('description')} />
+                    <input maxLength={200} className="input" placeholder="Reason..." {...register('description')} />
                   </div>
 
                   {/* Dates */}

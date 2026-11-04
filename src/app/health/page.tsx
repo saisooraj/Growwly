@@ -85,7 +85,7 @@ function BlockRow({
             border: `2px solid ${done ? color : 'var(--border-strong)'}`,
             background: done ? color : 'transparent',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all .15s',
+            transition: 'background .15s, border-color .15s',
           }}
         >
           {done && <Check size={13} color="#fff" strokeWidth={3} />}

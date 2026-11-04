@@ -304,7 +304,8 @@ function AllocRow({ label, reason, amount, type, freeCash, isEditing, editVal, o
                 value={editVal ?? ''}
                 onChange={e => onEditChange?.(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') onEditConfirm?.(); if (e.key === 'Escape') onEditCancel?.() }}
-                type="number" min={500}
+                type="number"
+                inputMode="decimal" min={500}
                 style={{
                   width: 86, background: 'var(--surface-2)', border: '1px solid var(--brand)',
                   borderRadius: 6, padding: '2px 6px', outline: 'none',
@@ -527,7 +528,8 @@ function AllocationsSection({ allocations, freeCash, savingsNet, upcomingIncome 
             value={newAmountStr} onChange={e => setNewAmountStr(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleAdd(); if (e.key === 'Escape') { setAddingNew(false); setNewLabel(''); setNewAmountStr('') } }}
             placeholder={`max ${formatCurrency(discretionaryAmt)}`}
-            type="number" min={500} max={discretionaryAmt - 500}
+            type="number"
+            inputMode="decimal" min={500} max={discretionaryAmt - 500}
             style={{ width: 100, background: 'transparent', border: 'none', outline: 'none', fontSize: 13, color: 'var(--text)', textAlign: 'right', flexShrink: 0 }}
           />
           <button
@@ -813,7 +815,7 @@ export default function PulseSheet({ open, onClose, pulse }: Props) {
         className="pulse-sheet-enter"
         style={{
           width: '100%', maxWidth: 620,
-          maxHeight: '92vh',
+          maxHeight: '92dvh',
           background: 'var(--surface)',
           borderRadius: '20px 20px 0 0',
           display: 'flex', flexDirection: 'column',
@@ -859,7 +861,7 @@ export default function PulseSheet({ open, onClose, pulse }: Props) {
         </div>
 
         {/* Scrollable body */}
-        <div style={{ overflowY: 'auto', flex: 1 }}>
+        <div style={{ overflowY: 'auto', overscrollBehavior: 'contain', flex: 1 }}>
           <div style={{
             margin: 16, padding: '12px 16px', borderRadius: 12,
             background: colors.bg, color: colors.ink,

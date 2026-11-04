@@ -281,6 +281,7 @@ const LP_CSS = `
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  min-height: 100svh;
 }
 
 .gw-landing *, .gw-landing *::before, .gw-landing *::after { box-sizing: border-box; }

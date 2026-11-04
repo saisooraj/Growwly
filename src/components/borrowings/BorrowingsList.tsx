@@ -643,7 +643,7 @@ export default function BorrowingsList({ onEdit }: Props) {
                 background: filter === tab.id ? 'var(--surface)' : 'transparent',
                 color: filter === tab.id ? 'var(--text)' : 'var(--text-3)',
                 boxShadow: filter === tab.id ? 'var(--elev)' : 'none',
-                transition: 'all .15s',
+                transition: 'background .15s, color .15s, box-shadow .15s',
                 fontFamily: 'inherit',
               }}
             >

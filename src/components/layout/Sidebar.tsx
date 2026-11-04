@@ -47,7 +47,7 @@ export default function Sidebar() {
       className="hidden lg:flex flex-col flex-shrink-0"
       style={{
         width: 248,
-        height: '100vh',
+        height: '100dvh',
         position: 'sticky',
         top: 0,
         background: 'var(--sidebar)',

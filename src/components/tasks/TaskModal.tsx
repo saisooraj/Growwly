@@ -117,7 +117,7 @@ export default function TaskModal({ task, defaultPriority = 'this-week', onClose
         width: '100%', maxWidth: 520,
         boxShadow: 'var(--shadow-lg)',
         display: 'flex', flexDirection: 'column',
-        maxHeight: '90vh', overflow: 'hidden',
+        maxHeight: '90dvh', overflow: 'hidden',
       }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 14px', borderBottom: '1px solid var(--border)' }}>
@@ -130,7 +130,7 @@ export default function TaskModal({ task, defaultPriority = 'this-week', onClose
         </div>
 
         {/* Body */}
-        <div style={{ overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ overflowY: 'auto', overscrollBehavior: 'contain', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Title */}
           <div>

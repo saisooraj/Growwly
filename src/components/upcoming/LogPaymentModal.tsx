@@ -150,19 +150,19 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
       <Dialog as="div" style={{ position: 'relative', zIndex: 60 }} onClose={onClose}>
         <Transition.Child
           as={Fragment}
-          enter="ease-out duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-          leave="ease-in duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
+          enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
+          leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
         >
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }} />
         </Transition.Child>
 
-        <div style={{ position: 'fixed', inset: 0, overflowY: 'auto' }}>
+        <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
           <div style={{ display: 'flex', minHeight: '100%', alignItems: 'flex-end', justifyContent: 'center', padding: 16 }}
                className="sm:items-center">
             <Transition.Child
               as={Fragment}
-              enter="ease-out duration-200" enterFrom="opacity-0 translate-y-4" enterTo="opacity-100 translate-y-0"
-              leave="ease-in duration-150" leaveFrom="opacity-100 translate-y-0" leaveTo="opacity-0 translate-y-4"
+              enter="ease-out-strong duration-200" enterFrom="opacity-0 translate-y-4" enterTo="opacity-100 translate-y-0"
+              leave="ease-out-strong duration-150" leaveFrom="opacity-100 translate-y-0" leaveTo="opacity-0 translate-y-4"
             >
               <Dialog.Panel style={{
                 width: '100%', maxWidth: 420,
@@ -212,9 +212,10 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
                     <label className="label">{isIncome ? 'Amount received (₹)' : 'Amount paid (₹)'}</label>
                     <input
                       type="number"
+                      inputMode="decimal"
                       step="0.01"
                       min="0"
-                      className="input"
+                      className="input input-lg"
                       style={{ fontSize: 18, fontWeight: 600 }}
                       placeholder="0"
                       value={amount}
@@ -265,7 +266,7 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
 
                   <div>
                     <label className="label">Notes (optional)</label>
-                    <input
+                    <input maxLength={200}
                       type="text"
                       className="input"
                       placeholder="e.g. UPI transfer, cheque…"
@@ -282,7 +283,7 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
                         padding: 12, borderRadius: 10, cursor: 'pointer',
                         background: useEF ? 'color-mix(in oklch, var(--warn) 10%, transparent)' : 'var(--surface-2)',
                         border: `1px solid ${useEF ? 'var(--warn)' : 'var(--border)'}`,
-                        transition: 'all .15s',
+                        transition: 'background .15s, border-color .15s',
                       }}>
                         <input type="checkbox" checked={useEF} onChange={e => { setUseEF(e.target.checked); if (!e.target.checked) setEfAmount('') }} style={{ display: 'none' }} />
                         <div style={{
@@ -312,6 +313,7 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
                           <label className="label">Amount from Emergency Fund (₹)</label>
                           <input
                             type="number"
+                            inputMode="decimal"
                             min="0.01"
                             max={Math.min(Number(amount) || 0, efBalance)}
                             step="0.01"
@@ -343,7 +345,7 @@ export default function LogPaymentModal({ open, onClose, item, alreadyPaid, edit
                     padding: 12, borderRadius: 10, cursor: 'pointer',
                     background: alsoLog ? 'var(--brand-soft)' : 'var(--surface-2)',
                     border: `1px solid ${alsoLog ? 'var(--brand)' : 'var(--border)'}`,
-                    transition: 'all .15s',
+                    transition: 'background .15s, border-color .15s',
                   }}>
                     <input type="checkbox" checked={alsoLog} onChange={e => setAlsoLog(e.target.checked)} style={{ display: 'none' }} />
                     <div style={{

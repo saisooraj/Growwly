@@ -74,7 +74,7 @@ export default function RoutineModal({ item, nextOrder, onSave, onClose }: Props
       style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(4px)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto', padding: 24, paddingBottom: 'max(24px, env(safe-area-inset-bottom))' }}>
+      <div style={{ background: 'var(--surface)', borderRadius: '20px 20px 0 0', width: '100%', maxWidth: 480, maxHeight: '90dvh', overflowY: 'auto', overscrollBehavior: 'contain', padding: 24, paddingBottom: 'max(24px, env(safe-area-inset-bottom))' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{item ? 'Edit Block' : 'New Block'}</h2>
           <button onClick={onClose} style={{ padding: 6, borderRadius: 8, border: 'none', background: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text-2)', display: 'flex' }}><X size={16} /></button>
@@ -139,7 +139,7 @@ export default function RoutineModal({ item, nextOrder, onSave, onClose }: Props
           {scheduleType === 'hourly-window' && (
             <div>
               <label className="label">Target count per day</label>
-              <input className="input" type="number" min="1" max="24" value={targetCount} onChange={e => setTargetCount(e.target.value)} />
+              <input className="input" type="number" inputMode="decimal" min="1" max="24" value={targetCount} onChange={e => setTargetCount(e.target.value)} />
             </div>
           )}
 

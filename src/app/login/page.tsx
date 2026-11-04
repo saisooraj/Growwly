@@ -37,7 +37,7 @@ function ssRemove(key: string) {
 // ── Shared input style ────────────────────────────────────────────────────────
 // login-input class applies autofill override in globals.css to prevent browsers
 // from painting the field white when auto-filling email/password.
-const inputCls = "login-input w-full rounded-2xl px-4 py-3.5 text-sm text-white placeholder:text-white/35 focus:outline-none transition-all"
+const inputCls = "login-input w-full rounded-2xl px-4 py-3.5 text-sm text-white placeholder:text-white/35 focus:outline-none transition-colors"
 const inputStyle = { background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' } as const
 
 // ── Redirect failure banner ───────────────────────────────────────────────────
@@ -74,7 +74,7 @@ function HomeScreen({
       <div className="flex flex-col gap-3 mb-4">
         <button
           onClick={() => onMethod('email-signin')}
-          className="w-full flex items-center gap-3 bg-white/8 hover:bg-white/12 border border-white/12 text-white font-medium py-3.5 px-4 rounded-2xl transition-all text-sm"
+          className="w-full flex items-center gap-3 bg-white/8 hover:bg-white/12 border border-white/12 text-white font-medium py-3.5 px-4 rounded-2xl transition-colors text-sm"
         >
           <span className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
             <Mail size={15} />
@@ -230,9 +230,11 @@ function OTPScreen({
       <p className="text-sm text-slate-400 mb-5">Code sent to {maskedPhone}</p>
 
       <input
-        className={`${inputCls} tracking-[0.4em] text-center text-lg font-semibold mb-4`}
+        className={`${inputCls} input-lg tracking-[0.4em] text-center text-lg font-semibold mb-4`}
         style={inputStyle}
         type="number"
+        inputMode="numeric"
+        autoComplete="one-time-code"
         placeholder="------"
         value={otp}
         onChange={e => setOtp(e.target.value.slice(0, 6))}
@@ -359,7 +361,7 @@ function EmailScreen({
           <button
             key={m}
             onClick={() => setMode(m)}
-            className={`flex-1 py-2 rounded-xl text-sm font-medium transition-all ${
+            className={`flex-1 py-2 rounded-xl text-sm font-medium transition-colors ${
               mode === m ? 'bg-white/15 text-white' : 'text-slate-500 hover:text-slate-300'
             }`}
           >
@@ -410,7 +412,7 @@ function EmailScreen({
         {mode === 'signup' && (
           <label
             ref={privacyRef}
-            className={`flex items-start gap-2.5 cursor-pointer mt-1 rounded-xl p-2 transition-all ${
+            className={`flex items-start gap-2.5 cursor-pointer mt-1 rounded-xl p-2 transition-colors ${
               privacyShake
                 ? 'bg-amber-500/10 border border-amber-500/40 animate-[shake_0.4s_ease-in-out]'
                 : 'border border-transparent'
@@ -451,7 +453,7 @@ function EmailScreen({
       </div>
       <button
         onClick={signInWithGoogle}
-        className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-900 font-semibold py-3 px-4 rounded-2xl transition-all text-sm"
+        className="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-900 font-semibold py-3 px-4 rounded-2xl transition-colors text-sm"
       >
         <GoogleIcon />
         Continue with Google
@@ -524,7 +526,7 @@ function PersistentErrorScreen({ onRetry, onEmail }: { onRetry: () => void; onEm
         </button>
         <button
           onClick={onEmail}
-          className="w-full flex items-center justify-center gap-2 bg-white/8 hover:bg-white/12 border border-white/12 text-white font-medium py-3.5 px-4 rounded-2xl transition-all text-sm"
+          className="w-full flex items-center justify-center gap-2 bg-white/8 hover:bg-white/12 border border-white/12 text-white font-medium py-3.5 px-4 rounded-2xl transition-colors text-sm"
         >
           <Mail size={14} />
           Use email instead
@@ -584,7 +586,7 @@ export default function LoginPage() {
   }
 
   if (loading && !authTimedOut) return (
-    <div className="min-h-screen bg-[#06030F] flex items-center justify-center">
+    <div className="min-h-dvh bg-[#06030F] flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
         <GrowwlyLogo size="md" pulse />
         <p className="text-sm text-slate-400 font-medium">Loading Growwly…</p>
@@ -593,7 +595,7 @@ export default function LoginPage() {
   )
 
   return (
-    <div className="min-h-screen bg-[#06030F] flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-dvh bg-[#06030F] flex items-center justify-center p-4 relative overflow-hidden">
       <div className="pointer-events-none absolute top-1/3 left-1/2 -translate-x-1/2 w-[700px] h-[500px] rounded-full bg-violet-700/15 blur-[130px]" />
       <div className="pointer-events-none absolute bottom-1/4 left-1/4 w-[400px] h-[400px] rounded-full bg-fuchsia-700/10 blur-[100px]" />
       <div className="pointer-events-none absolute top-10 right-10 w-64 h-64 rounded-full bg-brand-800/10 blur-[80px]" />
