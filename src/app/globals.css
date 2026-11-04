@@ -826,3 +826,50 @@ button, a, [role="button"] {
 @media (prefers-reduced-motion: reduce) {
   .heat-day__in, .heat-day__out { transform: none; transition: opacity .12s linear; }
 }
+
+/* ══════════════════════════════════════════
+   FIRE planner
+   Results on the left, your numbers and assumptions in a sticky 360px column on the right.
+   Below 1024px everything stacks and the inputs move into a bottom sheet.
+══════════════════════════════════════════ */
+/* Scenario lines: three lightness steps of the brand (conservative → optimistic), so they
+   follow the user's accent. In dark mode the ramp lifts so no line sinks into the background. */
+:root {
+  --fire-c0: color-mix(in oklch, var(--brand) 55%, #fff);
+  --fire-c1: var(--brand);
+  --fire-c2: color-mix(in oklch, var(--brand) 68%, #000);
+}
+.dark {
+  --fire-c0: color-mix(in oklch, var(--brand) 78%, #000);
+  --fire-c1: color-mix(in oklch, var(--brand) 85%, #fff);
+  --fire-c2: color-mix(in oklch, var(--brand) 38%, #fff);
+}
+:root[data-accent="black"] { --fire-c0: #B4B5BA; --fire-c1: #6E6F76; --fire-c2: #14151A; }
+.dark[data-accent="black"] { --fire-c0: #5C5E66; --fire-c1: #9A9CA3; --fire-c2: #F5F4EE; }
+
+.fire-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
+.fire-main, .fire-side { display: flex; flex-direction: column; gap: var(--row-gap); min-width: 0; }
+.fire-anchor { scroll-margin-top: 128px; }
+.fire-desk { display: none !important; }
+.fire-mob { display: flex; }
+@media (min-width: 1024px) {
+  .fire-layout { grid-template-columns: minmax(0, 1fr) 360px; }
+  .fire-side {
+    position: sticky; top: 76px;
+    max-height: calc(100dvh - 176px); overflow-y: auto;
+    border-radius: var(--radius-xl); scrollbar-width: thin;
+  }
+  /* Cards keep their full height; the column scrolls instead of squashing them */
+  .fire-side > * { flex-shrink: 0; }
+  .fire-anchor { scroll-margin-top: 76px; }
+  .fire-desk { display: flex !important; }
+  .fire-mob { display: none !important; }
+}
+/* Sticky bar under the app header: full-bleed across the main padding */
+.fire-sticky { position: sticky; top: 0; z-index: 6; background: var(--bg); border-bottom: 1px solid var(--border); margin: 0 -16px; padding: 8px 16px; }
+@media (min-width: 1025px) { .fire-sticky { margin: 0 -28px; padding: 10px 28px; } }
+.fire-chips { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+.fire-chips::-webkit-scrollbar { display: none; }
+.fire-navbtn { border: 0; background: transparent; color: var(--text-2); font-family: inherit; font-size: 13px; font-weight: 600; min-height: 36px; padding: 0 12px; border-radius: 8px; cursor: pointer; }
+@media (hover: hover) and (pointer: fine) { .fire-navbtn:hover { background: var(--surface-2); color: var(--text); } }
+.fire-sheet-body { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }

@@ -167,8 +167,31 @@ export interface UserSettings {
   dashboardCardOrder?: string[]                   // ordered list of dashboard block IDs
   vehicles?: Vehicle[]                             // for fuel fill-ups
   defaultVehicleId?: string                        // preselected on the next fill-up — the last one used
+  dateOfBirth?: string                             // YYYY-MM-DD, used by the FIRE planner for ages
+  fire?: FireSettings                              // FIRE planner assumptions and overrides
   createdAt: string
   updatedAt: string
+}
+
+// FIRE planner settings. Rates are stored as percentages (6 = 6%), as the user types them.
+// Anything missing falls back to the planner's defaults or to values worked out from the data.
+export interface FireSettings {
+  inflation?: number
+  stepUp?: number
+  withdrawalTax?: number
+  healthcareMonthly?: number
+  healthcareInflation?: number | null              // null = follow general inflation
+  returns?: { conservative: number; moderate: number; optimistic: number }
+  withdrawalRates?: { conservative: number; moderate: number; optimistic: number }
+  // Manual overrides of the auto-calculated inputs (₹, monthly except portfolio)
+  overrides?: { monthlyExpenses?: number; monthlyIncome?: number; monthlyInvestment?: number; portfolio?: number }
+  excludedCategories?: string[]                    // expense categories left out of retirement spending
+  include?: { cash?: boolean; gold?: boolean; realEstate?: boolean; otherAssets?: boolean; subtractLoans?: boolean; emergencyFund?: boolean }
+  lifestyles?: { lean?: number; fat?: number }     // monthly retirement budgets, today's ₹ (regular = expenses)
+  targetRetirementAge?: number
+  targetYears?: number                             // used instead of an age when no date of birth is set
+  targetAllocation?: { equity: number; debt: number; cash: number; other: number }
+  scenario?: 'conservative' | 'moderate' | 'optimistic' // the scenario shown as the headline
 }
 
 // ── Announcements ─────────────────────────────────────────────────────────────

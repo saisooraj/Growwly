@@ -11,6 +11,7 @@ import { addAsset, updateAsset, deleteAsset, addLiability, updateLiability, dele
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE, getLast6Months, getCycleMonth } from '@/lib/utils'
 import { linkedTransactionIds } from '@/lib/holdingLinks'
+import { calcEMI, calcOutstanding, monthsRemaining } from '@/lib/loans'
 import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import { computeValue } from '@/lib/assetValuation'
 import { useLivePrices } from '@/hooks/useLivePrices'
@@ -22,34 +23,11 @@ import LiabilityModal from './LiabilityModal'
 import MyAssetsSection from './MyAssetsSection'
 import MutualFundProjection from './MutualFundProjection'
 import MaskToggle from './MaskToggle'
+import Link from 'next/link'
+import FireSummaryCard, { fireStripText } from '@/components/fire/FireSummaryCard'
+import { useFirePlan } from '@/hooks/useFirePlan'
+import WealthTabs from './WealthTabs'
 import EmergencyFundTransactions, { useEfTransactions } from './EmergencyFundTransactions'
-
-// ── EMI / Loan calculations ────────────────────────────────────────────────────
-
-function calcEMI(principal: number, annualRate: number, tenureMonths: number): number {
-  if (annualRate === 0 || tenureMonths === 0) return tenureMonths > 0 ? principal / tenureMonths : 0
-  const r = annualRate / 12 / 100
-  return principal * r * Math.pow(1 + r, tenureMonths) / (Math.pow(1 + r, tenureMonths) - 1)
-}
-
-function calcOutstanding(principal: number, annualRate: number, tenureMonths: number, startDate: string): number {
-  if (tenureMonths === 0) return principal
-  const start = new Date(startDate)
-  const now = new Date()
-  const monthsPaid = Math.max(0, (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()))
-  if (monthsPaid >= tenureMonths) return 0
-  if (annualRate === 0) return principal - (principal / tenureMonths) * monthsPaid
-  const r = annualRate / 12 / 100
-  const emi = calcEMI(principal, annualRate, tenureMonths)
-  return principal * Math.pow(1 + r, monthsPaid) - emi * (Math.pow(1 + r, monthsPaid) - 1) / r
-}
-
-function monthsRemaining(tenureMonths: number, startDate: string): number {
-  const start = new Date(startDate)
-  const now = new Date()
-  const paid = Math.max(0, (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth()))
-  return Math.max(0, tenureMonths - paid)
-}
 
 // ── Asset / Liability metadata ─────────────────────────────────────────────────
 
@@ -142,6 +120,8 @@ export default function NetWorthPage() {
   // Every holding at its live value — the same figures the Savings & Investments card shows
   const prices = useLivePrices(assets)
   const valuedAssets = useMemo(() => assets.map(a => computeValue(a, prices)), [assets, prices])
+  const firePlan = useFirePlan(valuedAssets, prices)
+  const fireScenario = settings?.fire?.scenario ?? 'moderate'
   const holdingsValue = useMemo(() => valuedAssets.reduce((s, a) => s + a.currentValue, 0), [valuedAssets])
 
   // Vehicle prior-balance inline edit
@@ -291,6 +271,7 @@ export default function NetWorthPage() {
 
   return (
     <div className="anim-page" style={{ maxWidth: 600, display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+      <WealthTabs active="networth" />
 
       {/* Net Worth Hero */}
       <div style={{
@@ -370,6 +351,16 @@ export default function NetWorthPage() {
               <p style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>{fmt(totalLiabilities)}</p>
             </div>
           </div>
+
+          {/* One-line FIRE answer; opens the planner */}
+          <Link href="/networth/fire" className="pressable" style={{
+            display: 'flex', alignItems: 'center', gap: 12, marginTop: 10, minHeight: 52, padding: '12px 14px', borderRadius: 18,
+            background: 'rgba(255,255,255,.16)', color: '#fff', textDecoration: 'none', backdropFilter: 'blur(6px)',
+          }}>
+            <span style={{ font: "600 10px/1 'Geist Mono', monospace", letterSpacing: '.08em', textTransform: 'uppercase', opacity: 0.9, flex: 'none' }}>FIRE plan</span>
+            <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600, minWidth: 0 }}>{fireStripText(firePlan, fireScenario)}</span>
+            <span aria-hidden style={{ fontSize: 18 }}>→</span>
+          </Link>
         </div>
       </div>
 
@@ -601,8 +592,10 @@ export default function NetWorthPage() {
         )}
       </div>
 
-      {/* FI Calculator */}
-      <FICalculator holdingsValue={holdingsValue} masked={isMasked('fi')} onToggleMask={() => toggleCard('fi')} />
+
+      {/* Financial independence summary; the full planner is at /networth/fire */}
+      <FireSummaryCard plan={firePlan} scenario={fireScenario} targetRetirementAge={settings?.fire?.targetRetirementAge} targetYears={settings?.fire?.targetYears}
+        masked={isMasked('fi')} onToggleMask={() => toggleCard('fi')} />
 
       {assetModal.open && (
         <AssetModal item={assetModal.item} onSave={handleSaveAsset} onClose={() => setAssetModal({ open: false })} />
@@ -615,108 +608,6 @@ export default function NetWorthPage() {
       {confirm && (
         <ConfirmDialog open message={confirm.message} onConfirm={confirm.onConfirm} onClose={() => setConfirm(null)} />
       )}
-    </div>
-  )
-}
-
-// ── FI Calculator ──────────────────────────────────────────────────────────────
-
-function FICalculator({ holdingsValue, masked, onToggleMask }: { holdingsValue: number; masked: boolean; onToggleMask: () => void }) {
-  const { transactions, selectedMonth, settings, liabilities } = useAppStore()
-  const { monthlySavings, fiCorpus, currentNetWorth, yearsToFI, savingsRate, progressPct } = useMemo(() => {
-    const summary = buildMonthlySummary(transactions, selectedMonth, settings)
-    const monthlySavings  = Math.max(0, summary.savingsContributed - summary.savingsWithdrawn)
-    const fiCorpus        = summary.totalExpenses * 12 * 25
-    const savingsRate     = summary.totalIncome > 0 ? (monthlySavings / summary.totalIncome) * 100 : 0
-
-    const totalLiabilities = liabilities.reduce((s, l) => {
-      const outstanding = l.tenureMonths > 0
-        ? calcOutstanding(l.principal, l.interestRate, l.tenureMonths, l.startDate)
-        : l.principal
-      return s + outstanding
-    }, 0)
-    const currentNetWorth  = Math.max(0, holdingsValue - totalLiabilities)
-    const progressPct      = fiCorpus > 0 ? Math.min(100, (currentNetWorth / fiCorpus) * 100) : 0
-
-    let yearsToFI: number | null = null
-    if (fiCorpus > 0) {
-      if (currentNetWorth >= fiCorpus) {
-        yearsToFI = 0
-      } else if (monthlySavings > 0) {
-        const r   = 0.12 / 12
-        const pmt = monthlySavings
-        const pv  = currentNetWorth
-        const fv  = fiCorpus
-        // FV = PV*(1+r)^n + PMT*((1+r)^n - 1)/r  =>  n = ln((fv + pmt/r)/(pv + pmt/r)) / ln(1+r)
-        const n = Math.log((fv + pmt / r) / (pv + pmt / r)) / Math.log(1 + r)
-        yearsToFI = n / 12
-      }
-    }
-
-    return { monthlySavings, fiCorpus, currentNetWorth, yearsToFI, savingsRate, progressPct }
-  }, [transactions, selectedMonth, settings, liabilities, holdingsValue])
-
-  const fmt = (v: number) => masked ? '₹ •••' : formatCurrencyFull(v)
-
-  return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-        <div>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: '0 0 4px' }}>Financial Independence Calculator</h2>
-          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>Based on 4% withdrawal rule · 12% assumed investment return</p>
-        </div>
-        <MaskToggle masked={masked} onToggle={onToggleMask} />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: '12px 14px' }}>
-          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 4px' }}>FI Corpus Needed</p>
-          <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0 }}>{fmt(fiCorpus)}</p>
-          <p style={{ fontSize: 10, color: 'var(--text-4)', margin: '2px 0 0' }}>25× annual expenses</p>
-        </div>
-        <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: '12px 14px' }}>
-          <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 4px' }}>Monthly Contribution</p>
-          <p style={{ fontSize: 16, fontWeight: 700, color: monthlySavings > 0 ? 'var(--good-ink)' : 'var(--bad-ink)', margin: 0 }}>{fmt(monthlySavings)}</p>
-          <p style={{ fontSize: 10, color: 'var(--text-4)', margin: '2px 0 0' }}>{savingsRate.toFixed(1)}% of income</p>
-        </div>
-      </div>
-
-      {/* Net worth progress bar */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-3)' }}>
-          <span>Net worth <strong style={{ color: 'var(--text)' }}>{fmt(currentNetWorth)}</strong></span>
-          <span style={{ fontWeight: 700, color: progressPct >= 100 ? 'var(--good-ink)' : 'var(--brand-ink)' }}>{progressPct.toFixed(1)}% to FI</span>
-        </div>
-        <div style={{ height: 7, background: 'var(--surface-3)', borderRadius: 999, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${progressPct}%`, background: progressPct >= 100 ? 'var(--good)' : 'var(--brand)', borderRadius: 999, transition: 'width .6s ease' }} />
-        </div>
-      </div>
-
-      <div style={{ background: yearsToFI === 0 ? 'var(--good-soft)' : yearsToFI && yearsToFI < 20 ? 'var(--good-soft)' : 'var(--surface-2)', borderRadius: 10, padding: '16px', textAlign: 'center' }}>
-        {yearsToFI === 0 ? (
-          <>
-            <p style={{ fontSize: 11, color: 'var(--good-ink)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Financial Independence</p>
-            <p style={{ fontSize: 28, fontWeight: 700, color: 'var(--good-ink)', margin: '0 0 4px' }}>You&apos;re there!</p>
-            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>Net worth exceeds your FI corpus</p>
-          </>
-        ) : yearsToFI !== null ? (
-          <>
-            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '0 0 6px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Estimated time to FI</p>
-            <p style={{ fontSize: 32, fontWeight: 700, color: yearsToFI < 20 ? 'var(--good-ink)' : 'var(--text)', margin: '0 0 4px', letterSpacing: '-0.02em' }}>
-              {yearsToFI < 1 ? 'Under 1 year!' : `${yearsToFI.toFixed(1)} years`}
-            </p>
-            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>Net worth + {fmt(monthlySavings)}/mo at 12% p.a.</p>
-          </>
-        ) : (
-          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
-            {monthlySavings <= 0 ? 'Start saving to see your FI timeline' : 'Add transactions for this month to calculate'}
-          </p>
-        )}
-      </div>
-
-      <p style={{ fontSize: 11, color: 'var(--text-4)', lineHeight: 1.5, margin: 0 }}>
-        <strong style={{ color: 'var(--text-3)' }}>How this works:</strong> The 4% rule says you need 25× your annual expenses. Your current net worth is your starting point — the timeline shows how long to grow it to the FI corpus at 12% p.a. compounded monthly.
-      </p>
     </div>
   )
 }
