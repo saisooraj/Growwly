@@ -19,6 +19,7 @@ import { buildQuickAddShortcut } from '@/lib/iosShortcutPlist'
 import { BADGES, getBadgeEarnedDate, type BadgeDef } from '@/lib/badges'
 import { IconLeaf, IconFlame } from '@tabler/icons-react'
 import LinkedAccounts from '@/components/auth/LinkedAccounts'
+import VehiclesCard from '@/components/settings/VehiclesCard'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
 import { format, parseISO } from 'date-fns'
@@ -588,6 +589,8 @@ export default function SettingsPage() {
             ))}
           </div>
         </div>
+
+        <VehiclesCard />
 
         {/* Budget Targets */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

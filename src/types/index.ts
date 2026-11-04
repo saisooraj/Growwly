@@ -41,6 +41,21 @@ export interface Transaction {
   goldGrams?: number
   goldKarat?: 18 | 22 | 24
   goldPricePerGram?: number
+  // Fuel fill-ups (category 'Fuel'): read off the pump. `amount` stays what was actually paid,
+  // so litres × price can be higher when the payment app gave a discount.
+  vehicleId?: string
+  fuelLitres?: number
+  fuelPricePerLitre?: number
+  odometerKm?: number
+  fuelDiscount?: number       // knocked off the pump total at payment: amount = litres × price − discount
+  fuelPartial?: boolean       // tank not filled to full — this fill can't close a mileage interval
+  fuelMissedBefore?: boolean  // a fill-up before this one wasn't logged — mileage restarts here
+}
+
+export interface Vehicle {
+  id: string
+  name: string
+  createdAt: string
 }
 
 export interface SavingsGoal {
@@ -150,6 +165,8 @@ export interface UserSettings {
   seenAnnouncements?: string[]                     // announcement ids already shown — "id:platform" when the announcement is oncePerPlatform, else just "id" (cross-device)
   featureUsage?: Record<string, { useCount: number; lastUsedAt: string }>  // per-feature usage counters, used to trigger nudges for unused features
   dashboardCardOrder?: string[]                   // ordered list of dashboard block IDs
+  vehicles?: Vehicle[]                             // for fuel fill-ups
+  defaultVehicleId?: string                        // preselected on the next fill-up — the last one used
   createdAt: string
   updatedAt: string
 }

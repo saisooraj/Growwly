@@ -536,6 +536,29 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   .change-row { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) 64px; gap: 8px; }
 }
 
+/* Spending breakdown: Fuel & mileage card */
+.fuel-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.fuel-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 80px 72px;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 0;
+  font-size: 12.5px;
+  color: var(--text-2);
+  border-top: 1px solid var(--border);
+}
+@media (max-width: 640px) {
+  .fuel-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 400px) {
+  .fuel-row { grid-template-columns: 46px minmax(0, 1fr) 70px 64px; gap: 6px; font-size: 12px; }
+}
+
 /* Dashboard responsive grids */
 /* Hero: Spent on the left; This Month + Streak, Emergency fund and the four KPI
    tiles stacked on the right. Below 1280px the two halves stack. */

@@ -6,6 +6,7 @@ import { ArrowLeftRight, ChevronDown, ChevronRight, ArrowUp, ArrowDown, UserMinu
 import { useAppStore } from '@/store/appStore'
 import { formatCurrencyFull, CATEGORY_COLORS, getTransactionsForMonth, getTransferDisplay, isSavingsTransfer } from '@/lib/utils'
 import { findLinkedAsset } from '@/lib/holdingLinks'
+import { isFuelExpense, mileageFor } from '@/lib/fuel'
 import { getCycleRange } from '@/lib/cycle'
 import { getSavingsVehicleMeta, getCategoryDisplayName, CategoryIcon } from '@/lib/categoryIcons'
 import type { Transaction, Borrowing } from '@/types'
@@ -60,6 +61,12 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
     if (!isSavings) return undefined
     const asset = findLinkedAsset(s.assets, tx.id)
     return asset ? asset.name || 'Gold' : undefined
+  })
+  const isFill = isFuelExpense(tx) && !!tx.fuelLitres
+  const kmPerLitre = useAppStore(s => isFill ? mileageFor(s.transactions, s.settings, tx.id) : undefined)
+  const vehicleName = useAppStore(s => {
+    const vehicles = s.settings?.vehicles ?? []
+    return isFill && vehicles.length > 1 ? vehicles.find(v => v.id === tx.vehicleId)?.name : undefined
   })
 
   let color: string, icon: React.ReactNode, label: string, amountColor: string, prefix: string
@@ -177,6 +184,14 @@ function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => voi
         {!!tx.goldGrams && (
           <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {tx.goldGrams}g · {tx.goldKarat ?? 22}K{tx.goldPricePerGram ? ` · ₹${tx.goldPricePerGram.toLocaleString('en-IN')}/g` : ''}
+          </div>
+        )}
+        {isFill && (
+          <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {vehicleName ? `${vehicleName} · ` : ''}{tx.fuelLitres} L
+            {tx.fuelPricePerLitre ? ` · ₹${tx.fuelPricePerLitre.toLocaleString('en-IN')}/L` : ''}
+            {tx.fuelDiscount ? ` · ₹${tx.fuelDiscount.toLocaleString('en-IN')} off` : ''}
+            {kmPerLitre ? <span style={{ color: 'var(--good-ink)', fontWeight: 600 }}> · {kmPerLitre.toFixed(1)} km/l</span> : ''}
           </div>
         )}
         {holdingName && (

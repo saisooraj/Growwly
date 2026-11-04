@@ -17,6 +17,8 @@ import { isSavingsPlan } from '@/lib/budgetPlan'
 import CategoryPicker from '@/components/transactions/CategoryPicker'
 import TagPicker from '@/components/transactions/TagPicker'
 import AmountInput from '@/components/ui/AmountInput'
+import FuelFields, { addVehicle, fuelDraftFrom, fuelPayload, type FuelDraft } from '@/components/transactions/FuelFields'
+import { isFuelExpense, solveFuel, type FuelCalc } from '@/lib/fuel'
 import type { Asset, Transaction, TransactionType, TransferKind } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -160,6 +162,10 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   const [projectId, setProjectId]       = useState(editTx?.projectId ?? '')
   const [isRecurring, setIsRecurring]   = useState(editTx?.isRecurring ?? false)
   const [saving, setSaving]             = useState(false)
+  // Fuel fill-ups: pump reading + odometer. Of litres, ₹/litre and amount, any two fill in the third;
+  // fuelAuto is the one we filled, and it keeps following the other two until it's typed over.
+  const [fuel, setFuel]                 = useState<FuelDraft>(() => fuelDraftFrom(editTx, settings))
+  const [fuelAuto, setFuelAuto]         = useState<FuelCalc | null>(null)
   // Person name for loan transfers (auto-synced to borrowings)
   const [loanPerson, setLoanPerson]         = useState('')
   const [personDropdownOpen, setPersonDropdownOpen] = useState(false)
@@ -328,6 +334,8 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       setTags(editTx?.tags ?? [])
       setProjectId(editTx?.projectId ?? '')
       setIsRecurring(editTx?.isRecurring ?? false)
+      setFuel(fuelDraftFrom(editTx, useAppStore.getState().settings))
+      setFuelAuto(null)
       setSplitEnabled(false)
       setSplitMode('equal')
       setParticipants([])
@@ -342,6 +350,28 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       setShowRefundForm(false)
     }
   }, [open, editTx, initialPrefill])
+
+  const isFuel = activeTab === 'expense' && isFuelExpense({ type: txType, category })
+  // Litres, ₹ per litre, discount and amount move together: paid = litres × price − discount
+  function applyFuelMaths(changed: FuelCalc | 'discount', nextFuel: FuelDraft, nextAmount: string) {
+    const prev = { litres: fuel.litres, price: fuel.price, amount, discount: fuel.discount }
+    const r = solveFuel(changed, prev, { litres: nextFuel.litres, price: nextFuel.price, amount: nextAmount, discount: nextFuel.discount }, fuelAuto)
+    setFuelAuto(r.auto)
+    setFuel({ ...nextFuel, litres: r.vals.litres, price: r.vals.price })
+    setAmount(r.vals.amount)
+  }
+
+  function patchFuel(patch: Partial<FuelDraft>) {
+    const next = { ...fuel, ...patch }
+    const changed = 'litres' in patch ? 'litres' : 'price' in patch ? 'price' : 'discount' in patch ? 'discount' : null
+    if (changed) applyFuelMaths(changed, next, amount)
+    else setFuel(next)
+  }
+
+  function changeAmount(v: string) {
+    if (isFuel) applyFuelMaths('amount', fuel, v)
+    else setAmount(v)
+  }
 
   // Auto-link Gold/Construction → project
   useEffect(() => {
@@ -611,6 +641,11 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
         : {}
       const finalSettleApplied = Object.values(finalSettlePlan).reduce((s, v) => s + v, 0)
 
+      // A vehicle name typed but not added yet becomes the vehicle for this fill-up
+      const fuelFinal = isFuel && fuel.newVehicle.trim()
+        ? { ...fuel, vehicleId: await addVehicle(user.uid, settings, fuel.newVehicle), newVehicle: '' }
+        : fuel
+
       const payload: Partial<Transaction> = {
         type: txType,
         amount: effectiveAmount,
@@ -627,6 +662,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
         ...(showGoldFields && parseFloat(goldGrams) > 0
           ? { goldGrams: parseFloat(goldGrams), goldKarat, goldPricePerGram: parseFloat(goldPricePerGram) || 0 }
           : {}),
+        ...(isFuel ? fuelPayload(fuelFinal) : {}),
         ...(projectId && (txType === 'expense' || activeTab === 'savings') ? { projectId } : {}),
         ...(txType === 'transfer' && loanPerson.trim() ? { loanPerson: loanPerson.trim() } : {}),
         ...(txType === 'expense' && settledPerson && finalSettleApplied > 0
@@ -648,6 +684,11 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       const newTags = tags.filter(t => !existingTags.includes(t))
       if (newTags.length > 0) {
         await setUserSettings(user.uid, { customTags: [...existingTags, ...newTags] })
+      }
+
+      // The vehicle used last is preselected next time
+      if (isFuel && !fuel.newVehicle.trim() && fuel.vehicleId && fuel.vehicleId !== settings?.defaultVehicleId) {
+        await setUserSettings(user.uid, { defaultVehicleId: fuel.vehicleId })
       }
 
       // Collect affected project IDs upfront so we can recompute after refresh
@@ -1548,7 +1589,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                     <AmountInput
                       placeholder="0"
                       className="input" style={{ fontSize: 18, fontWeight: 600 }}
-                      value={amount} onValueChange={setAmount} required
+                      value={amount} onValueChange={changeAmount} required
                     />
                   </div>
 
@@ -1788,6 +1829,11 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                       </div>
                       <CategoryPicker value={category} onChange={v => { setCategory(v); setSuggestedCat(null) }} type={txType === 'income' ? 'income' : 'expense'} />
                     </div>
+                  )}
+
+                  {/* Fuel fill-up: pump reading + odometer, for mileage */}
+                  {isFuel && (
+                    <FuelFields value={fuel} onChange={patchFuel} auto={fuelAuto} paid={Number(amount) || 0} date={date} editId={editTx?.id} />
                   )}
 
                   {/* Tags — free-form labels, independent of category (e.g. "Christmas") */}

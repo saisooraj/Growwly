@@ -21,6 +21,7 @@ import RecurringSplitCard from '@/components/spending/RecurringSplitCard'
 import SpendingHeatmap from '@/components/spending/SpendingHeatmap'
 import TopTransactionsList from '@/components/spending/TopTransactionsList'
 import CategoryChangesCard from '@/components/spending/CategoryChangesCard'
+import FuelCard from '@/components/spending/FuelCard'
 
 const MAX_DONUT_SLICES = 8
 const MAX_TREND_LINES = 8
@@ -256,6 +257,8 @@ export default function SpendingBreakdownPage() {
         </div>
 
         <CategoryGrid rows={gridRows} masked={masked} onRowClick={goToCategory} />
+
+        <FuelCard transactions={transactions} settings={settings} cycleStart={cycleStart} cycleEnd={cycleEnd} masked={masked} />
 
         <SpendingTrendChart
           months={trendMonths}
