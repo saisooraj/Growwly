@@ -11,6 +11,14 @@ export interface LivePrices {
   stocks?: Record<string, { price: number; change: number; changePct: number; name: string }>
   mf?: Record<string, { nav: number; change: number; changePct: number; schemeName: string }>
   nps?: Record<string, { nav: number; schemeName: string; changePct: number }>
+  // Prices just before `since` (the cycle start), when asked for — see lib/wealthGrowth
+  start?: {
+    since: string
+    gold?: { price22k: number; price18k: number; price24k: number }
+    stocks?: Record<string, number>
+    mf?: Record<string, number>
+    nps?: Record<string, number>
+  }
 }
 
 export interface AssetWithValue extends Asset {

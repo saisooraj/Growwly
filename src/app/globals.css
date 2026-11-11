@@ -715,12 +715,29 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 .gw-stagger > *:nth-child(6) { animation-delay: 150ms; }
 .gw-stagger > *:nth-child(n+7) { animation-delay: 180ms; }
 
+/* Loading placeholders, tinted from currentColor so they work on cards and on the hero */
+.gw-skel {
+  display: block; border-radius: 6px;
+  background: currentColor; opacity: .14;
+  animation: gw-skel-pulse 1.4s ease-in-out infinite;
+}
+@keyframes gw-skel-pulse { 50% { opacity: .26; } }
+
+/* Figures arriving after a load settle in instead of swapping */
+@keyframes gw-reveal {
+  from { opacity: 0; transform: translateY(6px); filter: blur(4px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+.gw-reveal { animation: gw-reveal .42s cubic-bezier(.22,1,.36,1) both; }
+
 /* Reduced motion: keep the fades, drop the movement */
 @media (prefers-reduced-motion: reduce) {
   .anim-in, .gw-stagger > *, .gw-in-right, .gw-in-left, .pulse-sheet-enter, .gw-sheet-enter {
     animation-name: gw-fade-in;
   }
   .gw-sheet-exit { animation-name: gw-fade-out; }
+  .gw-reveal { animation-name: gw-fade-in; }
+  .gw-skel { animation: none; }
 }
 
 /* ══════════════════════════════════════════

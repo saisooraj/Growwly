@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { Pencil, Trash2, Home, Car, Landmark, CreditCard, Package, Wallet, Eye, EyeOff, ExternalLink, Plus, TrendingUp, TrendingDown, BarChart2, Coins, Mailbox } from 'lucide-react'
+import { Pencil, Trash2, Home, Car, Landmark, CreditCard, Package, Wallet, Eye, EyeOff, ExternalLink, Plus, TrendingUp, TrendingDown, BarChart2, Coins, Mailbox, Link2 } from 'lucide-react'
 import { IconLifebuoy } from '@tabler/icons-react'
 import { useAppStore } from '@/store/appStore'
 import { useAuth } from '@/context/AuthContext'
@@ -9,16 +9,21 @@ import { useRouter } from 'next/navigation'
 import { useRefreshData } from '@/hooks/useData'
 import { addAsset, updateAsset, deleteAsset, addLiability, updateLiability, deleteLiability, setEmergencyFund, setUserSettings } from '@/lib/firestore'
 import AddTransactionModal from '@/components/transactions/AddTransactionModal'
-import { formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE, getLast6Months, getCycleMonth } from '@/lib/utils'
-import { linkedTransactionIds } from '@/lib/holdingLinks'
+import { formatCurrency, formatCurrencyFull, buildMonthlySummary, buildSavingsByVehicle, EMERGENCY_FUND_VEHICLE, getLast6Months, getCycleMonth, isSavingsTransfer } from '@/lib/utils'
+import { getCycleRange } from '@/lib/cycle'
+import { growthSince, lifetimeReturns } from '@/lib/wealthGrowth'
+import { linkedTransactionIds, vehicleKinds } from '@/lib/holdingLinks'
 import { calcEMI, calcOutstanding, monthsRemaining } from '@/lib/loans'
 import { getSavingsVehicleMeta } from '@/lib/categoryIcons'
 import { computeValue } from '@/lib/assetValuation'
-import { useLivePrices } from '@/hooks/useLivePrices'
+import { useLivePricesState } from '@/hooks/useLivePrices'
+import { usePullToRefresh } from '@/components/layout/PullToRefresh'
+import LoadingDrop from '@/components/ui/LoadingDrop'
 import type { Asset, AssetKind, Liability, LiabilityKind, Transaction } from '@/types'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
 import toast from 'react-hot-toast'
 import AssetModal from './AssetModal'
+import LinkSavingsModal from './LinkSavingsModal'
 import LiabilityModal from './LiabilityModal'
 import MyAssetsSection from './MyAssetsSection'
 import MutualFundProjection from './MutualFundProjection'
@@ -56,6 +61,12 @@ const LIABILITY_META: Record<LiabilityKind, { label: string; icon: React.Element
 }
 
 const MASK = '₹ •••'
+// Gain / loss text on the hero gradient. Fixed light tints (not theme tokens) so they read on
+// every accent colour the hero can take.
+const HERO_GAIN = 'oklch(0.93 0.14 150)'
+const HERO_LOSS = 'oklch(0.88 0.09 25)'
+
+const pctText = (p: number) => `${p >= 0 ? '+' : '−'}${Math.abs(p) < 0.1 ? '<0.1' : Math.abs(p).toFixed(1)}%`
 
 function SectionHeader({ title, onAdd, extra }: { title: string; onAdd: () => void; extra?: React.ReactNode }) {
   return (
@@ -99,11 +110,48 @@ function Sparkline({ data, width = 280, height = 44, color = 'rgba(255,255,255,.
   )
 }
 
+// ── Loading states (shown until holdings are valued at today's prices) ─────────
+
+function HeroLoading() {
+  return (
+    <div aria-busy style={{ marginBottom: 20, color: '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 54, marginBottom: 14, marginLeft: -10 }}>
+        <LoadingDrop size={60} label="Calculating your net worth" />
+        <div style={{ minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>Calculating your net worth</p>
+          <p style={{ margin: '2px 0 0', fontSize: 12, color: 'rgba(255,255,255,.72)' }}>Valuing your holdings at today&apos;s prices</p>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <span className="gw-skel" style={{ width: 210, maxWidth: '100%', height: 28, borderRadius: 999 }} />
+        <span className="gw-skel" style={{ width: 170, maxWidth: '80%', height: 12, marginLeft: 4 }} />
+      </div>
+    </div>
+  )
+}
+
+function HoldingsSkeleton() {
+  return (
+    <div className="card" aria-busy style={{ display: 'flex', flexDirection: 'column', gap: 12, color: 'var(--text)' }}>
+      <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>Savings &amp; Investments</h2>
+      <span className="gw-skel" style={{ width: 150, height: 22 }} />
+      <span className="gw-skel" style={{ height: 6, borderRadius: 999 }} />
+      {[0, 1, 2].map(i => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span className="gw-skel" style={{ width: 32, height: 32, borderRadius: 8, flex: 'none' }} />
+          <span className="gw-skel" style={{ flex: 1, height: 12 }} />
+          <span className="gw-skel" style={{ width: 72, height: 14, flex: 'none' }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function NetWorthPage() {
   const { user } = useAuth()
-  const { assets, liabilities, emergencyFund, transactions, settings } = useAppStore()
+  const { assets, liabilities, emergencyFund, transactions, settings, initialized } = useAppStore()
   const refresh = useRefreshData()
   const router = useRouter()
 
@@ -118,7 +166,28 @@ export default function NetWorthPage() {
   const [savingsModalOpen, setSavingsModalOpen] = useState(false)
   const [unitsTx, setUnitsTx] = useState<Transaction | null>(null)
   // Every holding at its live value — the same figures the Savings & Investments card shows
-  const prices = useLivePrices(assets)
+  // Start of the current salary cycle: "this month" for the growth figures below
+  const cycleStart = useMemo(() => getCycleRange(getCycleMonth(settings), settings).start, [settings])
+  const { prices, loaded: pricesLoaded, refresh: refreshPrices } = useLivePricesState(assets, cycleStart)
+  // Holdings and transactions are already live; pulling down fetches fresh market prices
+  usePullToRefresh(refreshPrices)
+
+  // Until data and prices are in, holdings would be valued at cost and then jump. Show a loader
+  // instead and let the real figures settle in together. Once shown they stay: adding a holding
+  // or refreshing updates them in place. Coming back with cached prices skips the loader.
+  const valuesReady = initialized && pricesLoaded
+  const [revealed, setRevealed] = useState(valuesReady)
+  const animateReveal = useRef(!valuesReady).current
+  const [loaderShownLongEnough, setLoaderShownLongEnough] = useState(false)
+  useEffect(() => {
+    const t = setTimeout(() => setLoaderShownLongEnough(true), 500) // no blink when prices are quick
+    return () => clearTimeout(t)
+  }, [])
+  useEffect(() => {
+    if (valuesReady && loaderShownLongEnough) setRevealed(true)
+  }, [valuesReady, loaderShownLongEnough])
+  const revealCls = animateReveal ? 'gw-reveal' : undefined
+  const revealAfter = (ms: number) => (animateReveal ? { animationDelay: `${ms}ms` } : {})
   const valuedAssets = useMemo(() => assets.map(a => computeValue(a, prices)), [assets, prices])
   const firePlan = useFirePlan(valuedAssets, prices)
   const fireScenario = settings?.fire?.scenario ?? 'moderate'
@@ -206,6 +275,24 @@ export default function NetWorthPage() {
 
   const savingsTotal = useMemo(() => savingsVehicles.reduce((s, v) => s + v.balance, 0), [savingsVehicles])
 
+  // Linking a whole Unlinked savings row to a holding, optionally creating the holding first
+  const [linkFlow, setLinkFlow] = useState<{ vehicle: string; holdingId?: string } | null>(null)
+  const [creatingFor, setCreatingFor] = useState<string | null>(null)
+  // Same vehicle naming as buildSavingsByVehicle, so the rows and their transactions agree
+  const unlinkedFor = (vehicle: string) => transactions.filter(t =>
+    isSavingsTransfer(t) && !linkedIds.has(t.id) &&
+    (t.savingsVehicle || (t.transferKind === 'ef_withdrawal' ? EMERGENCY_FUND_VEHICLE : 'Other Savings')) === vehicle)
+  const presetFor = (vehicle: string) => {
+    const kind = vehicleKinds(vehicle)[0] ?? 'other'
+    const rupeeBalance = ['post_office', 'fd_rd', 'cash', 'other'].includes(kind)
+    return {
+      kind, name: vehicle,
+      note: rupeeBalance
+        ? `Starts at ₹0. Your unlinked ${vehicle} savings move into it next.`
+        : `Once it's added, your unlinked ${vehicle} savings move into it.`,
+    }
+  }
+
   // Spark data: monthly net income over last 6 months as a proxy trend
   const sparkData = useMemo(() => {
     return getLast6Months().map(m => {
@@ -232,9 +319,18 @@ export default function NetWorthPage() {
   , [liabilities])
 
   const netWorth = totalAssets - totalLiabilities
-  // This cycle's savings as a share of net worth before them (hidden when that base isn't positive)
-  const netWorthBefore = netWorth - savedThisCycle
-  const savedPct = netWorthBefore > 0 && savedThisCycle !== 0 ? (savedThisCycle / netWorthBefore) * 100 : null
+
+  // What holdings have earned overall, and what this cycle brought in: money added (logged
+  // savings plus EPF's own monthly credit) and what holdings earned on top of it.
+  const lifetime = useMemo(() => lifetimeReturns(valuedAssets), [valuedAssets])
+  const growth = useMemo(() => growthSince(valuedAssets, prices, cycleStart), [valuedAssets, prices, cycleStart])
+  const addedThisCycle = savedThisCycle + growth.added
+  const returnsThisCycle = growth.ready ? Math.round(growth.returns) : 0
+  const grewThisCycle = addedThisCycle + returnsThisCycle
+  const showGrowthSplit = lifetime.invested > 0 || growth.added !== 0
+  // As a share of net worth before this cycle (hidden when that base isn't positive)
+  const netWorthBefore = netWorth - grewThisCycle
+  const grewPct = netWorthBefore > 0 && grewThisCycle !== 0 ? (grewThisCycle / netWorthBefore) * 100 : null
   const nwColor = netWorth >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'
 
   function fmt(v: number, prefix = '') {
@@ -307,32 +403,78 @@ export default function NetWorthPage() {
             </button>
           </div>
 
-          <p style={{
-            fontSize: 40, fontWeight: 800, letterSpacing: '-0.03em', margin: '0 0 6px',
-            color: '#fff', lineHeight: 1,
-          }}>
-            {masked ? '₹ •••••' : `${netWorth >= 0 ? '' : '−'}${formatCurrencyFull(Math.round(Math.abs(netWorth)))}`}
-          </p>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              padding: '5px 12px', borderRadius: 999,
-              background: '#fff', boxShadow: '0 4px 14px -6px rgba(0,0,0,.35)',
-              fontSize: 12.5, fontWeight: 700,
-              // Fixed colours (not theme tokens) so they read on the white pill in every theme
-              color: savedThisCycle > 0 ? 'oklch(0.52 0.15 152)' : savedThisCycle < 0 ? 'oklch(0.55 0.19 25)' : 'oklch(0.5 0 0)',
+          {!revealed ? <HeroLoading /> : (<>
+          {/* Net worth, with what's been invested and earned so far beside it (below on narrow screens) */}
+          <div className={revealCls} style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 14, rowGap: 10, marginBottom: 14 }}>
+            <p style={{
+              fontSize: 40, fontWeight: 800, letterSpacing: '-0.03em', margin: 0,
+              color: '#fff', lineHeight: 1,
             }}>
-              {savedThisCycle >= 0 ? <TrendingUp size={14} strokeWidth={2.5} /> : <TrendingDown size={14} strokeWidth={2.5} />}
-              {masked ? '₹ •••' : formatCurrencyFull(Math.round(Math.abs(savedThisCycle)))}{' '}
-              {savedThisCycle >= 0 ? 'saved' : 'withdrawn from savings'} this month
-              {!masked && savedPct !== null && (
+              {masked ? '₹ •••••' : `${netWorth >= 0 ? '' : '−'}${formatCurrencyFull(Math.round(Math.abs(netWorth)))}`}
+            </p>
+
+            {lifetime.invested > 0 && (
+              <div
+                title="Across holdings with a purchase price: the money you put in, and what it has earned so far"
+                style={{
+                  padding: '6px 10px', borderRadius: 12, lineHeight: 1.3,
+                  background: 'rgba(0,0,0,.16)', backdropFilter: 'blur(6px)',
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,.78)', whiteSpace: 'nowrap' }}>
+                  {masked ? MASK : formatCurrency(lifetime.invested)} invested
+                </div>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
+                  fontSize: 12, fontWeight: 700, color: lifetime.returns >= 0 ? HERO_GAIN : HERO_LOSS,
+                }}>
+                  {lifetime.returns >= 0 ? <TrendingUp size={12} strokeWidth={2.5} /> : <TrendingDown size={12} strokeWidth={2.5} />}
+                  {masked ? MASK : `${lifetime.returns >= 0 ? '+' : ''}${formatCurrency(lifetime.returns)}`} returns
+                  {!masked && lifetime.pct !== null && <span style={{ fontWeight: 600, opacity: 0.85 }}>· {pctText(lifetime.pct)}</span>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* This cycle: money added plus what holdings earned, as one change in net worth */}
+          <div className={revealCls} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, marginBottom: 20, ...revealAfter(70) }}>
+            <span
+              title="How much your net worth grew this month: money you added plus returns on your holdings"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '5px 12px', borderRadius: 999,
+                background: '#fff', boxShadow: '0 4px 14px -6px rgba(0,0,0,.35)',
+                fontSize: 12.5, fontWeight: 700,
+                // Fixed colours (not theme tokens) so they read on the white pill in every theme
+                color: grewThisCycle > 0 ? 'oklch(0.52 0.15 152)' : grewThisCycle < 0 ? 'oklch(0.55 0.19 25)' : 'oklch(0.5 0 0)',
+              }}
+            >
+              {grewThisCycle >= 0 ? <TrendingUp size={14} strokeWidth={2.5} /> : <TrendingDown size={14} strokeWidth={2.5} />}
+              {masked ? MASK : `${grewThisCycle > 0 ? '+' : grewThisCycle < 0 ? '−' : ''}${formatCurrencyFull(Math.round(Math.abs(grewThisCycle)))}`} this month
+              {!masked && grewPct !== null && (
                 <span style={{ paddingLeft: 7, marginLeft: 1, borderLeft: '1px solid color-mix(in oklch, currentColor 30%, transparent)' }}>
-                  {savedPct > 0 ? '+' : '−'}{Math.abs(savedPct) < 0.1 ? '<0.1' : Math.abs(savedPct).toFixed(1)}%
+                  {pctText(grewPct)}
                 </span>
               )}
             </span>
+
+            {showGrowthSplit && (
+              <p style={{ margin: 0, paddingLeft: 4, fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,.8)', lineHeight: 1.4 }}>
+                {addedThisCycle >= 0 ? 'Added' : 'Withdrawn'}{' '}
+                <b style={{ color: '#fff', fontWeight: 700 }}>{masked ? MASK : formatCurrencyFull(Math.round(Math.abs(addedThisCycle)))}</b>
+                <span aria-hidden style={{ margin: '0 7px', opacity: 0.6 }}>·</span>
+                Returns{' '}
+                {growth.ready ? (
+                  <b style={{ color: returnsThisCycle >= 0 ? HERO_GAIN : HERO_LOSS, fontWeight: 700 }}>
+                    {masked ? MASK : `${returnsThisCycle > 0 ? '+' : returnsThisCycle < 0 ? '−' : ''}${formatCurrencyFull(Math.abs(returnsThisCycle))}`}
+                  </b>
+                ) : (
+                  <span style={{ opacity: 0.7 }}>updating…</span>
+                )}
+              </p>
+            )}
           </div>
+          </>)}
 
           {/* Sparkline */}
           {sparkData.some(v => v > 0) && (
@@ -344,7 +486,9 @@ export default function NetWorthPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <div style={{ background: 'rgba(255,255,255,.18)', borderRadius: 14, padding: '14px 16px', backdropFilter: 'blur(6px)' }}>
               <p style={{ fontSize: 11, color: 'rgba(255,255,255,.72)', fontWeight: 600, margin: '0 0 6px' }}>Total Assets</p>
-              <p style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>{fmt(totalAssets)}</p>
+              {revealed
+                ? <p className={revealCls} style={{ fontSize: 20, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-0.02em', ...revealAfter(110) }}>{fmt(totalAssets)}</p>
+                : <span className="gw-skel" style={{ width: 96, height: 20, color: '#fff' }} />}
             </div>
             <div style={{ background: 'rgba(255,255,255,.18)', borderRadius: 14, padding: '14px 16px', backdropFilter: 'blur(6px)' }}>
               <p style={{ fontSize: 11, color: 'rgba(255,255,255,.72)', fontWeight: 600, margin: '0 0 6px' }}>Liabilities</p>
@@ -358,13 +502,17 @@ export default function NetWorthPage() {
             background: 'rgba(255,255,255,.16)', color: '#fff', textDecoration: 'none', backdropFilter: 'blur(6px)',
           }}>
             <span style={{ font: "600 10px/1 'Geist Mono', monospace", letterSpacing: '.08em', textTransform: 'uppercase', opacity: 0.9, flex: 'none' }}>FIRE plan</span>
-            <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600, minWidth: 0 }}>{fireStripText(firePlan, fireScenario)}</span>
+            {revealed
+              ? <span className={revealCls} style={{ flex: 1, fontSize: 14.5, fontWeight: 600, minWidth: 0, ...revealAfter(150) }}>{fireStripText(firePlan, fireScenario)}</span>
+              : <span style={{ flex: 1, minWidth: 0 }}><span className="gw-skel" style={{ width: '70%', height: 14 }} /></span>}
             <span aria-hidden style={{ fontSize: 18 }}>→</span>
           </Link>
         </div>
       </div>
 
       {/* Savings & Investments (the holdings) */}
+      {!revealed ? <HoldingsSkeleton /> : (
+      <div className={revealCls} style={revealAfter(120)}>
       <MyAssetsSection
         assets={valuedAssets}
         masked={isMasked('holdings')}
@@ -379,6 +527,8 @@ export default function NetWorthPage() {
           else toast.error('Couldn’t find that transaction')
         }}
       />
+      </div>
+      )}
 
       {/* Mutual fund wealth projection (renders only when MF holdings exist) */}
       <MutualFundProjection assets={assets} masked={isMasked('projection')} onToggleMask={() => toggleCard('projection')} />
@@ -480,7 +630,7 @@ export default function NetWorthPage() {
           <MaskToggle masked={isMasked('savings')} onToggle={() => toggleCard('savings')} />
         </div>
         <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: '0 0 10px' }}>
-          Counted in net worth, but not tied to a holding yet. Open a transaction and pick its holding to move it into Savings &amp; Investments.
+          Counted in net worth, but not tied to a holding yet. Tap <Link2 size={11} style={{ verticalAlign: '-1px' }} /> to move it into one of your holdings.
         </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {savingsVehicles.map(v => {
@@ -501,6 +651,9 @@ export default function NetWorthPage() {
                       </p>
                     </div>
                     <p style={{ fontSize: 14, fontWeight: 600, color: 'var(--good-ink)', whiteSpace: 'nowrap' }}>{fmtSav(v.balance)}</p>
+                    <button onClick={() => setLinkFlow({ vehicle: v.name })} style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--brand-ink)', flexShrink: 0 }} title="Link to a holding" aria-label={`Link ${v.name} to a holding`}>
+                      <Link2 size={14} />
+                    </button>
                     <button onClick={() => openVehicleEdit(v.name)} style={{ padding: 6, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)', flexShrink: 0 }} title="Set prior balance">
                       <Pencil size={13} />
                     </button>
@@ -599,6 +752,33 @@ export default function NetWorthPage() {
 
       {assetModal.open && (
         <AssetModal item={assetModal.item} onSave={handleSaveAsset} onClose={() => setAssetModal({ open: false })} />
+      )}
+      {linkFlow && (
+        <LinkSavingsModal
+          key={`${linkFlow.vehicle}:${linkFlow.holdingId ?? ''}`}
+          vehicle={linkFlow.vehicle}
+          transactions={unlinkedFor(linkFlow.vehicle)}
+          opening={openingBalances[linkFlow.vehicle] ?? 0}
+          openingBalances={openingBalances}
+          assets={assets}
+          initialHoldingId={linkFlow.holdingId}
+          onCreateNew={() => { setCreatingFor(linkFlow.vehicle); setLinkFlow(null) }}
+          onClose={() => setLinkFlow(null)}
+        />
+      )}
+      {creatingFor && (
+        <AssetModal
+          preset={presetFor(creatingFor)}
+          onSave={async data => {
+            if (!user) return
+            const id = await addAsset(user.uid, data)
+            toast.success('Holding added')
+            setLinkFlow({ vehicle: creatingFor, holdingId: id })
+            setCreatingFor(null)
+          }}
+          // Backing out returns to the link step rather than dropping the whole flow
+          onClose={() => { setLinkFlow({ vehicle: creatingFor }); setCreatingFor(null) }}
+        />
       )}
       {liabilityModal.open && (
         <LiabilityModal item={liabilityModal.item} onSave={handleSaveLiability} onClose={() => setLiabilityModal({ open: false })} />

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { ddmmyyyyToIso, isIsoDay, valueBefore } from '@/lib/priceHistory'
 
 // NPS scheme NAVs — sourced from npsnav.in (free, no key, non-commercial use).
 // Daily NAVs published by the CRAs; this proxy caches them so the client makes
@@ -7,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 //   ?action=schemes                 → { results: [{ schemeCode, schemeName }] }
 //   ?action=history&code=SM008003   → { history: [{ date, value }] }
 //   ?codes=SM008003,SM001003        → { nav: { CODE: { nav, schemeName, changePct } } }
+//     &since=YYYY-MM-DD             → each entry also gets startNav, the NAV just before that day
 
 const BASE = 'https://npsnav.in/api'
 const UA = 'Mozilla/5.0 (compatible; SpendWise/1.0)'
@@ -54,7 +56,7 @@ export async function GET(req: NextRequest) {
     const json = await res.json()
     const rows: Record<string, string>[] = Array.isArray(json.data) ? json.data : []
 
-    const nav: Record<string, { nav: number; schemeName: string; changePct: number }> = {}
+    const nav: Record<string, { nav: number; schemeName: string; changePct: number; startNav?: number | null }> = {}
     for (const row of rows) {
       const code = row['Scheme Code']
       if (!wanted.has(code)) continue
@@ -63,6 +65,19 @@ export async function GET(req: NextRequest) {
         schemeName: row['Scheme Name'] ?? '',
         changePct: parseFloat(row['1D'] ?? '0') || 0,
       }
+    }
+    const since = req.nextUrl.searchParams.get('since')
+    if (isIsoDay(since)) {
+      await Promise.all(Object.keys(nav).map(async code => {
+        try {
+          const h = await fetch(`${BASE}/historical/${encodeURIComponent(code)}`, {
+            headers: { 'User-Agent': UA },
+            next: { revalidate: 21600 },
+          }).then(r => r.json())
+          const rows: { date: string; nav: number }[] = Array.isArray(h.data) ? h.data : []
+          nav[code].startNav = valueBefore(rows, d => ddmmyyyyToIso(d.date), d => Number(d.nav), since)
+        } catch { nav[code].startNav = null }
+      }))
     }
     return NextResponse.json({ nav, updatedAt: new Date().toISOString() })
   } catch {

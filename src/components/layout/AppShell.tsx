@@ -13,7 +13,8 @@ import BadgeCelebrationModal from '@/components/ui/BadgeCelebrationModal'
 import OnboardingTourModal from '@/components/onboarding/OnboardingTourModal'
 import SpotlightModal from '@/components/announcements/SpotlightModal'
 import { useAppStore } from '@/store/appStore'
-import { useRefreshData } from '@/hooks/useData'
+import { PullToRefreshContext } from './PullToRefresh'
+import LoadingDrop from '@/components/ui/LoadingDrop'
 import { computeLongestMoneyStreak } from '@/lib/utils'
 import { BADGES, getBadgeEarnedDate, SEEN_BADGES_KEY, type BadgeDef } from '@/lib/badges'
 import { Leaf, AlertTriangle, X } from 'lucide-react'
@@ -153,13 +154,7 @@ function PullIndicator({ pull, busy }: { pull: number; busy: boolean }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {busy ? (
-          // Spinner ring
-          <div style={{
-            width: 22, height: 22, borderRadius: '50%',
-            border: '2.5px solid var(--brand)',
-            borderTopColor: 'transparent',
-            animation: 'gw-spin .7s linear infinite',
-          }} />
+          <LoadingDrop size={34} label="Refreshing" style={{ color: 'var(--brand)' }} />
         ) : (
           // Leaf that rotates with pull distance (from design)
           <Leaf
@@ -181,7 +176,6 @@ export default function AppShell({ title, children, fillPage }: Props) {
   const transactions = useAppStore(s => s.transactions)
   const upcomingExpenses  = useAppStore(s => s.upcomingExpenses)
   const upcomingPayments  = useAppStore(s => s.upcomingPayments)
-  const refresh = useRefreshData()
 
   // ── Badge celebration queue ─────────────────────────────────────────────────
   const [badgeQueue, setBadgeQueue] = useState<BadgeDef[]>([])
@@ -385,7 +379,6 @@ export default function AppShell({ title, children, fillPage }: Props) {
   const [scrollY, setScrollY] = useState(0)
   const [pull, setPull] = useState(0)
   const [busy, setBusy] = useState(false)
-  const drag = useRef({ active: false, y0: 0 })
   const [addOpen, setAddOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
 
@@ -426,39 +419,98 @@ export default function AppShell({ title, children, fillPage }: Props) {
   }, [])
 
   // ── Pull-to-refresh ─────────────────────────────────────────────────────────
-  const onPointerDown = useCallback((e: React.PointerEvent<HTMLElement>) => {
-    const el = mainRef.current
-    if (el && el.scrollTop <= 0 && !busy) {
-      drag.current = { active: true, y0: e.clientY }
+  // Only on pages that register a refresh (see PullToRefresh). Touch events, not pointer
+  // events: once the browser starts handling a touch drag it cancels pointer events, which
+  // left the gesture dead on phones. Listeners are native so touchmove can be non-passive and
+  // stop the browser's own overscroll / reload while pulling.
+  const refreshHandler = useRef<(() => Promise<unknown>) | null>(null)
+  const [canPull, setCanPull] = useState(false)
+  const registerRefresh = useCallback((fn: () => Promise<unknown>) => {
+    refreshHandler.current = fn
+    setCanPull(true)
+    return () => {
+      if (refreshHandler.current !== fn) return
+      refreshHandler.current = null
+      setCanPull(false)
     }
-  }, [busy])
-
-  const onPointerMove = useCallback((e: React.PointerEvent<HTMLElement>) => {
-    if (!drag.current.active) return
-    const dy = e.clientY - drag.current.y0
-    if (dy > 0) setPull(Math.min(PULL_MAX, dy * 0.55))
-    else setPull(0)
   }, [])
 
-  const onPointerEnd = useCallback(() => {
-    if (!drag.current.active) return
-    drag.current.active = false
-    if (pull > PULL_THRESHOLD) {
+  useEffect(() => {
+    const el = mainRef.current
+    if (!el || !canPull) return
+    let startY = 0, tracking = false, pulling = false, current = 0, armed = false, busyNow = false
+
+    // A pull only starts with everything above the finger scrolled to the top: the page itself
+    // (on most pages the document scrolls, not <main>), <main>, and any list or sheet it's in.
+    const scrolledAbove = (target: EventTarget | null) => {
+      if (window.scrollY > 0) return true
+      for (let n = target as HTMLElement | null; n; n = n.parentElement) {
+        if (n.scrollTop > 0) return true
+      }
+      return false
+    }
+
+    async function run() {
+      busyNow = true
       setBusy(true)
       setPull(PULL_THRESHOLD)
-      refresh().finally(() => {
-        setBusy(false)
-        setPull(0)
-      })
-    } else {
+      // Spin long enough to read as "refreshed", and never hang past 15s
+      const minSpin = new Promise(r => setTimeout(r, 700))
+      const maxWait = new Promise(r => setTimeout(r, 15000))
+      try { await Promise.all([minSpin, Promise.race([refreshHandler.current?.(), maxWait])]) } catch { /* page reports its own errors */ }
+      busyNow = false
+      setBusy(false)
       setPull(0)
     }
-  }, [pull, refresh])
+
+    const onStart = (e: TouchEvent) => {
+      if (busyNow || e.touches.length !== 1 || scrolledAbove(e.target)) return
+      tracking = true; pulling = false; armed = false
+      startY = e.touches[0].clientY
+    }
+    const onMove = (e: TouchEvent) => {
+      if (!tracking) return
+      const dy = e.touches[0].clientY - startY
+      if (!pulling) {
+        if (dy < 0 || scrolledAbove(e.target)) { tracking = false; return } // scrolling down the page
+        if (dy < 4) return
+        pulling = true
+      }
+      e.preventDefault()
+      current = Math.min(PULL_MAX, Math.max(0, dy) * 0.55)
+      setPull(current)
+      // A tick when the pull is far enough to refresh (Android; iOS ignores it)
+      if (!armed && current > PULL_THRESHOLD) { armed = true; navigator.vibrate?.(8) }
+      if (armed && current <= PULL_THRESHOLD) armed = false
+    }
+    const onEnd = () => {
+      if (!tracking) return
+      tracking = false
+      if (!pulling) return
+      pulling = false
+      if (current > PULL_THRESHOLD) run()
+      else setPull(0)
+      current = 0
+    }
+
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd)
+    el.addEventListener('touchcancel', onEnd)
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+      el.removeEventListener('touchcancel', onEnd)
+      setPull(0)
+    }
+  }, [canPull])
 
   const scrolled = scrollY > 55
 
   return (
     <AuthGuard>
+      <PullToRefreshContext.Provider value={registerRefresh}>
       <div className="app">
         <Sidebar />
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: '100dvh' }}>
@@ -477,11 +529,6 @@ export default function AppShell({ title, children, fillPage }: Props) {
               ...(fillPage ? { padding: 0, display: 'flex', flexDirection: 'column' } : {}),
             }}
             onScroll={onScroll}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerEnd}
-            onPointerLeave={onPointerEnd}
-            onPointerCancel={onPointerEnd}
           >
             {/* Content shifts down with pull, springs back when released.
                 Only apply transform when actually pulling — translateY(0px) creates a
@@ -527,6 +574,7 @@ export default function AppShell({ title, children, fillPage }: Props) {
         onCta={() => closeAnnouncement('click')}
       />
       </div>
+      </PullToRefreshContext.Provider>
     </AuthGuard>
   )
 }

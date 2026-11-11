@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { ddmmyyyyToIso, isIsoDay, valueBefore } from '@/lib/priceHistory'
+
+// ?codes=A,B → latest NAVs. Add &since=YYYY-MM-DD to also get each scheme's NAV just before
+// that day (startNav), used for this cycle's returns on the net worth page.
 
 export async function GET(req: NextRequest) {
   const codes = req.nextUrl.searchParams.get('codes')
   if (!codes) return NextResponse.json({ nav: {} })
 
+  const since = req.nextUrl.searchParams.get('since')
   const schemeList = codes.split(',').map(s => s.trim()).filter(Boolean).slice(0, 20)
 
   try {
@@ -24,11 +29,14 @@ export async function GET(req: NextRequest) {
           change: parseFloat(change.toFixed(4)),
           changePct: parseFloat(changePct.toFixed(2)),
           date: json.data?.[0]?.date ?? '',
+          ...(isIsoDay(since) ? {
+            startNav: valueBefore<{ date: string; nav: string }>(json.data ?? [], d => ddmmyyyyToIso(d.date), d => parseFloat(d.nav), since),
+          } : {}),
         }
       })
     )
 
-    const nav: Record<string, { schemeName: string; nav: number; change: number; changePct: number; date: string }> = {}
+    const nav: Record<string, { schemeName: string; nav: number; change: number; changePct: number; date: string; startNav?: number | null }> = {}
     results.forEach((r, i) => {
       if (r.status === 'fulfilled') nav[schemeList[i]] = r.value
     })

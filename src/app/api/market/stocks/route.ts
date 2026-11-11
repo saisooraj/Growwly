@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { isIsoDay, yahooCloseBefore } from '@/lib/priceHistory'
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
@@ -7,6 +8,8 @@ const HEADERS = {
 
 export async function GET(req: NextRequest) {
   const symbols = req.nextUrl.searchParams.get('symbols') ?? 'HDFCBANK.NS'
+  // Optional: also return each symbol's close just before this day (startPrice)
+  const since = req.nextUrl.searchParams.get('since')
   const syms = symbols.split(',').map(s => s.trim()).filter(Boolean).slice(0, 30)
 
   try {
@@ -22,6 +25,7 @@ export async function GET(req: NextRequest) {
         if (!meta) throw new Error('No data')
 
         const price = meta.regularMarketPrice ?? 0
+        const startPrice = isIsoDay(since) ? await yahooCloseBefore(symbol, since).catch(() => null) : undefined
         const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price
         const change = price - prevClose
         const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0
@@ -37,6 +41,7 @@ export async function GET(req: NextRequest) {
           currency: meta.currency ?? 'INR',
           marketState: meta.marketState ?? 'CLOSED',
           sparkline: validCloses.map((c: number) => parseFloat(c.toFixed(2))),
+          ...(startPrice !== undefined ? { startPrice } : {}),
         }
       })
     )

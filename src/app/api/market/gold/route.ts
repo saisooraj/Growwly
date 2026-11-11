@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { isIsoDay, valueBefore, yahooDailyCloses } from '@/lib/priceHistory'
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
@@ -44,7 +45,21 @@ function parseDate(ddmmyyyy: string): string {
   return `${y}-${m}-${d}`
 }
 
-export async function GET() {
+// IBJA's page only lists the last few days, so the rate at an older date is estimated from
+// the move in GOLDBEES (an ETF that tracks the domestic gold price): today's IBJA rate scaled
+// by the ETF's close then vs now.
+async function start22kPerGram(since: string, price22kNow: number): Promise<number | null> {
+  try {
+    const { closes, price } = await yahooDailyCloses('GOLDBEES.NS')
+    const then = valueBefore(closes, c => c.date, c => c.close, since)
+    if (!then || !(price > 0)) return null
+    return parseFloat((price22kNow * then / price).toFixed(2))
+  } catch { return null }
+}
+
+// ?since=YYYY-MM-DD additionally returns start22kPerGram, the 22K rate just before that day.
+export async function GET(req: NextRequest) {
+  const since = req.nextUrl.searchParams.get('since')
   try {
     const entries = await fetchIBJA()
     if (entries.length === 0) throw new Error('No IBJA data')
@@ -99,6 +114,7 @@ export async function GET() {
       signal,
       signalText,
       history,
+      ...(isIsoDay(since) ? { start22kPerGram: await start22kPerGram(since, price22kPerGram) } : {}),
       source: 'IBJA',
       updatedAt: new Date().toISOString(),
     })

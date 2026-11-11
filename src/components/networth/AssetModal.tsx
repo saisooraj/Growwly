@@ -8,7 +8,7 @@ import { legacyGoldPurchases, goldPurchaseTotals, goldCurrentValue } from '@/lib
 import { linkSummary } from '@/lib/holdingLinks'
 import CenteredModal from '@/components/ui/CenteredModal'
 
-const KINDS: { value: AssetKind; label: string }[] = [
+export const KINDS: { value: AssetKind; label: string }[] = [
   { value: 'mutual_fund', label: 'Mutual Fund'    },
   { value: 'stocks',      label: 'Stocks / ETF'   },
   { value: 'gold_grams',  label: 'Gold'            },
@@ -32,6 +32,7 @@ export const POST_OFFICE_SCHEMES = [
   'Kisan Vikas Patra (KVP)',
   'Senior Citizens Savings Scheme (SCSS)',
   'Sukanya Samriddhi Yojana (SSY)',
+  'RPLI – Gram Santosh (EA)', // Rural Postal Life Insurance, endowment assurance policy
   'Savings Account',
 ]
 
@@ -43,13 +44,16 @@ const todayISO = () => new Date().toISOString().slice(0, 10)
 
 interface Props {
   item?: Asset
+  // A new holding with its type and name filled in (e.g. from linking unlinked savings). Manual
+  // kinds start at ₹0, ready to be filled by the linked transactions.
+  preset?: { kind: AssetKind; name: string; note?: string }
   onSave: (data: Omit<Asset, 'id' | 'userId' | 'createdAt' | 'updatedAt'>, id?: string) => Promise<void>
   onClose: () => void
 }
 
-export default function AssetModal({ item, onSave, onClose }: Props) {
-  const [kind, setKind]       = useState<AssetKind>(item?.kind ?? 'mutual_fund')
-  const [name, setName]       = useState(item?.name ?? '')
+export default function AssetModal({ item, preset, onSave, onClose }: Props) {
+  const [kind, setKind]       = useState<AssetKind>(item?.kind ?? preset?.kind ?? 'mutual_fund')
+  const [name, setName]       = useState(item?.name ?? preset?.name ?? '')
   const [saving, setSaving]   = useState(false)
 
   // Gold — one row per purchase lot (grams can vary in karat across lots)
@@ -70,7 +74,7 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
   // Manual (cash, FD, real estate, vehicle, other, epf_ppf legacy)
   const [postOfficeScheme, setPostOfficeScheme] = useState(item?.postOfficeScheme ?? '')
   const [manualValue, setManualValue] = useState(
-    !['gold_grams','mutual_fund','stocks','epf','ppf','nps'].includes(item?.kind ?? '') ? (item?.value ? String(item.value) : '') : ''
+    !['gold_grams','mutual_fund','stocks','epf','ppf','nps'].includes(item?.kind ?? '') ? (item?.value ? String(item.value) : preset ? '0' : '') : ''
   )
 
   // EPF
@@ -304,7 +308,8 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
     isEPF   ? parseFloat(epfBalance) > 0 && !!epfAsOf :
     isPPF   ? ppfDeposits.some(d => d.amount > 0 && d.date) :
     isNPS   ? npsHoldings.some(h => h.units > 0) || parseFloat(npsCorpusManual) > 0 :
-    parseFloat(manualValue) > 0
+    // 0 is allowed: a holding can start empty and fill up as savings transactions are linked to it
+    manualValue.trim() !== '' && parseFloat(manualValue) >= 0
   )
 
   return (
@@ -315,6 +320,9 @@ export default function AssetModal({ item, onSave, onClose }: Props) {
           <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{item ? 'Edit Holding' : 'Add Holding'}</h2>
           <button onClick={onClose} style={{ padding: 6, borderRadius: 8, border: 'none', background: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text-2)', display: 'flex' }}><X size={16} /></button>
         </div>
+        {preset?.note && (
+          <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '-8px 0 16px', lineHeight: 1.45 }}>{preset.note}</p>
+        )}
 
         {/* Kind selector */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>

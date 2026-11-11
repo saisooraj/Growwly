@@ -286,3 +286,76 @@ export function linkSummary(asset: Asset): LinkSummary {
   const linked = contributions.reduce((s, c) => s + c.amount, 0)
   return { unit: '₹', total, linked, historical: round(total - linked, 2), count: contributions.length }
 }
+
+// ── Link many at once ─────────────────────────────────────────────────────────
+
+// A savings transaction as the bulk link needs it. `direction` is from the holding's side:
+// 'in' for money saved into it, 'out' for money taken out of it.
+export interface BulkLinkTx {
+  id: string
+  date: string
+  amount: number
+  direction: 'in' | 'out'
+  goldGrams?: number
+  goldKarat?: 18 | 22 | 24
+  goldPricePerGram?: number
+}
+
+export interface BulkLinkPlan {
+  patch: Partial<Asset>
+  linked: string[]                             // transaction ids that link cleanly
+  skipped: { id: string; reason: string }[]   // and the ones that need opening one by one
+}
+
+/**
+ * Link several transactions to one holding, oldest first, as if each were linked on its own.
+ * As new money, a transaction that can't link (a gold buy without grams, a PPF withdrawal) is
+ * skipped with the reason instead of failing the rest. Pure.
+ */
+export function planBulkLink(asset: Asset, txs: BulkLinkTx[], mode: LinkMode): BulkLinkPlan {
+  let current = asset
+  let patch: Partial<Asset> = {}
+  const linked: string[] = []
+  const skipped: { id: string; reason: string }[] = []
+  for (const t of [...txs].sort((a, b) => a.date.localeCompare(b.date))) {
+    const result = applyLink(current, {
+      transactionId: t.id,
+      date: t.date,
+      amount: t.amount,
+      direction: t.direction,
+      ...(asset.kind === 'gold_grams' && t.goldGrams
+        ? { grams: t.goldGrams, karat: t.goldKarat ?? 22, pricePerGram: t.goldPricePerGram ?? 0 }
+        : {}),
+    }, mode)
+    if ('error' in result) { skipped.push({ id: t.id, reason: result.error }); continue }
+    patch = { ...patch, ...result.patch }
+    current = { ...current, ...result.patch }
+    linked.push(t.id)
+  }
+  // "Already in its balance" is said of the whole batch: if part of it doesn't fit, none of it
+  // is linked, rather than linking whatever happens to fit (say, only the withdrawals).
+  if (mode === 'included' && skipped.length) {
+    const reason = skipped[0].reason
+    return { patch: {}, linked: [], skipped: txs.map(t => ({ id: t.id, reason })) }
+  }
+  return { patch, linked, skipped }
+}
+
+// Kinds whose balance is a plain rupee figure, so a vehicle's prior balance (money saved before
+// tracking, with no transaction behind it) can simply be added to it. Gold needs grams, PPF a
+// dated deposit, and fund / NPS values come from units, so theirs is left for the user.
+const OPENING_MOVABLE: AssetKind[] = ['fd_rd', 'post_office', 'cash', 'other', 'epf']
+
+export function canTakeOpeningBalance(asset: Asset): boolean {
+  return OPENING_MOVABLE.includes(asset.kind)
+}
+
+/** Add a prior balance to a rupee-balance holding (on top of `patch`, if any). */
+export function addOpeningBalance(asset: Asset, patch: Partial<Asset>, amount: number): Partial<Asset> {
+  const merged = { ...asset, ...patch }
+  return {
+    ...patch,
+    value: round(merged.value + amount, 2),
+    ...(merged.investedAmount !== undefined ? { investedAmount: round(merged.investedAmount + amount, 2) } : {}),
+  }
+}
