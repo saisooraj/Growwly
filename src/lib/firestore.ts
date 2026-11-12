@@ -72,6 +72,17 @@ export async function getUserTransactions(
     })
 }
 
+/** Refunds logged against one expense — read fresh, without reading every transaction. */
+export async function getRefundsOf(userId: string, expenseId: string): Promise<Transaction[]> {
+  const q = query(
+    collection(db, 'transactions'),
+    where('userId', '==', userId),
+    where('refundOf', '==', expenseId),
+  )
+  const snap = await getDocs(q)
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Transaction))
+}
+
 const PAGE_SIZE = 50
 
 export async function getTransactionsPage(
