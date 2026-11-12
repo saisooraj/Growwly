@@ -321,6 +321,8 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
           anchor={
             <button
               onClick={() => (onScan ? setAddMenuOpen(o => !o) : onAdd())}
+              title="Add transaction (N)"
+              aria-keyshortcuts="N"
               className="hidden lg:flex items-center gap-2"
               style={{
                 padding: '9px 16px', borderRadius: 13, border: 'none',

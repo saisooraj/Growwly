@@ -382,6 +382,21 @@ export default function AppShell({ title, children, fillPage }: Props) {
   const [addOpen, setAddOpen] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
 
+  // ── N opens Add transaction from any page ───────────────────────────────────
+  // Skipped while typing in a field or when another dialog is already open
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      if (e.key.toLowerCase() !== 'n' || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return
+      e.preventDefault()
+      setAddOpen(true)
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   // ── Accent color + dynamic favicon + theme-color ────────────────────────────
   useEffect(() => {
     const accent = settings?.accentColor ?? 'green'
