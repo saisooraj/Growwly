@@ -41,6 +41,8 @@ export default function BillScannerModal({ open, onClose, initialBlob }: Props) 
   const [manualFallback, setManualFallback] = useState(false)
   const [duplicate, setDuplicate] = useState<Transaction | null>(null)
   const [duplicateAcknowledged, setDuplicateAcknowledged] = useState(false)
+  // The scanned picture, shown as a thumbnail while reviewing what was read from it
+  const [scanImage, setScanImage] = useState<string | null>(null)
 
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -52,7 +54,10 @@ export default function BillScannerModal({ open, onClose, initialBlob }: Props) 
     setManualFallback(false)
     setDuplicate(null)
     setDuplicateAcknowledged(false)
+    setScanImage(null)
   }
+
+  useEffect(() => () => { if (scanImage) URL.revokeObjectURL(scanImage) }, [scanImage])
 
   useEffect(() => {
     if (!open) {
@@ -91,6 +96,7 @@ export default function BillScannerModal({ open, onClose, initialBlob }: Props) 
 
   async function runOcr(blob: Blob, source: 'scan' | 'share-target') {
     setStep('ocr')
+    setScanImage(URL.createObjectURL(blob))
     try {
       const upload = await resizeForUpload(blob)
       const formData = new FormData()
@@ -281,6 +287,8 @@ export default function BillScannerModal({ open, onClose, initialBlob }: Props) 
         onClose={onClose}
         initialTab={initialTab}
         initialPrefill={prefill}
+        scanImage={scanImage}
+        onRescan={() => { setPrefill(null); setDuplicate(null); setStep('choose') }}
       />
     </>
   )

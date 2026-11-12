@@ -1,24 +1,25 @@
 'use client'
 
-import { Fragment, useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { Fragment, useState, useEffect, useCallback, useMemo, useRef, type CSSProperties } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { X, RefreshCw, ArrowDownLeft, ArrowUpRight, ArrowLeftRight, Split, UserPlus, Trash2, PiggyBank, RotateCcw } from 'lucide-react'
-import { IconMedal, IconCrane } from '@tabler/icons-react'
-import { format, parseISO } from 'date-fns'
-import { addTransaction, updateTransaction, deleteTransaction, updateProject, updateSavingsGoal, addBorrowing, updateBorrowing, setUserSettings, setEmergencyFund, getUserTransactions, getUserAssets, updateAsset } from '@/lib/firestore'
+import { differenceInCalendarDays, format, parseISO, subDays } from 'date-fns'
+import { addTransaction, updateTransaction, deleteTransaction, updateProject, updateSavingsGoal, addBorrowing, updateBorrowing, setUserSettings, setEmergencyFund, getRefundsOf, getUserAssets, updateAsset } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTransfer, buildMonthlySummary, EXPENSE_CATEGORIES, INCOME_CATEGORIES, computeProjectPaid, formatCurrencyFull } from '@/lib/utils'
-import { getSavingsVehicleMeta, getCategoryDisplayName } from '@/lib/categoryIcons'
+import { getCategoryDisplayName, ICON_PALETTE, buildCustomCategory } from '@/lib/categoryIcons'
 import { applyLink, removeLink, findLinkedAsset, linkedContribution, linkSummary, defaultHoldingFor, vehicleKinds, isLinkable, type LinkMode, type LinkInput } from '@/lib/holdingLinks'
 import { useAppStore } from '@/store/appStore'
 import { getCycleMonthForDate } from '@/lib/cycle'
 import { isSavingsPlan } from '@/lib/budgetPlan'
-import CategoryPicker from '@/components/transactions/CategoryPicker'
-import TagPicker from '@/components/transactions/TagPicker'
-import AmountInput from '@/components/ui/AmountInput'
+import AmountInput, { groupINR } from '@/components/ui/AmountInput'
 import FuelFields, { addVehicle, fuelDraftFrom, fuelPayload, type FuelDraft } from '@/components/transactions/FuelFields'
 import { isFuelExpense, solveFuel, type FuelCalc } from '@/lib/fuel'
+import { DEFAULT_TOP_EXPENSE, EXPENSE_GROUPS, hueOf, vehicleSheetMeta } from '@/lib/txnSheetMeta'
+import {
+  MONO, Sym, tone, chip, seg, field, radio, avatar, labelStyle, subLabelStyle, closeBtn, darkBtn, textInput,
+  SheetCard, Keypad, CatTile, CatGlyph, NeutralTile, NumInput, Switch, Kbd, categoryLook,
+} from '@/components/transactions/TxnSheetParts'
 import type { Asset, Transaction, TransactionType, TransferKind } from '@/types'
 import toast from 'react-hot-toast'
 
@@ -26,6 +27,7 @@ const GOLD_VEHICLE = 'Gold'
 
 type Tab = 'expense' | 'income' | 'transfer' | 'savings'
 type SavingsKind = 'savings_contribution' | 'savings_withdrawal'
+type CardKey = 'split' | 'tags' | 'settle' | 'project' | 'repeat' | 'refunds'
 
 interface InitialPrefill {
   amount?: number
@@ -43,6 +45,9 @@ interface Props {
   initialSavingsVehicle?: string
   initialPrefill?: InitialPrefill | null
   onViewOriginal?: (tx: Transaction) => void
+  /** Prefilled from a bill: its picture for the banner, and a way back to the scanner */
+  scanImage?: string | null
+  onRescan?: () => void
 }
 
 type SplitMode = 'equal' | 'percentage' | 'manual'
@@ -55,12 +60,23 @@ interface SplitParticipant {
   kind: SplitKind
 }
 
-const TYPE_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: 'expense', label: 'Expense',  icon: <ArrowUpRight size={14} /> },
-  { id: 'income',  label: 'Income',   icon: <ArrowDownLeft size={14} /> },
-  { id: 'savings', label: 'Savings',  icon: <PiggyBank size={14} /> },
-  { id: 'transfer',label: 'Transfer', icon: <ArrowLeftRight size={14} /> },
+const TYPE_TABS: { id: Tab; label: string; tone: 'bad' | 'good' | 'brand' | 'info' }[] = [
+  { id: 'expense',  label: 'Expense',  tone: 'bad' },
+  { id: 'income',   label: 'Income',   tone: 'good' },
+  { id: 'savings',  label: 'Savings',  tone: 'brand' },
+  { id: 'transfer', label: 'Transfer', tone: 'info' },
 ]
+
+// Contributions and withdrawals live on the Savings tab; Transfer is loans only
+const LOAN_KINDS: { id: TransferKind; label: string; icon: string }[] = [
+  { id: 'loan_given',              label: 'Loan given',         icon: 'north_east' },
+  { id: 'loan_repayment_received', label: 'Repayment received', icon: 'south_west' },
+  { id: 'loan_repayment_paid',     label: 'Loan repaid',        icon: 'north_east' },
+]
+
+const DESKTOP_QUERY = '(min-width: 640px)'
+const R = (n: number) => formatCurrencyFull(n)
+const todayStr = () => format(new Date(), 'yyyy-MM-dd')
 
 function savingsTabFor(tx?: Transaction | null): Tab {
   if (!tx) return 'expense'
@@ -110,30 +126,54 @@ async function createSplitRecords(
   }
 }
 
-function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div
-      onClick={e => { e.stopPropagation(); onChange(!on) }}
-      style={{
-        width: 36, height: 20, borderRadius: 999, flexShrink: 0, cursor: 'pointer',
-        background: on ? 'var(--brand)' : 'var(--border-strong)',
-        position: 'relative', transition: 'background .2s',
-      }}
-    >
-      <div style={{
-        position: 'absolute', top: 2, left: on ? 18 : 2,
-        width: 16, height: 16, borderRadius: '50%',
-        background: '#fff', transition: 'left .2s',
-        boxShadow: '0 1px 3px rgba(0,0,0,.2)',
-      }} />
-    </div>
-  )
+function useIsDesktop() {
+  const [desk, setDesk] = useState(() => typeof window !== 'undefined' && window.matchMedia(DESKTOP_QUERY).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(DESKTOP_QUERY)
+    const on = () => setDesk(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  return desk
 }
 
-export default function AddTransactionModal({ open, onClose, editTx, initialTab, initialSavingsVehicle, initialPrefill, onViewOriginal }: Props) {
+// The visible part of the screen. On phones the sheet sits inside it, so it rides above the keyboard.
+function useVisualViewport(active: boolean) {
+  const [vv, setVv] = useState<{ h: number; top: number } | null>(null)
+  useEffect(() => {
+    const v = typeof window !== 'undefined' ? window.visualViewport : null
+    if (!active || !v) { setVv(null); return }
+    const on = () => setVv({ h: v.height, top: v.offsetTop })
+    on()
+    v.addEventListener('resize', on)
+    v.addEventListener('scroll', on)
+    return () => { v.removeEventListener('resize', on); v.removeEventListener('scroll', on) }
+  }, [active])
+  return vv
+}
+
+// Opens the browser's own date picker for a hidden date input
+function openPicker(el: HTMLInputElement | null) {
+  if (!el) return
+  try { el.showPicker() } catch { el.focus(); el.click() }
+}
+
+function dateLabel(d: string) {
+  const days = differenceInCalendarDays(new Date(), parseISO(d))
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Yesterday'
+  const dt = parseISO(d)
+  return format(dt, dt.getFullYear() === new Date().getFullYear() ? 'EEE, d MMM' : 'd MMM yyyy')
+}
+
+export default function AddTransactionModal({ open, onClose, editTx, initialTab, initialSavingsVehicle, initialPrefill, onViewOriginal, scanImage, onRescan }: Props) {
   const { user } = useAuth()
   const refresh = useRefreshData()
   const { projects, budgets, transactions, borrowings, contacts, settings, emergencyFund, savingsGoals, setSavingsGoals, assets } = useAppStore()
+  const isDesktop = useIsDesktop()
+  const mobile = !isDesktop
+  const vv = useVisualViewport(open && mobile)
 
   // Core fields
   const [activeTab, setActiveTab]       = useState<Tab>(savingsTabFor(editTx))
@@ -154,11 +194,12 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   const [linkMode, setLinkMode]     = useState<LinkMode | null>(null)
   const holdingTouched = useRef(false)
   const [amount, setAmount]             = useState(editTx ? String(editTx.amount) : initialPrefill?.amount != null ? String(initialPrefill.amount) : '')
-  const [category, setCategory]         = useState<string>(editTx?.category ?? initialPrefill?.category ?? 'Food & Dining')
-  const [date, setDate]                 = useState(editTx?.date ?? initialPrefill?.date ?? format(new Date(), 'yyyy-MM-dd'))
+  const [category, setCategory]         = useState<string>(editTx?.category ?? initialPrefill?.category ?? '')
+  const [date, setDate]                 = useState(editTx?.date ?? initialPrefill?.date ?? todayStr())
   const [notes, setNotes]               = useState(editTx?.notes ?? initialPrefill?.notes ?? '')
   const [tags, setTags]                 = useState<string[]>(editTx?.tags ?? [])
   const [suggestedCat, setSuggestedCat] = useState<string | null>(null)
+  const [thinking, setThinking]         = useState(false)
   const [projectId, setProjectId]       = useState(editTx?.projectId ?? '')
   const [isRecurring, setIsRecurring]   = useState(editTx?.isRecurring ?? false)
   const [saving, setSaving]             = useState(false)
@@ -166,19 +207,19 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   // fuelAuto is the one we filled, and it keeps following the other two until it's typed over.
   const [fuel, setFuel]                 = useState<FuelDraft>(() => fuelDraftFrom(editTx, settings))
   const [fuelAuto, setFuelAuto]         = useState<FuelCalc | null>(null)
-  // Person name for loan transfers (auto-synced to borrowings)
-  const [loanPerson, setLoanPerson]         = useState('')
-  const [personDropdownOpen, setPersonDropdownOpen] = useState(false)
-  const personInputRef = useRef<HTMLInputElement>(null)
+  // Person for loan transfers (auto-synced to borrowings); the query is the search box text
+  const [loanPerson, setLoanPerson]     = useState('')
+  const [personQuery, setPersonQuery]   = useState('')
+  const [personOpen, setPersonOpen]     = useState(false)
   // Allocation plan: borrowingId → amount to apply (editable, defaults to greedy)
-  const [allocation, setAllocation] = useState<Record<string, number>>({})
+  const [allocation, setAllocation] = useState<Record<string, string>>({})
 
   // Debt settlement state (expense only) — settles against a person's *total* "lent" balance
   const [settledPerson, setSettledPerson] = useState(editTx?.settledPerson ?? '')
 
   // Refund state (expense edit only — logging a refund against this expense)
   const [refundAmount, setRefundAmount] = useState('')
-  const [refundDate, setRefundDate]     = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [refundDate, setRefundDate]     = useState(todayStr())
   const [refundNotes, setRefundNotes]   = useState('')
   const [addingRefund, setAddingRefund] = useState(false)
   const [showRefundForm, setShowRefundForm] = useState(false)
@@ -187,13 +228,61 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   const [splitEnabled, setSplitEnabled]   = useState(false)
   const [splitMode, setSplitMode]         = useState<SplitMode>('equal')
   const [participants, setParticipants]   = useState<SplitParticipant[]>([])
+  const [myShareValue, setMyShareValue]   = useState(0)   // your % or ₹ in percentage / manual mode
   const [newName, setNewName]             = useState('')
 
+  // Sheet UI: which input owns the keyboard, open layers, opened detail cards (in tap order)
+  const [focus, setFocus]                 = useState<'amount' | 'text' | null>(null)
+  const [noteFocused, setNoteFocused]     = useState(false)
+  const [dateOpen, setDateOpen]           = useState(false)
+  const [catExpanded, setCatExpanded]     = useState(false)
+  const [allCats, setAllCats]             = useState(false)
+  const [catQuery, setCatQuery]           = useState('')
+  const [customOpen, setCustomOpen]       = useState(false)
+  const [customName, setCustomName]       = useState('')
+  const [customIcon, setCustomIcon]       = useState(() => ICON_PALETTE.find(p => p.group === 'Misc')?.name ?? ICON_PALETTE[0].name)
+  const [iconGroup, setIconGroup]         = useState('Misc')
+  const [sessionCats, setSessionCats]     = useState<string[]>([])
+  const [openCards, setOpenCards]         = useState<CardKey[]>([])
+  const [holdingOpen, setHoldingOpen]     = useState(false)
+  const [vehicleInputOpen, setVehicleInputOpen] = useState(false)
+  const [vehicleDraft, setVehicleDraft]   = useState('')
+  const [tagQuery, setTagQuery]           = useState('')
+  const [attempted, setAttempted]         = useState(false)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+
+  const panelRef   = useRef<HTMLDivElement>(null)
+  const bodyRef    = useRef<HTMLDivElement>(null)
+  const amountRef  = useRef<HTMLInputElement>(null)
+  const dateRef    = useRef<HTMLInputElement>(null)
+  const refundDateRef = useRef<HTMLInputElement>(null)
+  const drag       = useRef<{ y: number; dy: number } | null>(null)
+
   // Unique known people from contacts + borrowings
-  const knownPeople = Array.from(new Set([
+  const knownPeople = useMemo(() => Array.from(new Set([
     ...contacts.map(c => c.name),
     ...borrowings.map(b => b.person),
-  ])).sort()
+  ])).sort(), [contacts, borrowings])
+
+  // What each person owes you / you owe them, across their open records
+  const balances = useMemo(() => {
+    const map = new Map<string, { owesYou: number; youOwe: number }>()
+    for (const b of borrowings) {
+      const out = b.amount - b.repaidAmount
+      if (b.status === 'repaid' || out <= 0) continue
+      const e = map.get(b.person) ?? { owesYou: 0, youOwe: 0 }
+      if (b.type === 'lent') e.owesYou += out
+      else e.youOwe += out
+      map.set(b.person, e)
+    }
+    return map
+  }, [borrowings])
+  const personMeta = (name: string) => {
+    const b = balances.get(name)
+    if (b?.owesYou) return `Owes you ${R(b.owesYou)}`
+    if (b?.youOwe) return `You owe ${R(b.youOwe)}`
+    return 'No open records'
+  }
 
   // When editing a settled expense, the allocation it already applied — reversed before
   // recomputing so outstanding balances read as they were *before* this expense.
@@ -258,6 +347,12 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   // Refund editing: this modal instance is editing a refund transaction itself
   const isRefundEdit = editTx?.type === 'refund'
   const linkedOriginal = isRefundEdit ? transactions.find(t => t.id === editTx!.refundOf) : undefined
+  // Most this refund can be, given the other refunds against the same expense
+  const refundCeiling = linkedOriginal
+    ? linkedOriginal.amount - transactions
+        .filter(t => t.type === 'refund' && t.refundOf === linkedOriginal.id && t.id !== editTx!.id)
+        .reduce((s, t) => s + t.amount, 0)
+    : Infinity
 
   // Refunds already logged against this expense (when editing an expense)
   const existingRefunds = useMemo(() =>
@@ -272,12 +367,20 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   const isRepaymentKind = transferKind === 'loan_repayment_received' || transferKind === 'loan_repayment_paid'
   const loanPersonTrimmed = loanPerson.trim()
 
-  // Filtered dropdown options
-  const filteredPeople = useMemo(() =>
-    knownPeople.filter(p => p.toLowerCase().includes(loanPersonTrimmed.toLowerCase())),
-    [knownPeople, loanPersonTrimmed]
+  // Search results for the person box, and whether the typed name is someone new
+  const personQ = personQuery.trim().toLowerCase()
+  const personResults = useMemo(() =>
+    knownPeople.filter(p => !personQ || p.toLowerCase().includes(personQ)).slice(0, 5),
+    [knownPeople, personQ]
   )
-  const isNewPerson = !!loanPersonTrimmed && !knownPeople.some(p => p.toLowerCase() === loanPersonTrimmed.toLowerCase())
+  const canAddPerson = !!personQ && !knownPeople.some(p => p.toLowerCase() === personQ)
+
+  // Open records with this person that a loan transfer of this kind touches
+  const personRecords = useMemo(() => {
+    if (!loanPersonTrimmed) return []
+    const bType = transferKind === 'loan_repayment_paid' ? 'borrowed' : 'lent'
+    return borrowings.filter(b => b.type === bType && b.status !== 'repaid' && b.person.toLowerCase() === loanPersonTrimmed.toLowerCase())
+  }, [loanPersonTrimmed, borrowings, transferKind])
 
   // Pending borrowings for the selected person (for repayment kinds)
   const pendingForPerson = useMemo(() => {
@@ -295,12 +398,12 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     const amt = Number(amount)
     if (!amt) { setAllocation({}); return }
     let remaining = amt
-    const plan: Record<string, number> = {}
+    const plan: Record<string, string> = {}
     for (const b of pendingForPerson) {
       if (remaining <= 0) break
       const outstanding = b.amount - b.repaidAmount
       const apply = Math.min(outstanding, remaining)
-      if (apply > 0) { plan[b.id] = apply; remaining -= apply }
+      if (apply > 0) { plan[b.id] = String(Math.round(apply * 100) / 100); remaining -= apply }
     }
     setAllocation(plan)
   }, [pendingForPerson, amount])
@@ -310,46 +413,78 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     [allocation]
   )
 
+  // Fills the form from the transaction being edited / the prefill, or clears it for "save & add another"
+  function resetForm(again = false) {
+    const src = again ? null : editTx ?? null
+    const pre = again ? null : initialPrefill ?? null
+    if (!again) {
+      setActiveTab(src ? savingsTabFor(src) : (initialTab ?? 'expense'))
+      setTransferKind(src?.transferKind ?? 'loan_repayment_received')
+      setSavingsKind(src?.transferKind === 'savings_withdrawal' || src?.transferKind === 'ef_withdrawal' ? 'savings_withdrawal' : 'savings_contribution')
+      setSavingsVehicle(src?.savingsVehicle ?? initialSavingsVehicle ?? EMERGENCY_FUND_VEHICLE)
+      setDate(src?.date ?? pre?.date ?? todayStr())
+    }
+    setGoldGrams(src?.goldGrams ? String(src.goldGrams) : '')
+    setGoldKarat(src?.goldKarat ?? 22)
+    setGoldPricePerGram(src?.goldPricePerGram ? String(src.goldPricePerGram) : '')
+    const linked = src ? findLinkedAsset(assets, src.id) : undefined
+    const linkedEntry = linked && src ? linkedContribution(linked, src.id) : undefined
+    setHoldingId(linked?.id ?? '')
+    setLinkUnits(linkedEntry?.units ? String(Math.abs(linkedEntry.units)) : '')
+    setLinkScheme(linkedEntry?.schemeCode ?? '')
+    setLinkMode(null)
+    holdingTouched.current = false
+    setAmount(src ? String(src.amount) : pre?.amount != null ? String(pre.amount) : '')
+    setCategory(src?.category ?? pre?.category ?? '')
+    setNotes(src?.notes ?? pre?.notes ?? '')
+    setTags(src?.tags ?? [])
+    setProjectId(src?.projectId ?? '')
+    setIsRecurring(src?.isRecurring ?? false)
+    setFuel(fuelDraftFrom(src, useAppStore.getState().settings))
+    setFuelAuto(null)
+    setSplitEnabled(false)
+    setSplitMode('equal')
+    setParticipants([])
+    setMyShareValue(0)
+    setNewName('')
+    setLoanPerson(src?.loanPerson ?? '')
+    setPersonQuery('')
+    setPersonOpen(false)
+    setAllocation({})
+    setSettledPerson(src?.settledPerson ?? '')
+    setRefundAmount('')
+    setRefundDate(todayStr())
+    setRefundNotes('')
+    setShowRefundForm(false)
+    setSuggestedCat(null)
+    setThinking(false)
+    setFocus(!src && !pre ? 'amount' : null)
+    setDateOpen(false)
+    setCatExpanded(false)
+    setAllCats(false)
+    setCatQuery('')
+    setCustomOpen(false)
+    setCustomName('')
+    setHoldingOpen(false)
+    setVehicleInputOpen(false)
+    setVehicleDraft('')
+    setTagQuery('')
+    setAttempted(false)
+    setConfirmDiscard(false)
+    // Details the transaction already has start open, so nothing saved is hidden
+    const cards: CardKey[] = []
+    if (src?.tags?.length) cards.push('tags')
+    if (src?.settledPerson) cards.push('settle')
+    if (src?.projectId) cards.push('project')
+    if (src?.isRecurring) cards.push('repeat')
+    if (src?.type === 'expense' && transactions.some(t => t.type === 'refund' && t.refundOf === src.id)) cards.push('refunds')
+    setOpenCards(cards)
+  }
+
   // Reset on open/close
   useEffect(() => {
-    if (open) {
-      setActiveTab(editTx ? savingsTabFor(editTx) : (initialTab ?? 'expense'))
-      setTransferKind(editTx?.transferKind ?? 'loan_repayment_received')
-      setSavingsKind(editTx?.transferKind === 'savings_withdrawal' || editTx?.transferKind === 'ef_withdrawal' ? 'savings_withdrawal' : 'savings_contribution')
-      setSavingsVehicle(editTx?.savingsVehicle ?? initialSavingsVehicle ?? EMERGENCY_FUND_VEHICLE)
-      setGoldGrams(editTx?.goldGrams ? String(editTx.goldGrams) : '')
-      setGoldKarat(editTx?.goldKarat ?? 22)
-      setGoldPricePerGram(editTx?.goldPricePerGram ? String(editTx.goldPricePerGram) : '')
-      const linked = editTx ? findLinkedAsset(assets, editTx.id) : undefined
-      const linkedEntry = linked && editTx ? linkedContribution(linked, editTx.id) : undefined
-      setHoldingId(linked?.id ?? '')
-      setLinkUnits(linkedEntry?.units ? String(Math.abs(linkedEntry.units)) : '')
-      setLinkScheme(linkedEntry?.schemeCode ?? '')
-      setLinkMode(null)
-      holdingTouched.current = false
-      setAmount(editTx ? String(editTx.amount) : initialPrefill?.amount != null ? String(initialPrefill.amount) : '')
-      setCategory(editTx?.category ?? initialPrefill?.category ?? 'Food & Dining')
-      setDate(editTx?.date ?? initialPrefill?.date ?? format(new Date(), 'yyyy-MM-dd'))
-      setNotes(editTx?.notes ?? initialPrefill?.notes ?? '')
-      setTags(editTx?.tags ?? [])
-      setProjectId(editTx?.projectId ?? '')
-      setIsRecurring(editTx?.isRecurring ?? false)
-      setFuel(fuelDraftFrom(editTx, useAppStore.getState().settings))
-      setFuelAuto(null)
-      setSplitEnabled(false)
-      setSplitMode('equal')
-      setParticipants([])
-      setNewName('')
-      setLoanPerson('')
-      setPersonDropdownOpen(false)
-      setAllocation({})
-      setSettledPerson(editTx?.settledPerson ?? '')
-      setRefundAmount('')
-      setRefundDate(format(new Date(), 'yyyy-MM-dd'))
-      setRefundNotes('')
-      setShowRefundForm(false)
-    }
-  }, [open, editTx, initialPrefill])
+    if (open) resetForm()
+  }, [open, editTx, initialPrefill]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const isFuel = activeTab === 'expense' && isFuelExpense({ type: txType, category })
   // Litres, ₹ per litre, discount and amount move together: paid = litres × price − discount
@@ -369,8 +504,23 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   }
 
   function changeAmount(v: string) {
+    setAttempted(false)
     if (isFuel) applyFuelMaths('amount', fuel, v)
     else setAmount(v)
+  }
+
+  // The in-sheet keypad: two decimals at most, nine digits at most
+  function pressKey(k: string) {
+    let a = amount
+    if (k === 'del') a = a.slice(0, -1)
+    else if (k === '.') { if (a.includes('.')) return; a = (a || '0') + '.' }
+    else {
+      if (a.includes('.') && a.split('.')[1].length >= 2) return
+      if (a.replace('.', '').length >= 9) return
+      if (a === '0') a = ''
+      a += k
+    }
+    changeAmount(a)
   }
 
   // Auto-link Gold/Construction → project
@@ -389,8 +539,10 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
 
   // ── Auto-categorization from notes (debounced 600ms) ───────────────────────
   useEffect(() => {
-    if (activeTab === 'savings' || txType === 'transfer') return
-    if (notes.trim().length < 3) { setSuggestedCat(null); return }
+    if (activeTab === 'savings' || txType === 'transfer' || isRefundEdit) { setThinking(false); return }
+    if (notes.trim().length < 3) { setSuggestedCat(null); setThinking(false); return }
+    let live = true
+    setThinking(true)
     const timer = setTimeout(async () => {
       try {
         const res = await fetch('/api/chat/categorize', {
@@ -399,11 +551,14 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           body: JSON.stringify({ notes: notes.trim(), type: txType }),
         })
         const data = await res.json()
+        if (!live) return
         if (data.category && data.category !== category) setSuggestedCat(data.category)
         else setSuggestedCat(null)
-      } catch { /* silent */ }
+      } catch { /* silent */ } finally {
+        if (live) setThinking(false)
+      }
     }, 600)
-    return () => clearTimeout(timer)
+    return () => { live = false; clearTimeout(timer) }
   }, [notes, txType, activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Split calculations ──────────────────────────────────────────────────────
@@ -419,40 +574,52 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     return p.value
   }, [splitMode, participants.length, totalAmount])
 
+  const splitActive = splitEnabled && participants.length > 0
   const myShare = (() => {
-    if (!splitEnabled || participants.length === 0) return totalAmount
+    if (!splitActive) return totalAmount
     if (splitMode === 'equal') {
       const n = participants.length
       return totalAmount - n * Math.floor(totalAmount / (n + 1))
     }
-    if (splitMode === 'percentage') {
-      const sumPct = participants.reduce((s, p) => s + p.value, 0)
-      return Math.round(totalAmount * Math.max(0, 100 - sumPct) / 100)
-    }
-    const sumOthers = participants.reduce((s, p) => s + p.value, 0)
-    return totalAmount - sumOthers
+    if (splitMode === 'percentage') return Math.round(totalAmount * myShareValue / 100)
+    return myShareValue
   })()
 
   const sumAssigned = participants.reduce((s, p) => s + getParticipantAmount(p), 0) + myShare
-  const isBalanced = totalAmount > 0 && Math.abs(sumAssigned - totalAmount) < 1
-  const myPct = totalAmount > 0 ? (myShare / totalAmount) * 100 : 0
+  // Percentages balance on the percentages themselves, so rounding each share can't knock them out
+  const pctTotal = myShareValue + participants.reduce((s, p) => s + p.value, 0)
+  const isBalanced = !splitActive || splitMode === 'equal'
+    ? true
+    : splitMode === 'percentage' ? Math.abs(pctTotal - 100) < 0.01 : Math.abs(sumAssigned - totalAmount) < 0.5
+  const splitRemaining = splitMode === 'percentage'
+    ? Math.round(totalAmount * (100 - pctTotal)) / 100
+    : totalAmount - sumAssigned
+  const myPct = totalAmount > 0 ? Math.round((myShare / totalAmount) * 1000) / 10 : 0
 
   // ── Participant management ──────────────────────────────────────────────────
 
+  // Even starting values for everyone, you included, whenever people or the mode change
+  function seedSplit(mode: SplitMode, people: SplitParticipant[]) {
+    const n = people.length + 1
+    if (mode === 'percentage') {
+      const each = +(100 / n).toFixed(2)
+      setMyShareValue(+(100 - each * (n - 1)).toFixed(2))
+      return people.map(p => ({ ...p, value: each }))
+    }
+    if (mode === 'manual') {
+      const each = Math.floor(totalAmount / n)
+      setMyShareValue(totalAmount - each * (n - 1))
+      return people.map(p => ({ ...p, value: each }))
+    }
+    return people
+  }
+
   function addParticipant(name: string) {
-    if (!name.trim()) return
-    const defaultValue = splitMode === 'percentage'
-      ? Math.floor(100 / (participants.length + 2))
-      : splitMode === 'manual'
-      ? Math.floor(totalAmount / (participants.length + 2))
-      : 0
-    setParticipants(ps => [...ps, {
-      id: Math.random().toString(36).slice(2),
-      name: name.trim(),
-      value: defaultValue,
-      kind: 'lent',
-    }])
+    const nm = name.trim()
+    if (!nm) return
     setNewName('')
+    if (participants.some(p => p.name.toLowerCase() === nm.toLowerCase())) return
+    setParticipants(seedSplit(splitMode, [...participants, { id: Math.random().toString(36).slice(2), name: nm, value: 0, kind: 'lent' }]))
   }
 
   function updateParticipant(id: string, changes: Partial<SplitParticipant>) {
@@ -460,7 +627,12 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   }
 
   function removeParticipant(id: string) {
-    setParticipants(ps => ps.filter(p => p.id !== id))
+    setParticipants(seedSplit(splitMode, participants.filter(p => p.id !== id)))
+  }
+
+  function changeSplitMode(m: SplitMode) {
+    setSplitMode(m)
+    setParticipants(seedSplit(m, participants))
   }
 
   // ── Budget alert ────────────────────────────────────────────────────────────
@@ -475,9 +647,9 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     const newTotal = alreadySpent + addedAmount
     const pct = (newTotal / budget.planned) * 100
     if (pct >= 100)
-      toast.error(`Over budget on ${cat}! ₹${Math.round(newTotal).toLocaleString('en-IN')} of ₹${budget.planned.toLocaleString('en-IN')}`, { duration: 5000 })
+      toast.error(`Over budget on ${getCategoryDisplayName(cat)}! ₹${Math.round(newTotal).toLocaleString('en-IN')} of ₹${budget.planned.toLocaleString('en-IN')}`, { duration: 5000 })
     else if (pct >= 80)
-      toast(`${Math.round(pct)}% of ${cat} budget used`, { duration: 4000 })
+      toast(`${Math.round(pct)}% of ${getCategoryDisplayName(cat)} budget used`, { duration: 4000 })
   }
 
   // ── Holding link ────────────────────────────────────────────────────────────
@@ -571,7 +743,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   const linkPreview = holding && linkResult && !('error' in linkResult)
     ? { before: linkSummary(holding), after: linkSummary({ ...holding, ...linkResult.patches[holding.id] }) }
     : null
-  const fmtLinked = (n: number, unit: '₹' | 'g') => unit === 'g' ? `${n}g` : formatCurrencyFull(n)
+  const fmtLinked = (n: number, unit: '₹' | 'g') => unit === 'g' ? `${n} g` : formatCurrencyFull(n)
 
   async function syncHoldingLink(transactionId: string, linkAmount: number) {
     if (!user || (!activeHoldingId && !prevHolding)) return
@@ -589,50 +761,101 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     }
   }
 
-  // ── Submit ──────────────────────────────────────────────────────────────────
+  // ── What's on screen ────────────────────────────────────────────────────────
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!user || !amount || Number(amount) <= 0) return
-    if (linkError) { toast.error(linkError); return }
-    const pendingParticipant = splitEnabled && newName.trim()
-      ? [{ id: 'tmp', name: newName.trim(), value: 0, kind: 'lent' as SplitKind }]
-      : []
-    const hasParticipants = splitEnabled && (participants.length + pendingParticipant.length) > 0
-    if (hasParticipants && myShare <= 0) {
-      toast.error('Your share must be greater than 0')
+  const isExp = activeTab === 'expense' && !isRefundEdit
+  const isInc = activeTab === 'income'
+  const isSav = activeTab === 'savings'
+  const isTr  = activeTab === 'transfer'
+  const amt   = Number(amount) || 0
+  const canSplit = txType === 'expense' && !editTx?.splitApplied && !isRefundEdit
+  const splitOn  = canSplit && splitEnabled && isExp
+  const showKeypad = mobile && focus === 'amount' && !allCats && !saving
+  const kbdOpen = mobile && focus === 'text'
+  const isScan = !!initialPrefill?.source && !editTx
+  const cardOpen = (k: CardKey) => openCards.includes(k)
+
+  // Category tiles: the user's most-used over the last 60 days, the AI pick and the current pick
+  const customCats = useMemo(() => Array.from(new Set([...(settings?.customCategories ?? []), ...sessionCats])), [settings?.customCategories, sessionCats])
+  const usage = useMemo(() => {
+    const since = format(subDays(new Date(), 60), 'yyyy-MM-dd')
+    const counts: Record<string, number> = {}
+    for (const t of transactions) if (t.type === txType && t.date >= since && t.category) counts[t.category] = (counts[t.category] ?? 0) + 1
+    return counts
+  }, [transactions, txType])
+  const catTiles = useMemo(() => {
+    let top: string[]
+    if (isInc) top = [...INCOME_CATEGORIES]
+    else {
+      const ranked = [...EXPENSE_CATEGORIES, ...customCats].filter(c => usage[c]).sort((a, b) => usage[b] - usage[a])
+      top = Array.from(new Set([...ranked, ...DEFAULT_TOP_EXPENSE]))
+    }
+    top = top.slice(0, 7)
+    if (suggestedCat && !top.includes(suggestedCat)) top = [suggestedCat, ...top]
+    if (category && !top.includes(category)) top = [category, ...top]
+    return top.slice(0, 7)
+  }, [isInc, customCats, usage, suggestedCat, category])
+  const suggestion = (isExp || isInc) && !!suggestedCat && suggestedCat !== category
+  const showCatGrid = !category || showKeypad || catExpanded || suggestion
+  const catGroups = useMemo(() => {
+    const groups: [string, string[]][] = isInc ? [['Income', [...INCOME_CATEGORIES]]] : [...EXPENSE_GROUPS]
+    if (!isInc) {
+      const grouped = new Set(EXPENSE_GROUPS.flatMap(g => g[1]))
+      const rest = EXPENSE_CATEGORIES.filter(c => !grouped.has(c))
+      if (rest.length) groups.push(['More', rest])
+    }
+    if (customCats.length) groups.push(['Yours', customCats])
+    const q = catQuery.trim().toLowerCase()
+    return groups
+      .map(([label, items]) => ({ label, items: items.filter(c => !q || getCategoryDisplayName(c).toLowerCase().includes(q)) }))
+      .filter(g => g.items.length)
+  }, [isInc, customCats, catQuery])
+
+  const vehicles = useMemo(() => {
+    const list = [...SAVINGS_VEHICLES, ...(settings?.customSavingsVehicles ?? []).filter(v => !SAVINGS_VEHICLES.includes(v))]
+    if (savingsVehicle.trim() && !list.includes(savingsVehicle)) list.push(savingsVehicle)
+    return list
+  }, [settings?.customSavingsVehicles, savingsVehicle])
+
+  const showAlloc = isTr && isRepaymentKind && !!loanPersonTrimmed && pendingForPerson.length > 0 && amt > 0 && !editTx
+
+  // Why Save is off, in priority order, and the part of the form to point at
+  const block: { text: string; target: string } | null = (() => {
+    if (amt <= 0) return { text: isRefundEdit ? 'Enter the refund amount' : 'Enter an amount to continue', target: 'amount' }
+    if (isRefundEdit && amt > refundCeiling) return { text: `Refund can’t exceed ${R(Math.max(0, refundCeiling))}`, target: 'amount' }
+    if ((isExp || isInc) && !category) return { text: 'Pick a category', target: 'cats' }
+    if (isSav && linkError) return { text: 'Fix the holding link', target: 'holding' }
+    if (splitOn && newName.trim()) return { text: `Tap Add to include ${newName.trim()}`, target: 'split' }
+    if (splitOn && splitActive && !isBalanced) return { text: splitRemaining > 0 ? `Split is ${R(splitRemaining)} short` : `Split is ${R(-splitRemaining)} over`, target: 'split' }
+    if (splitOn && splitActive && myShare <= 0) return { text: 'Your share must be more than ₹0', target: 'split' }
+    if (isTr && !editTx && !loanPersonTrimmed) return { text: 'Choose who this is with', target: 'person' }
+    if (showAlloc && allocationTotal > amt + 0.01) return { text: 'Allocation is more than the amount', target: 'alloc' }
+    return null
+  })()
+
+  function pointAt(target: string) {
+    const body = bodyRef.current
+    if (target === 'amount') {
+      if (body) body.scrollTo({ top: 0, behavior: 'smooth' })
+      if (isDesktop) amountRef.current?.focus()
+      else setFocus('amount')
       return
     }
+    const el = body?.querySelector(`[data-card="${target}"]`)
+    if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }
 
+  // ── Submit ──────────────────────────────────────────────────────────────────
+
+  async function save(again = false) {
+    if (saving || !user) return
+    if (block) { setAttempted(true); pointAt(block.target); return }
+    if (isRefundEdit) return saveRefundEdit()
+    setFocus(null)
     setSaving(true)
     try {
-      // Auto-add any participant whose name was typed but not yet confirmed via the Add button
-      const finalParticipants: SplitParticipant[] = splitEnabled && newName.trim()
-        ? [...participants, {
-            id: Math.random().toString(36).slice(2),
-            name: newName.trim(),
-            value: splitMode === 'percentage'
-              ? Math.floor(100 / (participants.length + 2))
-              : splitMode === 'manual'
-                ? Math.floor(totalAmount / (participants.length + 2))
-                : 0,
-            kind: 'lent' as SplitKind,
-          }]
-        : participants
-
-      const effectiveAmount = splitEnabled && finalParticipants.length > 0
-        ? (() => {
-            if (splitMode === 'equal') {
-              const n = finalParticipants.length
-              return totalAmount - n * Math.floor(totalAmount / (n + 1))
-            }
-            if (splitMode === 'percentage') {
-              const sumPct = finalParticipants.reduce((s, p) => s + p.value, 0)
-              return Math.round(totalAmount * Math.max(0, 100 - sumPct) / 100)
-            }
-            return Math.max(0, totalAmount - finalParticipants.reduce((s, p) => s + p.value, 0))
-          })()
-        : Number(amount)
+      const finalParticipants = splitOn ? participants : []
+      const effectiveAmount = finalParticipants.length > 0 ? myShare : Number(amount)
 
       // Settlement allocation for this save — capped at the amount that actually
       // leaves the user's pocket (the post-split share).
@@ -676,7 +899,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
             ? { settledBorrowingId: '', settledPerson: '', settledAllocation: {}, settledAmount: 0 }
             : {}),
         ...(!editTx && initialPrefill?.source ? { source: initialPrefill.source } : {}),
-        ...(splitEnabled && finalParticipants.length > 0 ? { splitApplied: true } : {}),
+        ...(finalParticipants.length > 0 ? { splitApplied: true } : {}),
       }
 
       // Persist any newly-typed tags for reuse next time
@@ -698,6 +921,8 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
         if (projectId) affectedProjectIds.add(projectId)
       }
 
+      const catSuffix = txType === 'expense' || txType === 'income' ? ` · ${getCategoryDisplayName(category)}` : ''
+
       if (editTx) {
         if (editTx.id.startsWith('borrow-')) {
           // Synthetic borrowing row — update the underlying borrowing record
@@ -707,7 +932,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
             date,
             ...(notes ? { description: notes } : {}),
           })
-          toast.success('Updated')
+          toast.success(`Updated · ${R(Number(amount))}`)
         } else {
           await updateTransaction(editTx.id, payload)
           await syncHoldingLink(editTx.id, effectiveAmount)
@@ -716,8 +941,8 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           // new one in, per borrowing record, in a single pass.
           if (txType === 'expense') {
             const delta: Record<string, number> = {}
-            for (const [id, amt] of Object.entries(editSettlePlan))    delta[id] = (delta[id] ?? 0) - amt
-            for (const [id, amt] of Object.entries(finalSettlePlan))   delta[id] = (delta[id] ?? 0) + amt
+            for (const [id, a] of Object.entries(editSettlePlan))    delta[id] = (delta[id] ?? 0) - a
+            for (const [id, a] of Object.entries(finalSettlePlan))   delta[id] = (delta[id] ?? 0) + a
             for (const [id, d] of Object.entries(delta)) {
               if (!d) continue
               const b = borrowings.find(x => x.id === id)
@@ -732,7 +957,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
 
           // Split: first time this transaction is being split (canSplit already
           // excludes transactions that already have splitApplied set).
-          if (splitEnabled && finalParticipants.length > 0) {
+          if (finalParticipants.length > 0) {
             await createSplitRecords(user.uid, finalParticipants, totalAmount, splitMode, notes, category, date)
             const lentCount   = finalParticipants.filter(p => p.kind === 'lent').length
             const absorbCount = finalParticipants.filter(p => p.kind === 'absorbed').length
@@ -741,7 +966,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
             if (absorbCount) parts.push(`${absorbCount} absorbed`)
             toast.success(`Transaction updated — ${parts.join(', ')}`)
           } else {
-            toast.success('Transaction updated')
+            toast.success(`Updated · ${R(effectiveAmount)}${catSuffix}`)
           }
         }
       } else {
@@ -814,11 +1039,11 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           } else if (transferKind === 'loan_repayment_received' || transferKind === 'loan_repayment_paid') {
             // Apply user-edited (or greedy-defaulted) allocation
             for (const [bId, applyAmt] of Object.entries(allocation)) {
-              const amt = Number(applyAmt)
-              if (amt <= 0) continue
+              const a = Number(applyAmt)
+              if (a <= 0) continue
               const b = borrowings.find(x => x.id === bId)
               if (!b) continue
-              const newRepaid = Math.min(b.repaidAmount + amt, b.amount)
+              const newRepaid = Math.min(b.repaidAmount + a, b.amount)
               await updateBorrowing(bId, {
                 repaidAmount: newRepaid,
                 status: newRepaid >= b.amount ? 'repaid' : 'partial',
@@ -843,7 +1068,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
         }
 
         // Split: create borrowings + absorbed transactions
-        if (splitEnabled && finalParticipants.length > 0) {
+        if (finalParticipants.length > 0) {
           await createSplitRecords(user.uid, finalParticipants, totalAmount, splitMode, notes, category, date)
           const lentCount   = finalParticipants.filter(p => p.kind === 'lent').length
           const absorbCount = finalParticipants.filter(p => p.kind === 'absorbed').length
@@ -852,7 +1077,10 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           if (absorbCount) parts.push(`${absorbCount} absorbed`)
           toast.success(`Split saved — ${parts.join(', ')}`)
         } else {
-          toast.success(activeTab === 'savings' ? 'Savings logged' : txType === 'transfer' ? 'Transfer logged' : 'Transaction added')
+          const verb = activeTab === 'savings'
+            ? (savingsKind === 'savings_withdrawal' ? 'Withdrawn' : 'Added to savings')
+            : txType === 'transfer' ? 'Transfer logged' : txType === 'income' ? 'Income added' : 'Expense added'
+          toast.success(`${verb} · ${R(effectiveAmount)}${catSuffix}`)
           if (txType === 'expense') checkBudgetAlert(category, effectiveAmount, date)
 
           // Prompt to save custom category
@@ -860,28 +1088,28 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
             const allStandard = [...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES]
             const existing = settings?.customCategories ?? []
             if (!allStandard.includes(category) && !existing.includes(category) && category) {
+              const savedCat = category
               toast(t => (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 500 }}>Save &ldquo;{category}&rdquo; as a category?</span>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      onClick={async () => {
-                        toast.dismiss(t.id)
-                        await setUserSettings(user.uid, { customCategories: [...existing, category] })
-                        await refresh()
-                        toast.success(`"${category}" saved`)
-                      }}
-                      style={{ flex: 1, padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'var(--brand)', color: '#fff', fontSize: 12, fontWeight: 600 }}
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => toast.dismiss(t.id)}
-                      style={{ flex: 1, padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border)', cursor: 'pointer', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12 }}
-                    >
-                      Skip
-                    </button>
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Sym name="bookmark_add" size={22} fill style={{ color: 'var(--brand-ink)' }} />
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, lineHeight: 1.35 }}>Save &ldquo;{getCategoryDisplayName(savedCat)}&rdquo; as a category?</span>
+                  <button
+                    onClick={() => toast.dismiss(t.id)}
+                    style={{ height: 32, padding: '0 10px', borderRadius: 8, border: 0, background: 'transparent', color: 'var(--text-2)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Dismiss
+                  </button>
+                  <button
+                    onClick={async () => {
+                      toast.dismiss(t.id)
+                      await setUserSettings(user.uid, { customCategories: [...existing, savedCat] })
+                      await refresh()
+                      toast.success(`"${getCategoryDisplayName(savedCat)}" saved`)
+                    }}
+                    style={{ height: 32, padding: '0 12px', borderRadius: 8, border: 0, background: 'var(--text)', color: 'var(--bg)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Save
+                  </button>
                 </div>
               ), { duration: 10000 })
             }
@@ -905,7 +1133,14 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
         setProjects(freshProjs.map(p => p.id in paidMap ? { ...p, paid: paidMap[p.id] } : p))
       }
 
-      onClose()
+      // Save & add another: same tab and date, everything else cleared
+      if (again && !editTx) {
+        resetForm(true)
+        bodyRef.current?.scrollTo({ top: 0 })
+        if (isDesktop) setTimeout(() => amountRef.current?.focus(), 0)
+      } else {
+        onClose()
+      }
     } catch {
       toast.error('Something went wrong')
     } finally {
@@ -917,19 +1152,19 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
 
   async function logRefund() {
     if (!user || !editTx) return
-    const amt = Number(refundAmount)
-    if (!amt || amt <= 0) return
+    const a = Number(refundAmount)
+    if (!a || a <= 0) return
     setAddingRefund(true)
     try {
       // Re-check against a fresh read, not just the locally cached total — the local
       // copy can be stale (another device, or a refund logged moments ago elsewhere),
       // which would otherwise let two refunds silently add up to more than the expense.
-      const fresh = await getUserTransactions(user.uid)
+      const fresh = await getRefundsOf(user.uid, editTx.id)
       const freshRefunded = fresh
-        .filter(t => t.type === 'refund' && t.refundOf === editTx.id)
+        .filter(t => t.type === 'refund')
         .reduce((s, t) => s + t.amount, 0)
       const freshRemaining = editTx.amount - freshRefunded
-      if (amt > freshRemaining) {
+      if (a > freshRemaining) {
         toast.error(`Refund can't exceed ${formatCurrencyFull(Math.max(0, freshRemaining))} remaining`)
         return
       }
@@ -937,7 +1172,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
         type: 'refund',
         refundOf: editTx.id,
         category: editTx.category,
-        amount: amt,
+        amount: a,
         date: refundDate,
         notes: refundNotes,
         tags: [],
@@ -966,27 +1201,26 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     }
   }
 
-  async function handleRefundSave(e: React.FormEvent) {
-    e.preventDefault()
+  async function saveRefundEdit() {
     if (!editTx || !linkedOriginal) return
-    const amt = Number(amount)
-    if (!amt || amt <= 0) return
+    const a = Number(amount)
+    if (!a || a <= 0) return
     setSaving(true)
     try {
       // Fresh check for the same staleness reason as logRefund above
-      const fresh = await getUserTransactions(editTx.userId)
+      const fresh = await getRefundsOf(editTx.userId, linkedOriginal.id)
       const otherRefunds = fresh
-        .filter(t => t.type === 'refund' && t.refundOf === linkedOriginal.id && t.id !== editTx.id)
+        .filter(t => t.type === 'refund' && t.id !== editTx.id)
         .reduce((s, t) => s + t.amount, 0)
       const maxRefundable = linkedOriginal.amount - otherRefunds
-      if (amt > maxRefundable) {
+      if (a > maxRefundable) {
         toast.error(`Refund can't exceed ${formatCurrencyFull(Math.max(0, maxRefundable))} remaining`)
         setSaving(false)
         return
       }
-      await updateTransaction(editTx.id, { amount: amt, date, notes })
+      await updateTransaction(editTx.id, { amount: a, date, notes })
       await refresh()
-      toast.success('Refund updated')
+      toast.success(`Refund updated · ${R(a)}`)
       onClose()
     } catch {
       toast.error('Something went wrong')
@@ -995,1058 +1229,1139 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     }
   }
 
-  if (isRefundEdit) {
-    return (
-      <Transition appear show={open} as={Fragment}>
-        <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={onClose}>
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-            leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
-          >
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
-          </Transition.Child>
+  // ── Interaction ─────────────────────────────────────────────────────────────
 
-          <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
-            <div
-              style={{ display: 'flex', minHeight: '100%', alignItems: 'flex-end', justifyContent: 'center' }}
-              className="sm:items-center sm:p-4"
-            >
-              <Transition.Child
-                as={Fragment}
-                enter="ease-drawer duration-300"
-                enterFrom="opacity-0 translate-y-full sm:translate-y-4 sm:opacity-0"
-                enterTo="opacity-100 translate-y-0"
-                leave="ease-out-strong duration-200"
-                leaveFrom="opacity-100 translate-y-0"
-                leaveTo="opacity-0 translate-y-full sm:translate-y-4 sm:opacity-0"
-              >
-                <Dialog.Panel
-                  className="rounded-t-3xl sm:rounded-3xl"
-                  style={{
-                    width: '100%', maxWidth: 440,
-                    background: 'var(--surface)',
-                    border: '1px solid var(--border)',
-                    boxShadow: 'var(--shadow-lg)',
-                    overflow: 'hidden',
-                    display: 'flex', flexDirection: 'column',
-                    maxHeight: '92dvh',
-                  }}
-                >
-                  <div className="sm:hidden" style={{ display: 'flex', justifyContent: 'center', paddingTop: 10, paddingBottom: 4, flexShrink: 0 }}>
-                    <div style={{ width: 36, height: 4, borderRadius: 999, background: 'var(--border-strong)', opacity: 0.6 }} />
-                  </div>
-
-                  <div style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0,
-                  }}>
-                    <Dialog.Title style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>Edit Refund</Dialog.Title>
-                    <button onClick={onClose} style={{ padding: 6, borderRadius: 8, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                      <X size={16} />
-                    </button>
-                  </div>
-
-                  <form id="edit-refund-form" onSubmit={handleRefundSave} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', overscrollBehavior: 'contain', flex: 1 }}>
-                    {linkedOriginal && (
-                      <button
-                        type="button"
-                        onClick={() => onViewOriginal?.(linkedOriginal)}
-                        style={{
-                          display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left',
-                          padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
-                          background: 'var(--surface-2)', border: '1px solid var(--border)',
-                        }}
-                      >
-                        <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Refund of</span>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
-                          {getCategoryDisplayName(linkedOriginal.category)} · {formatCurrencyFull(linkedOriginal.amount)} on {format(parseISO(linkedOriginal.date), 'MMM d, yyyy')}
-                        </span>
-                        <span style={{ fontSize: 11.5, color: 'var(--brand-ink)', fontWeight: 500 }}>View original →</span>
-                      </button>
-                    )}
-
-                    <div>
-                      <label className="label">Refund amount</label>
-                      <AmountInput className="input" value={amount} onValueChange={setAmount} required />
-                    </div>
-                    <div>
-                      <label className="label">Date</label>
-                      <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} required />
-                    </div>
-                    <div>
-                      <label className="label">Notes (optional)</label>
-                      <input maxLength={200} type="text" className="input" value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. Cancellation refund" />
-                    </div>
-                  </form>
-
-                  <div style={{ flexShrink: 0, padding: '12px 20px 20px', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
-                    <button
-                      type="submit"
-                      form="edit-refund-form"
-                      disabled={saving || !amount || Number(amount) <= 0}
-                      className="btn-primary"
-                      style={{ width: '100%', justifyContent: 'center', padding: '13px', fontSize: 14, opacity: saving ? 0.6 : 1 }}
-                    >
-                      {saving ? 'Saving...' : 'Update Refund'}
-                    </button>
-                  </div>
-                </Dialog.Panel>
-              </Transition.Child>
-            </div>
-          </div>
-        </Dialog>
-      </Transition>
-    )
+  function setTab(t: Tab) {
+    // Amount, date and note carry over; split and the category don't
+    setActiveTab(t)
+    if (t === 'transfer' && !LOAN_KINDS.some(k => k.id === transferKind)) setTransferKind('loan_repayment_received')
+    setSplitEnabled(false)
+    setOpenCards(cs => cs.filter(c => c !== 'split'))
+    setCategory('')
+    setSuggestedCat(null)
+    setCatExpanded(false)
+    setAllCats(false)
+    setAttempted(false)
   }
 
+  function pickCat(c: string) {
+    setCategory(c)
+    setCatExpanded(false)
+    setAllCats(false)
+    setCatQuery('')
+    setFocus(f => (f === 'amount' ? null : f))
+    if (suggestedCat === c) setSuggestedCat(null)
+    setAttempted(false)
+  }
+
+  function createCustom() {
+    const nm = customName.trim()
+    if (!nm) return
+    const value = buildCustomCategory(customIcon, nm)
+    setSessionCats(cs => (cs.includes(value) ? cs : [...cs, value]))
+    setCustomOpen(false)
+    setCustomName('')
+    pickCat(value)
+  }
+
+  function toggleCard(k: CardKey) {
+    const on = cardOpen(k)
+    setOpenCards(cs => (on ? cs.filter(c => c !== k) : [...cs, k]))
+    if (k === 'split') { setSplitEnabled(!on); if (on) { setParticipants([]); setNewName('') } }
+    if (k === 'settle' && on) setSettledPerson('')
+    if (k === 'project' && on) setProjectId('')
+    if (k === 'repeat') setIsRecurring(!on)
+    if (!on) {
+      setFocus(f => (f === 'amount' ? null : f))
+      setTimeout(() => bodyRef.current?.querySelector(`[data-card="${k}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 60)
+    }
+  }
+
+  const dirty = editTx
+    ? amount !== String(editTx.amount) || notes !== (editTx.notes ?? '') || date !== editTx.date || (!!category && category !== editTx.category)
+    : !!amount || !!notes.trim() || participants.length > 0
+
+  // Esc, a scrim tap and the drag handle all come here: close the innermost layer first,
+  // and ask before throwing away anything typed
+  function requestClose() {
+    if (saving) return
+    if (confirmDiscard) { setConfirmDiscard(false); return }
+    if (allCats) { setAllCats(false); setCatQuery(''); return }
+    if (personOpen) { setPersonOpen(false); return }
+    if (holdingOpen) { setHoldingOpen(false); return }
+    if (dateOpen) { setDateOpen(false); return }
+    if (dirty) { setConfirmDiscard(true); return }
+    onClose()
+  }
+
+  const isTyping = (el: EventTarget | null) => el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement
+
+  function onPanelKey(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save(!editTx) ; return }
+    if (!isTyping(e.target) && !e.metaKey && !e.ctrlKey && !e.altKey && /^[1-4]$/.test(e.key) && !isRefundEdit && !allCats) {
+      e.preventDefault()
+      setTab(TYPE_TABS[Number(e.key) - 1].id)
+    }
+  }
+
+  // Enter in a single-line field saves
+  function onFieldKey(e: React.KeyboardEvent) {
+    if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey) { e.preventDefault(); save() }
+  }
+
+  // Text fields own the system keyboard: the keypad steps aside and, on phones, the sheet goes full height
+  function onFocusIn(e: React.FocusEvent) {
+    const el = e.target
+    if (!isTyping(el) || el === amountRef.current || (el as HTMLInputElement).type === 'date') return
+    setFocus('text')
+    if (mobile) setTimeout(() => (el as HTMLElement).scrollIntoView({ block: 'center', behavior: 'smooth' }), 320)
+  }
+  function onFocusOut() {
+    setTimeout(() => {
+      const a = document.activeElement
+      if (!isTyping(a) || !panelRef.current?.contains(a)) setFocus(f => (f === 'text' ? null : f))
+    }, 0)
+  }
+
+  // Drag the handle down to close (phones)
+  function onHandleDown(e: React.PointerEvent) {
+    drag.current = { y: e.clientY, dy: 0 }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  function onHandleMove(e: React.PointerEvent) {
+    const d = drag.current
+    const panel = panelRef.current
+    if (!d || !panel) return
+    d.dy = Math.max(0, e.clientY - d.y)
+    panel.style.transition = 'none'
+    panel.style.transform = `translateY(${d.dy}px)`
+  }
+  function onHandleUp() {
+    const d = drag.current
+    const panel = panelRef.current
+    drag.current = null
+    if (!d || !panel) return
+    panel.style.transition = 'transform .25s cubic-bezier(.2,.8,.2,1)'
+    panel.style.transform = ''
+    if (d.dy > 100) requestClose()
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  const tabTone = TYPE_TABS.find(t => t.id === activeTab)!.tone
+  const amountTone = isRefundEdit ? 'bad' : tabTone
+  const [amountLabel, amountIcon] = isRefundEdit ? ['Refund amount', 'undo']
+    : isExp ? ['Spent', 'arrow_outward']
+    : isInc ? ['Received', 'south_west']
+    : isSav ? (savingsKind === 'savings_contribution' ? ['Into savings', 'savings'] : ['Back to cash', 'payments'])
+    : transferKind === 'loan_given' ? ['Lent', 'north_east']
+    : transferKind === 'loan_repayment_received' ? ['Received back', 'south_west'] : ['Repaid', 'north_east']
+  const amountErr = attempted && amt <= 0
+  const amountText = groupINR(amount) || '0'
+  const amountHint = amountErr ? 'Enter an amount to continue'
+    : isFuel && fuelAuto === 'amount' ? 'calculated from litres × price'
+    : editTx?.type === 'expense' && isExp && totalRefunded > 0 ? `Net after refunds ${R(amt - totalRefunded)}`
+    : null
+
+  const dayDiff = differenceInCalendarDays(new Date(), parseISO(date))
+  const earlier = dayDiff > 1 || dayDiff < 0
+  const days = Array.from({ length: 30 }, (_, i) => subDays(new Date(), i))
+
   const selectedKind = TRANSFER_KINDS.find(k => k.id === transferKind)
-  const canSplit = txType === 'expense' && !editTx?.splitApplied
+  const notePh = isRefundEdit ? 'Notes (optional)'
+    : isSav ? 'e.g. Monthly SIP, bonus into FD…'
+    : isTr ? (selectedKind?.dir === 'in' ? 'e.g. Rahul paid back' : 'e.g. Lent to Priya')
+    : isInc ? 'e.g. November salary'
+    : 'e.g. Domino\'s pizza — we\'ll suggest a category'
+
+  const vMeta = vehicleSheetMeta(savingsVehicle)
+  const vTone = tone(vMeta.h)
+  const holdingSummary = (a: Asset) => {
+    const s = linkSummary(a)
+    return s.unit === 'g' ? `${s.total} g` : R(s.total)
+  }
+  const gramsVal = parseFloat(goldGrams) || 0
+  const goldCalc = gramsVal * (parseFloat(goldPricePerGram) || 0)
+  const goldMatch = Math.abs(goldCalc - amt) < 1
+  const gramsMissing = holding?.kind === 'gold_grams' && !(gramsVal > 0)
+
+  // The "Add details" tray, in the design's order; a chip is dark while its card is open
+  const tray: { k: CardKey; label: string; icon: string; summary: string | null }[] = []
+  const project = projects.find(p => p.id === projectId)
+  const autoLinked = txType === 'expense' && (category === 'Gold' || category === 'Construction') && !!projectId
+  if (isExp && canSplit) tray.push({ k: 'split', label: 'Split', icon: 'call_split', summary: splitActive ? `${participants.length + 1} people` : null })
+  if (!isTr && !isRefundEdit) tray.push({ k: 'tags', label: 'Tags', icon: 'sell', summary: tags.length ? String(tags.length) : null })
+  if (isExp && (settleablePeople.length > 0 || settledPerson)) tray.push({ k: 'settle', label: 'Settle a debt', icon: 'handshake', summary: settledPerson ? settledPerson.split(' ')[0] : null })
+  if ((isExp || isSav) && projects.length > 0) tray.push({ k: 'project', label: 'Project', icon: 'folder', summary: project ? (cardOpen('project') || !autoLinked ? project.name : 'Auto') : null })
+  if (isExp || isInc) tray.push({ k: 'repeat', label: 'Repeat monthly', icon: 'event_repeat', summary: null })
+  if (editTx?.type === 'expense' && isExp) tray.push({ k: 'refunds', label: 'Refunds', icon: 'undo', summary: totalRefunded ? R(totalRefunded) : null })
+
+  const saveLabel = saving ? 'Saving…'
+    : isRefundEdit ? 'Update refund'
+    : editTx ? 'Update'
+    : isExp ? (splitOn && splitActive ? `Save & split (${participants.length + 1} records)` : 'Add expense')
+    : isInc ? 'Add income'
+    : isSav ? (savingsKind === 'savings_contribution' ? 'Add to savings' : 'Withdraw from savings')
+    : 'Log transfer'
+  const disabled = !!block
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
+
+  const panelStyle: CSSProperties = isDesktop
+    ? { width: 440, maxHeight: 'min(640px, calc(100dvh - 32px))', borderRadius: 24, boxShadow: '0 30px 70px -10px rgba(0,0,0,.3), 0 0 0 1px var(--line)' }
+    : { width: '100%', borderRadius: '26px 26px 0 0', boxShadow: '0 -10px 40px rgba(0,0,0,.18)', ...(kbdOpen ? { height: 'calc(100% - 12px)' } : { maxHeight: '92%' }) }
+
+  const fieldLabel = (text: string, extra?: CSSProperties) => <div style={{ ...labelStyle, ...extra }}>{text}</div>
 
   return (
     <Transition appear show={open} as={Fragment}>
-      <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={onClose}>
+      <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={requestClose}>
         <Transition.Child
           as={Fragment}
-          enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-          leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
+          enter="ease-out duration-300" enterFrom="opacity-0" enterTo="opacity-100"
+          leave="ease-out duration-200" leaveFrom="opacity-100" leaveTo="opacity-0"
         >
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
+          <div className="txn-scrim" style={{ position: 'fixed', inset: 0 }} />
         </Transition.Child>
 
-        {/* ── Sheet wrapper ── */}
-        <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overscrollBehavior: 'contain' }}>
-          {/*
-            Mobile  : flex-end  → sheet anchors to bottom, no side padding, flush edge
-            Desktop : center    → centred modal with padding
-          */}
-          <div
-            style={{ display: 'flex', minHeight: '100%', alignItems: 'flex-end', justifyContent: 'center' }}
-            className="sm:items-center sm:p-4"
+        <div
+          style={{
+            position: 'fixed', left: 0, right: 0, display: 'flex', justifyContent: 'center',
+            alignItems: isDesktop ? 'center' : 'flex-end', padding: isDesktop ? 16 : 0,
+            top: vv ? vv.top : 0, height: vv ? vv.h : '100%',
+          }}
+        >
+          <Transition.Child
+            as={Fragment}
+            enter="transition duration-[340ms] ease-[cubic-bezier(.2,.8,.2,1)] sm:duration-[250ms] sm:ease-out"
+            enterFrom="translate-y-[105%] sm:translate-y-[3%] sm:scale-[.97] sm:opacity-0"
+            enterTo="translate-y-0 sm:scale-100 sm:opacity-100"
+            leave="transition duration-200 ease-out"
+            leaveFrom="translate-y-0 sm:scale-100 sm:opacity-100"
+            leaveTo="translate-y-[105%] sm:translate-y-[3%] sm:scale-[.97] sm:opacity-0"
           >
-            <Transition.Child
-              as={Fragment}
-              enter="ease-drawer duration-300"
-              enterFrom="opacity-0 translate-y-full sm:translate-y-4 sm:opacity-0"
-              enterTo="opacity-100 translate-y-0"
-              leave="ease-out-strong duration-200"
-              leaveFrom="opacity-100 translate-y-0"
-              leaveTo="opacity-0 translate-y-full sm:translate-y-4 sm:opacity-0"
+            <Dialog.Panel
+              ref={panelRef}
+              className="txn-sheet"
+              aria-label={isRefundEdit ? 'Edit refund' : editTx ? 'Edit transaction' : 'Add transaction'}
+              onKeyDown={onPanelKey}
+              onFocus={onFocusIn}
+              onBlur={onFocusOut}
+              style={{ position: 'relative', display: 'flex', flexDirection: 'column', background: 'var(--sheet)', overflow: 'hidden', ...panelStyle }}
             >
-              <Dialog.Panel
-                className="rounded-t-3xl sm:rounded-3xl"
-                style={{
-                  width: '100%', maxWidth: 440,
-                  background: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  boxShadow: 'var(--shadow-lg)',
-                  overflow: 'hidden',
-                  display: 'flex', flexDirection: 'column',
-                  maxHeight: '92dvh',
-                }}
-              >
-                {/* Drag handle — mobile only */}
-                <div className="sm:hidden" style={{ display: 'flex', justifyContent: 'center', paddingTop: 10, paddingBottom: 4, flexShrink: 0 }}>
-                  <div style={{ width: 36, height: 4, borderRadius: 999, background: 'var(--border-strong)', opacity: 0.6 }} />
+              {/* Drag handle — phones */}
+              {mobile && (
+                <div
+                  onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleUp}
+                  style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px', flex: 'none', cursor: 'grab', touchAction: 'none' }}
+                >
+                  <div style={{ width: 38, height: 5, borderRadius: 3, background: 'var(--line2)' }} />
                 </div>
+              )}
 
-                {/* Header */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0,
-                }}>
-                  <Dialog.Title style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>
-                    {editTx ? 'Edit Transaction' : 'Add Transaction'}
-                  </Dialog.Title>
-                  <button onClick={onClose} style={{ padding: 6, borderRadius: 8, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                    <X size={16} />
-                  </button>
-                </div>
-
-                <form id="add-tx-form" onSubmit={handleSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', overscrollBehavior: 'contain', flex: 1 }}>
-
-                  {/* Type tabs */}
-                  <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 12, background: 'var(--surface-2)' }}>
-                    {TYPE_TABS.map(tab => (
-                      <button key={tab.id} type="button" onClick={() => { setActiveTab(tab.id); setSplitEnabled(false) }}
-                        style={{
-                          flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                          padding: '8px 6px', borderRadius: 9, border: 'none', cursor: 'pointer',
-                          fontSize: 12, fontWeight: 500, minWidth: 0,
-                          background: activeTab === tab.id ? 'var(--surface)' : 'transparent',
-                          color: activeTab === tab.id
-                            ? tab.id === 'expense' ? 'var(--bad-ink)' : tab.id === 'income' ? 'var(--good-ink)' : tab.id === 'savings' ? 'var(--brand-ink)' : 'var(--info-ink)'
-                            : 'var(--text-3)',
-                          boxShadow: activeTab === tab.id ? 'var(--shadow-sm)' : 'none',
-                          transition: 'background .15s, color .15s, box-shadow .15s',
-                        }}>
-                        {tab.icon}{tab.label}
-                      </button>
-                    ))}
+              {/* Title row — edit modes */}
+              {editTx && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px 6px 20px', flex: 'none', ...(isDesktop ? { paddingTop: 14 } : {}) }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Dialog.Title style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--t1)', letterSpacing: '-0.01em' }}>
+                      {isRefundEdit ? 'Edit refund' : 'Edit transaction'}
+                    </Dialog.Title>
+                    <div style={{ fontSize: 12.5, color: 'var(--t3)', fontWeight: 500 }}>
+                      {isRefundEdit ? 'Refund · editing' : `${TYPE_TABS.find(t => t.id === activeTab)!.label} · ${dateLabel(date)}`}
+                    </div>
                   </div>
+                  <button type="button" onClick={requestClose} aria-label="Close" style={{ ...closeBtn, width: 40, height: 40 }}><Sym name="close" /></button>
+                </div>
+              )}
 
-                  {/* Transfer kind */}
-                  {activeTab === 'transfer' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <label className="label">Transfer type</label>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {TRANSFER_KINDS.map(k => (
-                          <button key={k.id} type="button" onClick={() => setTransferKind(k.id)}
-                            style={{
-                              display: 'flex', alignItems: 'center', gap: 12,
-                              padding: '10px 14px', borderRadius: 10,
-                              border: `1px solid ${transferKind === k.id ? 'var(--brand)' : 'var(--border)'}`,
-                              background: transferKind === k.id ? 'var(--brand-soft)' : 'var(--surface)',
-                              cursor: 'pointer', textAlign: 'left', transition: 'background .15s, border-color .15s',
-                            }}>
-                            <div style={{
-                              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                              background: transferKind === k.id ? 'var(--brand)' : 'var(--surface-2)',
-                              color: transferKind === k.id ? '#fff' : 'var(--text-3)',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
-                              {k.dir === 'in' ? <ArrowDownLeft size={15} /> : <ArrowUpRight size={15} />}
-                            </div>
-                            <div>
-                              <div style={{ fontSize: 13, fontWeight: 500, color: transferKind === k.id ? 'var(--brand-ink)' : 'var(--text)' }}>{k.label}</div>
-                              <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 1 }}>{k.sub}</div>
-                            </div>
-                          </button>
-                        ))}
+              {/* Type tabs */}
+              {!isRefundEdit && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px 10px 16px', flex: 'none', ...(isDesktop && !editTx ? { paddingTop: 14 } : {}) }}>
+                  <div role="tablist" aria-label="Transaction type" style={{ flex: 1, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 2, padding: 3, borderRadius: 14, background: 'var(--sunk)' }}>
+                    {TYPE_TABS.map(t => {
+                      const sel = activeTab === t.id
+                      return (
+                        <button key={t.id} type="button" role="tab" aria-selected={sel} onClick={() => setTab(t.id)}
+                          style={{ height: 38, border: 0, borderRadius: 11, background: sel ? `var(--${t.tone}-soft)` : 'transparent', color: sel ? `var(--${t.tone}-ink)` : 'var(--t2)', fontSize: 13.5, fontWeight: sel ? 800 : 600, cursor: 'pointer', minWidth: 0, padding: 0 }}
+                        >{t.label}</button>
+                      )
+                    })}
+                  </div>
+                  {!editTx && (
+                    <button type="button" onClick={requestClose} aria-label="Close" style={{ ...closeBtn, width: 40, height: 40 }}><Sym name="close" /></button>
+                  )}
+                </div>
+              )}
+
+              {/* Read from a bill */}
+              {isScan && (
+                <div style={{ margin: '0 16px 6px', display: 'flex', alignItems: 'center', gap: 12, padding: 8, borderRadius: 14, background: 'var(--brand-soft)', flex: 'none' }}>
+                  {scanImage
+                    ? <img src={scanImage} alt="" style={{ width: 38, height: 46, borderRadius: 7, objectFit: 'cover', flex: 'none' }} />
+                    : <div style={{ width: 38, height: 46, borderRadius: 7, background: 'repeating-linear-gradient(135deg, var(--card) 0 4px, var(--sunk) 4px 8px)', flex: 'none', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: MONO, fontSize: 7, color: 'var(--t3)', paddingBottom: 3 }}>bill</div>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--brand-ink)' }}>Read from your bill</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--t2)', lineHeight: 1.35 }}>
+                      {[initialPrefill?.amount, initialPrefill?.category, initialPrefill?.date, initialPrefill?.notes].filter(v => v != null && v !== '').length} fields filled · check before saving
+                    </div>
+                  </div>
+                  {onRescan && (
+                    <button type="button" onClick={onRescan} style={{ height: 36, padding: '0 12px', borderRadius: 10, border: 0, background: 'var(--card)', color: 'var(--t1)', fontSize: 13, fontWeight: 600, cursor: 'pointer', flex: 'none' }}>Rescan</button>
+                  )}
+                </div>
+              )}
+
+              <div ref={bodyRef} className="txn-scroll" style={{ position: 'relative', flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '0 16px 18px', overscrollBehavior: 'contain' }}>
+
+                {/* ── All categories + custom ── */}
+                {allCats && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingTop: 2 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button type="button" onClick={() => { setAllCats(false); setCatQuery('') }} aria-label="Back" style={{ ...closeBtn, width: 40, height: 40, color: 'var(--t1)' }}><Sym name="arrow_back" /></button>
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, height: 44, padding: '0 12px', borderRadius: 14, background: 'var(--card)', border: '1px solid var(--line)' }}>
+                        <Sym name="search" style={{ color: 'var(--t3)' }} />
+                        <input value={catQuery} onChange={e => setCatQuery(e.target.value)} placeholder="Search categories" aria-label="Search categories"
+                          style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', fontSize: 16, color: 'var(--t1)' }} />
                       </div>
                     </div>
-                  )}
+                    {catGroups.map(g => (
+                      <div key={g.label} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--t3)' }}>{g.label}</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
+                          {g.items.map(c => <CatTile key={c} category={c} selected={category === c} suggested={suggestedCat === c} onClick={() => pickCat(c)} />)}
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{ background: 'var(--card)', border: '1px dashed var(--line2)', borderRadius: 18, padding: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {!customOpen ? (
+                        <button type="button" onClick={() => setCustomOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, height: 40, border: 0, background: 'transparent', color: 'var(--t1)', fontSize: 14, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+                          <span style={{ width: 34, height: 34, borderRadius: 11, background: 'var(--sunk)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t2)' }}><Sym name="add" /></span>
+                          Create a custom category
+                        </button>
+                      ) : (() => {
+                        const ct = tone(hueOf(customName.trim() || 'x'))
+                        const Preview = ICON_PALETTE.find(p => p.name === customIcon)?.Icon
+                        const groupIcons = ICON_PALETTE.filter(p => p.group === iconGroup)
+                        return (
+                          <>
+                            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--t1)' }}>New category</div>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                              <span style={{ width: 44, height: 44, borderRadius: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', background: ct.soft, color: ct.ink, flex: 'none' }}>
+                                {Preview && <Preview size={22} stroke={1.8} />}
+                              </span>
+                              <input value={customName} onChange={e => setCustomName(e.target.value)} placeholder="Name, e.g. Pet care" maxLength={40}
+                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); createCustom() } }}
+                                style={{ ...textInput }} />
+                            </div>
+                            <div className="txn-scroll" style={{ display: 'flex', gap: 4, overflowX: 'auto', margin: '0 -12px', padding: '0 12px' }}>
+                              {Array.from(new Set(ICON_PALETTE.map(p => p.group))).map(g => (
+                                <button key={g} type="button" onClick={() => setIconGroup(g)} style={chip(iconGroup === g, 'brand', { height: 34, fontSize: 12.5, padding: '0 11px' })}>{g}</button>
+                              ))}
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 6 }}>
+                              {groupIcons.map(p => {
+                                const sel = customIcon === p.name
+                                return (
+                                  <button key={p.name} type="button" aria-label={p.label} title={p.label} onClick={() => setCustomIcon(p.name)}
+                                    style={{ height: 44, borderRadius: 12, border: sel ? '1.5px solid var(--brand)' : '1px solid var(--line)', background: sel ? 'var(--brand-soft)' : 'var(--sheet)', color: sel ? 'var(--brand-ink)' : 'var(--t2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <p.Icon size={22} stroke={1.6} />
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            <button type="button" onClick={createCustom}
+                              style={{ height: 46, borderRadius: 14, border: 0, background: customName.trim() ? 'var(--t1)' : 'var(--sunk2)', color: customName.trim() ? 'var(--sheet)' : 'var(--t3)', fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
+                              Use &ldquo;{customName.trim() || 'New category'}&rdquo;
+                            </button>
+                          </>
+                        )
+                      })()}
+                    </div>
+                  </div>
+                )}
 
-                  {/* Person combobox — shown for all loan transfer types */}
-                  {activeTab === 'transfer' && ['loan_given', 'loan_repayment_received', 'loan_repayment_paid'].includes(transferKind) && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, position: 'relative' }}>
-                        <label className="label">
-                          {transferKind === 'loan_given' ? 'Who are you lending to?' :
-                           transferKind === 'loan_repayment_received' ? 'Who paid you back?' :
-                           'Who are you repaying?'}
-                        </label>
-                        <input maxLength={60}
-                          ref={personInputRef}
-                          type="text"
-                          className="input"
-                          placeholder="Search or add a person…"
-                          value={loanPerson}
-                          onChange={e => { setLoanPerson(e.target.value); setPersonDropdownOpen(true) }}
-                          onFocus={() => setPersonDropdownOpen(true)}
-                          onBlur={() => setTimeout(() => setPersonDropdownOpen(false), 150)}
-                          autoComplete="off"
-                          style={{ fontSize: 14 }}
-                        />
-                        {/* Dropdown */}
-                        {personDropdownOpen && (filteredPeople.length > 0 || (loanPersonTrimmed && isNewPerson)) && (
-                          <div style={{
-                            position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 60,
-                            background: 'var(--surface)', border: '1px solid var(--border)',
-                            borderRadius: 12, overflow: 'hidden',
-                            boxShadow: '0 8px 24px rgba(0,0,0,.18)',
-                            marginTop: 4,
-                          }}>
-                            {filteredPeople.map(p => (
-                              <button
-                                key={p} type="button"
-                                onMouseDown={() => { setLoanPerson(p); setPersonDropdownOpen(false) }}
-                                style={{
-                                  width: '100%', textAlign: 'left', padding: '10px 14px',
-                                  background: 'transparent', border: 'none', cursor: 'pointer',
-                                  fontSize: 13.5, color: 'var(--text)', display: 'flex',
-                                  alignItems: 'center', gap: 8,
-                                  borderBottom: '1px solid var(--border)',
-                                }}
-                                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                              >
-                                <span style={{
-                                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                                  background: 'var(--brand-soft)', color: 'var(--brand-ink)',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: 12, fontWeight: 800,
-                                }}>
-                                  {p[0]?.toUpperCase()}
-                                </span>
-                                {p}
-                              </button>
-                            ))}
-                            {loanPersonTrimmed && isNewPerson && (
-                              <button
-                                type="button"
-                                onMouseDown={() => { setPersonDropdownOpen(false) }}
-                                style={{
-                                  width: '100%', textAlign: 'left', padding: '10px 14px',
-                                  background: 'transparent', border: 'none', cursor: 'pointer',
-                                  fontSize: 13.5, color: 'var(--brand-ink)', display: 'flex',
-                                  alignItems: 'center', gap: 8, fontWeight: 600,
-                                }}
-                                onMouseEnter={e => (e.currentTarget.style.background = 'var(--brand-soft)')}
-                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                              >
-                                <span style={{
-                                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                                  background: 'var(--brand-soft)', color: 'var(--brand-ink)',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: 16, fontWeight: 800,
-                                }}>+</span>
-                                Add &ldquo;{loanPersonTrimmed}&rdquo;
-                              </button>
-                            )}
-                          </div>
+                {!allCats && (
+                  <>
+                    {/* Refund of … */}
+                    {isRefundEdit && linkedOriginal && (() => {
+                      const look = categoryLook(linkedOriginal.category)
+                      return (
+                        <button type="button" onClick={() => onViewOriginal?.(linkedOriginal)}
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: 12, margin: '4px 0 8px', borderRadius: 16, border: '1px solid var(--line)', background: 'var(--card)', cursor: 'pointer', textAlign: 'left' }}>
+                          <span style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--bad-soft)', color: 'var(--bad-ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+                            <CatGlyph category={linkedOriginal.category} />
+                          </span>
+                          <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{ fontSize: 12, color: 'var(--t3)', fontWeight: 600 }}>Refund of</span>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--t1)' }}>{look.label} · <span style={{ fontFamily: MONO, fontWeight: 500 }}>{R(linkedOriginal.amount)}</span></span>
+                            <span style={{ fontSize: 12.5, color: 'var(--t2)' }}>on {format(parseISO(linkedOriginal.date), 'MMM d, yyyy')}</span>
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--brand-ink)', flex: 'none' }}>View original →</span>
+                        </button>
+                      )
+                    })()}
+
+                    {/* Amount */}
+                    <div data-card="amount" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '2px 0 6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 20 }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 700, color: `var(--${amountTone}-ink)` }}>
+                          <Sym name={amountIcon} size={16} />{amountLabel}
+                        </span>
+                        {isScan && initialPrefill?.amount != null && (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--brand-soft)', color: 'var(--brand-ink)' }}>from bill</span>
                         )}
                       </div>
-
-                      {/* Status chip */}
-                      {loanPersonTrimmed && !isNewPerson && (
-                        <div style={{
-                          fontSize: 11.5, color: 'var(--brand-ink)',
-                          padding: '4px 8px', borderRadius: 7, background: 'var(--brand-soft)',
-                          alignSelf: 'flex-start',
-                        }}>
-                          ✓ Linked to existing borrowing record
-                        </div>
+                      {mobile ? (
+                        <button type="button" onClick={() => { (document.activeElement as HTMLElement | null)?.blur(); setFocus('amount') }} aria-label="Amount"
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 0, padding: '0 8px', minHeight: 62, cursor: 'text', color: 'inherit', maxWidth: '100%' }}>
+                          <span style={{ fontSize: 26, color: 'var(--t3)', fontWeight: 500, marginRight: 4, fontFamily: MONO }}>₹</span>
+                          <span style={{
+                            fontFamily: MONO, fontWeight: 500, letterSpacing: '-0.04em', lineHeight: 1.1,
+                            fontSize: amountText.length > 10 ? 34 : amountText.length > 8 ? 40 : 48,
+                            color: amountErr ? 'var(--bad-ink)' : amount ? (isFuel && fuelAuto === 'amount' ? 'var(--brand-ink)' : 'var(--t1)') : 'var(--t4)',
+                          }}>{amountText}</span>
+                          {showKeypad && <span style={{ width: 2.5, height: 38, borderRadius: 2, background: 'var(--brand)', marginLeft: 3, animation: 'gw-blink 1s steps(1) infinite' }} />}
+                        </button>
+                      ) : (
+                        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 66, cursor: 'text' }}>
+                          <span style={{ fontSize: 28, color: 'var(--t3)', fontWeight: 500, fontFamily: MONO }}>₹</span>
+                          <AmountInput
+                            ref={amountRef}
+                            value={amount}
+                            onValueChange={changeAmount}
+                            onKeyDown={onFieldKey}
+                            placeholder="0"
+                            aria-label="Amount"
+                            autoFocus={!editTx && !initialPrefill}
+                            data-autofocus={!editTx && !initialPrefill ? true : undefined}
+                            style={{
+                              fontFamily: MONO, fontSize: 46, fontWeight: 500, letterSpacing: '-0.04em', border: 0, outline: 'none',
+                              background: 'transparent', padding: 0, textAlign: 'left', maxWidth: 340,
+                              width: `${Math.max(1, (groupINR(amount) || '0').length) + 0.3}ch`,
+                              color: amountErr ? 'var(--bad-ink)' : isFuel && fuelAuto === 'amount' ? 'var(--brand-ink)' : 'var(--t1)',
+                            }}
+                          />
+                        </label>
                       )}
-                      {loanPersonTrimmed && isNewPerson && isRepaymentKind && (
-                        <div style={{
-                          fontSize: 11.5, color: 'var(--warn-ink, #b45309)',
-                          padding: '4px 8px', borderRadius: 7, background: 'var(--warn-soft, #fef3c7)',
-                          alignSelf: 'flex-start',
-                        }}>
-                          No open records for {loanPersonTrimmed} — transaction will still be logged
-                        </div>
-                      )}
+                      {amountHint && <div style={{ fontSize: 12.5, fontWeight: 600, color: amountErr ? 'var(--bad-ink)' : 'var(--t3)', marginTop: 2 }}>{amountHint}</div>}
+                    </div>
 
-                      {/* Allocation preview — shown when person is known + amount set + pending records exist */}
-                      {isRepaymentKind && loanPersonTrimmed && !isNewPerson && pendingForPerson.length > 0 && Number(amount) > 0 && (
-                        <div style={{
-                          background: 'var(--surface-2)', borderRadius: 12,
-                          padding: '10px 12px', border: '1px solid var(--border)',
-                          display: 'flex', flexDirection: 'column', gap: 0,
-                        }}>
-                          <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--text-4)', letterSpacing: '0.05em', marginBottom: 8 }}>
-                            WILL SETTLE
+                    {/* Date */}
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: 6, paddingBottom: 10 }}>
+                      <button type="button" onClick={() => { setDate(todayStr()); setDateOpen(false) }} style={chip(dayDiff === 0 && !dateOpen, 'brand', { height: 36, fontSize: 13, padding: '0 12px' })}>Today</button>
+                      <button type="button" onClick={() => { setDate(format(subDays(new Date(), 1), 'yyyy-MM-dd')); setDateOpen(false) }} style={chip(dayDiff === 1 && !dateOpen, 'brand', { height: 36, fontSize: 13, padding: '0 12px' })}>Yesterday</button>
+                      <button type="button" onClick={() => setDateOpen(o => !o)} aria-expanded={dateOpen} style={chip(earlier || dateOpen, 'brand', { height: 36, fontSize: 13, padding: '0 12px' })}>
+                        <Sym name="calendar_month" size={17} />{earlier ? dateLabel(date) : 'Earlier'}
+                      </button>
+                    </div>
+                    {dateOpen && (
+                      <div className="txn-scroll" style={{ display: 'flex', gap: 6, overflowX: 'auto', margin: '0 -16px', padding: '0 16px 12px' }}>
+                        {days.map((d, i) => {
+                          const ds = format(d, 'yyyy-MM-dd')
+                          const sel = ds === date
+                          return (
+                            <button key={ds} type="button" onClick={() => { setDate(ds); setDateOpen(false) }}
+                              style={{ flex: 'none', width: 52, height: 64, borderRadius: 14, border: sel ? '1.5px solid var(--brand)' : '1px solid var(--line)', background: sel ? 'var(--brand-soft)' : 'var(--card)', color: sel ? 'var(--brand-ink)' : 'var(--t1)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, cursor: 'pointer' }}>
+                              <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', opacity: 0.75 }}>{i === 0 ? 'Today' : format(d, 'EEE')}</span>
+                              <span style={{ fontFamily: MONO, fontSize: 17, fontWeight: 500 }}>{d.getDate()}</span>
+                              <span style={{ fontSize: 10, fontWeight: 600, opacity: 0.6 }}>{format(d, 'MMM')}</span>
+                            </button>
+                          )
+                        })}
+                        {/* Anything older than 30 days, or ahead */}
+                        <button type="button" onClick={() => openPicker(dateRef.current)}
+                          style={{ position: 'relative', flex: 'none', width: 52, height: 64, borderRadius: 14, border: '1px dashed var(--line2)', background: 'transparent', color: 'var(--t2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, cursor: 'pointer' }}>
+                          <Sym name="calendar_month" size={18} />
+                          <span style={{ fontSize: 10, fontWeight: 700 }}>Other</span>
+                          <input ref={dateRef} type="date" tabIndex={-1} aria-hidden value={date}
+                            onChange={e => { if (e.target.value) { setDate(e.target.value); setDateOpen(false) } }}
+                            style={{ position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }} />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Note */}
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', borderRadius: 14,
+                      background: isScan && initialPrefill?.notes && notes === initialPrefill.notes ? 'var(--brand-soft)' : 'var(--card)',
+                      border: noteFocused ? '1.5px solid var(--brand)' : '1px solid var(--line)',
+                      boxShadow: noteFocused ? '0 0 0 4px var(--brand-soft)' : 'none',
+                    }}>
+                      <Sym name="notes" style={{ color: 'var(--t3)' }} />
+                      <input value={notes} maxLength={200} onChange={e => setNotes(e.target.value)} onKeyDown={onFieldKey}
+                        onFocus={() => setNoteFocused(true)} onBlur={() => setNoteFocused(false)}
+                        placeholder={notePh} aria-label={isSav ? 'Note' : 'Description'}
+                        style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', fontSize: 16, color: 'var(--t1)', height: 46 }} />
+                      {thinking && <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand-ink)', animation: 'gw-pulse 1s ease-in-out infinite', flex: 'none' }}>✦ Reading…</span>}
+                    </div>
+
+                    {/* Category */}
+                    {(isExp || isInc) && (
+                      <div data-card="cats" style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 30, gap: 8 }}>
+                          <span style={{ ...labelStyle, color: attempted && !category && amt > 0 ? 'var(--bad-ink)' : 'var(--t2)' }}>Category</span>
+                          {suggestion && (
+                            <button type="button" onClick={() => pickCat(suggestedCat!)}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 30, padding: '0 11px', borderRadius: 999, border: 0, background: 'var(--brand-soft)', color: 'var(--brand-ink)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', animation: 'gw-in .25s ease-out', maxWidth: '70%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              ✦ Use &ldquo;{getCategoryDisplayName(suggestedCat!)}&rdquo;
+                            </button>
+                          )}
+                        </div>
+                        {showCatGrid ? (
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
+                            {catTiles.map(c => <CatTile key={c} category={c} selected={category === c} suggested={suggestedCat === c} onClick={() => pickCat(c)} />)}
+                            {isInc
+                              ? <NeutralTile label="Custom" icon="add" onClick={() => { setAllCats(true); setCustomOpen(true); setFocus(null) }} />
+                              : <NeutralTile label={`All ${EXPENSE_CATEGORIES.length + customCats.length}`} icon="apps" onClick={() => { setAllCats(true); setFocus(null) }} />}
                           </div>
-                          {pendingForPerson.map(b => {
-                            const outstanding = b.amount - b.repaidAmount
-                            const applied = Number(allocation[b.id] ?? 0)
-                            const untouched = applied === 0
+                        ) : (() => {
+                          const look = categoryLook(category)
+                          const t = tone(look.h)
+                          return (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px 8px 10px', borderRadius: 14, background: 'var(--card)', border: '1px solid var(--line)' }}>
+                              <span style={{ width: 36, height: 36, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: t.ink, color: 'var(--card)', flex: 'none' }}>
+                                <CatGlyph category={category} fill />
+                              </span>
+                              <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 700, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{look.label}</span>
+                              <button type="button" onClick={() => setCatExpanded(true)} style={{ height: 36, padding: '0 12px', borderRadius: 10, border: 0, background: 'var(--sunk)', color: 'var(--t2)', fontSize: 13, fontWeight: 600, cursor: 'pointer', flex: 'none' }}>Change</button>
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    )}
+
+                    {/* Savings: direction + where it's going */}
+                    {isSav && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 12 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                          {([
+                            { id: 'savings_contribution' as const, label: 'Contribute', sub: 'Into savings', icon: 'south_east' },
+                            { id: 'savings_withdrawal' as const,   label: 'Withdraw',   sub: 'Back to cash', icon: 'north_west' },
+                          ]).map(d => {
+                            const sel = savingsKind === d.id
                             return (
-                              <div key={b.id} style={{
-                                display: 'flex', alignItems: 'center', gap: 8,
-                                padding: '6px 0',
-                                borderBottom: '1px solid var(--border)',
-                              }}>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 12.5, color: untouched ? 'var(--text-4)' : 'var(--text)', fontWeight: 500, lineHeight: 1.2 }}>
-                                    {b.description || 'Loan'} · {format(parseISO(b.date), 'dd MMM yy')}
-                                  </div>
-                                  <div style={{ fontSize: 11, color: 'var(--text-4)', marginTop: 1 }}>
-                                    {formatCurrencyFull(outstanding)} outstanding
-                                  </div>
-                                </div>
-                                {untouched ? (
-                                  <span style={{ fontSize: 11, color: 'var(--text-4)', padding: '3px 8px', borderRadius: 6, background: 'var(--surface-3)', flexShrink: 0 }}>
-                                    Untouched
-                                  </span>
-                                ) : (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-                                    <span style={{ fontSize: 12, color: 'var(--text-3)' }}>₹</span>
-                                    <input
-                                      type="number"
-                                      inputMode="decimal"
-                                      min={0}
-                                      max={outstanding}
-                                      value={applied}
-                                      onChange={e => setAllocation(prev => ({ ...prev, [b.id]: Number(e.target.value) }))}
-                                      style={{
-                                        width: 70, fontSize: 13, fontWeight: 700,
-                                        color: 'var(--good-ink)', background: 'var(--surface)',
-                                        border: '1px solid var(--border)', borderRadius: 7,
-                                        padding: '3px 6px', textAlign: 'right',
-                                      }}
-                                    />
-                                  </div>
-                                )}
-                              </div>
+                              <button key={d.id} type="button" onClick={() => setSavingsKind(d.id)} aria-pressed={sel}
+                                style={{ display: 'flex', alignItems: 'center', gap: 10, height: 54, padding: '0 12px', borderRadius: 14, border: sel ? '1.5px solid var(--brand)' : '1px solid var(--line)', background: sel ? 'var(--brand-soft)' : 'var(--card)', color: sel ? 'var(--brand-ink)' : 'var(--t2)', cursor: 'pointer', textAlign: 'left' }}>
+                                <Sym name={d.icon} />
+                                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1 }}>
+                                  <span style={{ fontSize: 14, fontWeight: 700 }}>{d.label}</span>
+                                  <span style={{ fontSize: 11.5, fontWeight: 500, opacity: 0.75 }}>{d.sub}</span>
+                                </span>
+                              </button>
                             )
                           })}
-                          {/* Total vs amount */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8 }}>
-                            <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
-                              {allocationTotal !== Number(amount)
-                                ? <span style={{ color: allocationTotal > Number(amount) ? 'var(--bad-ink)' : 'var(--text-4)' }}>
-                                    {formatCurrencyFull(Math.abs(Number(amount) - allocationTotal))}{' '}
-                                    {allocationTotal > Number(amount) ? 'over-allocated' : 'unallocated'}
-                                  </span>
-                                : <span style={{ color: 'var(--good-ink)' }}>Fully allocated ✓</span>
-                              }
-                            </span>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-3)' }}>
-                              {formatCurrencyFull(allocationTotal)} / {formatCurrencyFull(Number(amount))}
-                            </span>
-                          </div>
                         </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Savings: direction + vehicle */}
-                  {activeTab === 'savings' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {/* Direction toggle */}
-                      <div style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 10, background: 'var(--surface-2)' }}>
-                        {([
-                          { id: 'savings_contribution' as const, label: 'Contribute', sub: 'Into savings', icon: <ArrowUpRight size={13} /> },
-                          { id: 'savings_withdrawal' as const,   label: 'Withdraw',   sub: 'Back to cash', icon: <ArrowDownLeft size={13} /> },
-                        ]).map(d => (
-                          <button key={d.id} type="button" onClick={() => setSavingsKind(d.id)}
-                            style={{
-                              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
-                              padding: '8px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                              background: savingsKind === d.id ? 'var(--surface)' : 'transparent',
-                              color: savingsKind === d.id ? (d.id === 'savings_withdrawal' ? 'var(--good-ink)' : 'var(--text)') : 'var(--text-3)',
-                              boxShadow: savingsKind === d.id ? 'var(--shadow-sm)' : 'none',
-                              transition: 'background .15s, color .15s, box-shadow .15s',
-                            }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 500 }}>{d.icon}{d.label}</span>
-                            <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{d.sub}</span>
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Vehicle picker */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <label className="label">Savings vehicle</label>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-                          {[...SAVINGS_VEHICLES, ...(settings?.customSavingsVehicles ?? []).filter(v => !SAVINGS_VEHICLES.includes(v))].map(v => {
-                            const meta = getSavingsVehicleMeta(v)
-                            const active = savingsVehicle === v
+                        {fieldLabel('Where’s it going?', { paddingTop: 4 })}
+                        <div className="txn-scroll" style={{ display: 'grid', gridAutoFlow: 'column', gridTemplateRows: 'repeat(2, auto)', gap: 6, overflowX: 'auto', margin: '0 -16px', padding: '0 16px 2px', justifyContent: 'start' }}>
+                          {vehicles.map(v => {
+                            const sel = savingsVehicle === v
+                            const m = vehicleSheetMeta(v)
+                            const t = tone(m.h)
                             return (
-                              <button key={v} type="button" onClick={() => setSavingsVehicle(v)}
-                                style={{
-                                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                                  padding: '5px 11px', borderRadius: 20,
-                                  border: `1.5px solid ${active ? 'var(--brand)' : 'var(--border)'}`,
-                                  background: active ? 'var(--brand-soft)' : 'var(--surface-2)',
-                                  color: active ? 'var(--brand-ink)' : 'var(--text-2)',
-                                  fontSize: 12.5, fontWeight: 500, cursor: 'pointer', transition: 'background .12s, border-color .12s, color .12s', whiteSpace: 'nowrap',
-                                }}>
-                                <meta.Icon size={13} color={active ? 'var(--brand-ink)' : meta.color} stroke={1.5} />
+                              <button key={v} type="button" onClick={() => { setSavingsVehicle(v); setHoldingOpen(false) }} aria-pressed={sel}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 40, padding: '0 13px 0 6px', borderRadius: 999, border: sel ? `1.5px solid ${t.ink}` : '1px solid var(--line)', background: sel ? t.soft : 'var(--card)', color: sel ? t.ink : 'var(--t1)', fontSize: 13.5, fontWeight: sel ? 700 : 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                <span style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: sel ? t.ink : t.soft, color: sel ? 'var(--card)' : t.ink }}>
+                                  <Sym name={m.icon} size={17} />
+                                </span>
                                 {v}
                               </button>
                             )
                           })}
-                        </div>
-                        <input maxLength={40}
-                          type="text"
-                          className="input"
-                          style={{ fontSize: 13, marginTop: 2 }}
-                          placeholder="Or type a custom vehicle (e.g. Crypto, REIT)…"
-                          value={SAVINGS_VEHICLES.includes(savingsVehicle) || (settings?.customSavingsVehicles ?? []).includes(savingsVehicle) ? '' : savingsVehicle}
-                          onChange={e => setSavingsVehicle(e.target.value)}
-                        />
-                      </div>
-
-                      {/* Holding link */}
-                      {linkableAssets.length === 0 && vehicleHoldingKinds.length > 0 && savingsVehicle !== EMERGENCY_FUND_VEHICLE && (
-                        <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
-                          No {savingsVehicle} holding yet. This counts under Unlinked savings in Net Worth; add a {savingsVehicle} holding there to link it.
-                        </p>
-                      )}
-                      {linkableAssets.length > 0 && savingsVehicle !== EMERGENCY_FUND_VEHICLE && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          <label className="label">Holding</label>
-                          <select
-                            className="input" style={{ fontSize: 13 }} value={holdingId}
-                            onChange={e => { holdingTouched.current = true; setHoldingId(e.target.value); setLinkMode(null) }}
-                          >
-                            <option value="">Not linked</option>
-                            {linkableAssets.map(a => <option key={a.id} value={a.id}>{a.name || 'Gold'}</option>)}
-                          </select>
-
-                          {!holding && (
-                            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
-                              Counts under Unlinked savings in Net Worth until it is linked to a holding.
-                            </p>
-                          )}
-
-                          {showUnits && (
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <input className="input" style={{ fontSize: 13 }} type="number" inputMode="decimal" min="0" step="0.0001"
-                                placeholder={savingsKind === 'savings_contribution' ? 'Units allotted' : 'Units redeemed'}
-                                value={linkUnits} onChange={e => setLinkUnits(e.target.value)} />
-                              {npsSchemes.length > 1 && (
-                                <select className="input" style={{ fontSize: 13 }} value={linkScheme || npsSchemes[0].schemeCode} onChange={e => setLinkScheme(e.target.value)}>
-                                  {npsSchemes.map(h => <option key={h.schemeCode} value={h.schemeCode}>{h.schemeName}</option>)}
-                                </select>
-                              )}
-                            </div>
-                          )}
-                          {showUnits && !(parseFloat(linkUnits) > 0) && (
-                            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
-                              Units not allotted yet? Save now. The holding counts this at cost and shows it as awaiting units until you open this transaction and add them.
-                            </p>
-                          )}
-
-                          {isRetroLink && (
-                            <div style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 10, background: 'var(--surface-2)' }}>
-                              {([
-                                { id: 'included' as const, label: 'Already in its balance', sub: 'Holding total stays the same' },
-                                { id: 'add' as const,      label: 'New money',              sub: savingsKind === 'savings_contribution' ? 'Holding total goes up' : 'Holding total goes down' },
-                              ]).map(m => (
-                                <button key={m.id} type="button" onClick={() => setLinkMode(m.id)}
-                                  style={{
-                                    flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
-                                    padding: '8px 10px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                                    background: linkMode === m.id ? 'var(--surface)' : 'transparent',
-                                    color: linkMode === m.id ? 'var(--text)' : 'var(--text-3)',
-                                    boxShadow: linkMode === m.id ? 'var(--shadow-sm)' : 'none',
-                                    transition: 'background .15s, color .15s, box-shadow .15s',
-                                  }}>
-                                  <span style={{ fontSize: 12.5, fontWeight: 500 }}>{m.label}</span>
-                                  <span style={{ fontSize: 10.5, color: 'var(--text-3)' }}>{m.sub}</span>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-
-                          {linkError && (
-                            <p style={{ fontSize: 11.5, color: linkNeedsInput ? 'var(--text-3)' : 'var(--bad-ink)', margin: 0 }}>{linkError}</p>
-                          )}
-                          {holding && linkPreview && (
-                            <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--good-soft)', fontSize: 12, color: 'var(--good-ink)' }}>
-                              {linkPreview.before.total === linkPreview.after.total
-                                ? `${holding.name || 'Gold'} stays at ${fmtLinked(linkPreview.after.total, linkPreview.after.unit)}`
-                                : `${holding.name || 'Gold'}: ${fmtLinked(linkPreview.before.total, linkPreview.before.unit)} → ${fmtLinked(linkPreview.after.total, linkPreview.after.unit)}`}
-                              {' · '}
-                              {fmtLinked(linkPreview.after.historical, linkPreview.after.unit)} historical + {fmtLinked(linkPreview.after.linked, linkPreview.after.unit)} from {linkPreview.after.count} linked
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Gold purchase details */}
-                      {showGoldFields && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 10, background: 'var(--surface-2)' }}>
-                          <label className="label" style={{ margin: 0 }}>
-                            {savingsKind === 'savings_contribution' ? 'Grams bought' : 'Grams sold'}{holding?.kind === 'gold_grams' ? '' : ' (optional)'}
-                          </label>
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            {([18, 22, 24] as const).map(k => (
-                              <button key={k} type="button" onClick={() => setGoldKarat(k)}
-                                style={{
-                                  flex: 1, padding: '7px', borderRadius: 8, fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
-                                  border: `1.5px solid ${goldKarat === k ? 'var(--brand)' : 'var(--border)'}`,
-                                  background: goldKarat === k ? 'var(--brand-soft)' : 'var(--surface)',
-                                  color: goldKarat === k ? 'var(--brand-ink)' : 'var(--text-2)',
-                                }}
-                              >{k}K</button>
-                            ))}
-                          </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                            <input className="input" type="number" inputMode="decimal" min="0" step="0.001" placeholder="Grams"
-                              value={goldGrams} onChange={e => setGoldGrams(e.target.value)} />
-                            <input className="input" type="number" inputMode="decimal" min="0" step="0.01" placeholder="₹/gram"
-                              value={goldPricePerGram} onChange={e => setGoldPricePerGram(e.target.value)} />
-                          </div>
-                          {parseFloat(goldGrams) > 0 && parseFloat(goldPricePerGram) > 0 && (
-                            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
-                              = ₹{Math.round(parseFloat(goldGrams) * parseFloat(goldPricePerGram)).toLocaleString('en-IN')} — should match the amount below
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Amount */}
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <label className="label" style={{ margin: 0 }}>Amount (₹)</label>
-                      {canSplit && (
-                        <button
-                          type="button"
-                          onClick={() => setSplitEnabled(v => !v)}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 5,
-                            padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600,
-                            background: splitEnabled ? 'var(--brand)' : 'var(--surface-2)',
-                            color: splitEnabled ? '#fff' : 'var(--text-3)',
-                            border: `1px solid ${splitEnabled ? 'var(--brand)' : 'var(--border)'}`,
-                            cursor: 'pointer', transition: 'background .15s, border-color .15s, color .15s',
-                          }}
-                        >
-                          <Split size={11} />
-                          {splitEnabled ? 'Splitting' : 'Split'}
-                        </button>
-                      )}
-                    </div>
-                    <AmountInput
-                      placeholder="0"
-                      className="input" style={{ fontSize: 18, fontWeight: 600 }}
-                      value={amount} onValueChange={changeAmount} required
-                    />
-                  </div>
-
-                  {/* ── Split Panel — shown when Split button in amount row is active ── */}
-                  {canSplit && splitEnabled && (
-                    <div style={{
-                      borderRadius: 12,
-                      border: '1px solid var(--brand)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                    }}>
-                      {/* Panel header */}
-                      <div style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '10px 14px',
-                        background: 'var(--brand-soft)',
-                        borderRadius: '12px 12px 0 0',
-                      }}>
-                        <Split size={13} style={{ color: 'var(--brand)', flexShrink: 0 }} />
-                        <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--brand-ink)' }}>
-                          Split expense
-                        </span>
-                        <button type="button" onClick={() => { setSplitEnabled(false); setParticipants([]) }}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--brand-ink)', display: 'flex', padding: 2, opacity: 0.7 }}>
-                          <X size={13} />
-                        </button>
-                      </div>
-
-                      {/* Split content */}
-                      <div style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-                          {/* Mode selector */}
-                          <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 9, background: 'var(--surface-3)' }}>
-                            {(['equal', 'percentage', 'manual'] as SplitMode[]).map(m => (
-                              <button key={m} type="button" onClick={() => setSplitMode(m)}
-                                style={{
-                                  flex: 1, padding: '5px 0', borderRadius: 7, border: 'none', cursor: 'pointer',
-                                  fontSize: 11.5, fontWeight: 500, transition: 'background .15s, color .15s, box-shadow .15s',
-                                  background: splitMode === m ? 'var(--surface)' : 'transparent',
-                                  color: splitMode === m ? 'var(--text)' : 'var(--text-3)',
-                                  boxShadow: splitMode === m ? 'var(--shadow-sm)' : 'none',
-                                }}>
-                                {m === 'equal' ? 'Equal' : m === 'percentage' ? 'Percent %' : 'Manual ₹'}
-                              </button>
-                            ))}
-                          </div>
-
-                          {/* Your share summary */}
-                          {participants.length > 0 && (
-                            <div style={{
-                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                              padding: '10px 12px', borderRadius: 10,
-                              background: myShare > 0 ? 'var(--good-soft)' : 'var(--bad-soft)',
-                            }}>
-                              <span style={{ fontSize: 12, color: myShare > 0 ? 'var(--good-ink)' : 'var(--bad-ink)', fontWeight: 500 }}>
-                                Your share
-                              </span>
-                              <span style={{ fontSize: 15, fontWeight: 700, color: myShare > 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
-                                ₹{myShare.toLocaleString('en-IN')}
-                                {splitMode === 'percentage' && totalAmount > 0 && (
-                                  <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 6 }}>
-                                    ({myPct.toFixed(0)}%)
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Participants */}
-                          {participants.length > 0 && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                              {participants.map(p => (
-                                <div key={p.id} style={{
-                                  display: 'flex', alignItems: 'center', gap: 6,
-                                  padding: '8px 10px', borderRadius: 10,
-                                  background: 'var(--surface-2)', border: '1px solid var(--border)',
-                                }}>
-                                  {/* Name */}
-                                  <span style={{ flex: 1, fontSize: 12.5, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {p.name}
-                                  </span>
-
-                                  {/* Value input (percentage or manual) */}
-                                  {splitMode !== 'equal' && (
-                                    <input
-                                      type="number"
-                                      inputMode="decimal" min="0"
-                                      max={splitMode === 'percentage' ? 100 : undefined}
-                                      step={splitMode === 'percentage' ? 1 : 0.01}
-                                      value={p.value || ''}
-                                      onChange={e => updateParticipant(p.id, { value: Number(e.target.value) })}
-                                      style={{
-                                        width: 70, padding: '4px 8px', borderRadius: 7,
-                                        border: '1px solid var(--border)', background: 'var(--surface)',
-                                        fontSize: 12, color: 'var(--text)', outline: 'none', textAlign: 'right',
-                                      }}
-                                      placeholder={splitMode === 'percentage' ? '%' : '₹'}
-                                    />
-                                  )}
-
-                                  {/* Amount preview for equal mode */}
-                                  {splitMode === 'equal' && (
-                                    <span style={{ fontSize: 12, color: 'var(--text-2)', minWidth: 52, textAlign: 'right' }}>
-                                      ₹{getParticipantAmount(p).toLocaleString('en-IN')}
-                                    </span>
-                                  )}
-
-                                  {/* Lent / Absorbed toggle */}
-                                  <div style={{ display: 'flex', borderRadius: 7, overflow: 'hidden', border: '1px solid var(--border)', flexShrink: 0 }}>
-                                    {(['lent', 'absorbed'] as SplitKind[]).map(k => (
-                                      <button key={k} type="button"
-                                        onClick={() => updateParticipant(p.id, { kind: k })}
-                                        style={{
-                                          padding: '3px 8px', fontSize: 11, fontWeight: 500, border: 'none', cursor: 'pointer',
-                                          background: p.kind === k
-                                            ? k === 'lent' ? 'var(--warn)' : 'var(--text-3)'
-                                            : 'transparent',
-                                          color: p.kind === k ? '#fff' : 'var(--text-3)',
-                                          transition: 'background .15s, color .15s',
-                                        }}>
-                                        {k === 'lent' ? 'Lent' : 'Absorbed'}
-                                      </button>
-                                    ))}
-                                  </div>
-
-                                  {/* Remove */}
-                                  <button type="button" onClick={() => removeParticipant(p.id)}
-                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', padding: 2, display: 'flex', flexShrink: 0 }}
-                                    onMouseEnter={e => (e.currentTarget.style.color = 'var(--bad)')}
-                                    onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-4)')}>
-                                    <Trash2 size={13} />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Add person */}
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <div style={{ flex: 1, position: 'relative' }}>
-                              <input maxLength={60}
-                                type="text"
-                                list="split-people"
-                                placeholder="Add person..."
-                                value={newName}
-                                onChange={e => setNewName(e.target.value)}
-                                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addParticipant(newName) } }}
-                                style={{
-                                  width: '100%', padding: '7px 10px', borderRadius: 9,
-                                  border: '1px solid var(--border)', background: 'var(--surface)',
-                                  fontSize: 13, color: 'var(--text)', outline: 'none',
-                                }}
-                              />
-                              <datalist id="split-people">
-                                {knownPeople
-                                  .filter(n => !participants.some(p => p.name === n))
-                                  .map(n => <option key={n} value={n} />)}
-                              </datalist>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => addParticipant(newName)}
-                              disabled={!newName.trim()}
-                              style={{
-                                display: 'flex', alignItems: 'center', gap: 5,
-                                padding: '7px 12px', borderRadius: 9, border: 'none', cursor: 'pointer',
-                                background: newName.trim() ? 'var(--brand)' : 'var(--surface-2)',
-                                color: newName.trim() ? '#fff' : 'var(--text-3)',
-                                fontSize: 12, fontWeight: 500, flexShrink: 0, transition: 'background .15s, color .15s',
-                              }}>
-                              <UserPlus size={13} /> Add
-                            </button>
-                          </div>
-
-                          {/* Balance bar */}
-                          {participants.length > 0 && totalAmount > 0 && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                              <div style={{ height: 4, borderRadius: 999, background: 'var(--surface-3)', overflow: 'hidden' }}>
-                                <div style={{
-                                  height: '100%', borderRadius: 999, transition: 'width .2s',
-                                  background: isBalanced ? 'var(--good)' : 'var(--warn)',
-                                  width: `${Math.min((sumAssigned / totalAmount) * 100, 100)}%`,
-                                }} />
-                              </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5 }}>
-                                <span style={{ color: isBalanced ? 'var(--good-ink)' : 'var(--warn-ink)' }}>
-                                  {isBalanced ? '✓ Balanced' : `₹${Math.abs(sumAssigned - totalAmount).toLocaleString('en-IN')} ${sumAssigned > totalAmount ? 'over' : 'remaining'}`}
-                                </span>
-                                <span style={{ color: 'var(--text-4)' }}>
-                                  ₹{sumAssigned.toLocaleString('en-IN')} / ₹{totalAmount.toLocaleString('en-IN')}
-                                </span>
-                              </div>
-                            </div>
-                          )}
-
-                        </div>
-                    </div>
-                  )}
-                  {/* ── End Split Panel ──────────────────────────────────── */}
-
-                  {/* Description — moved above category so suggestion chip is immediately visible */}
-                  <div>
-                    <label className="label">
-                      {activeTab === 'savings' ? 'Note' : 'Description'}
-                    </label>
-                    <input maxLength={200}
-                      type="text"
-                      placeholder={
-                        activeTab === 'savings'
-                          ? 'e.g. Monthly SIP, bonus into FD…'
-                          : txType === 'transfer'
-                            ? selectedKind?.dir === 'in' ? 'e.g. Rahul paid back' : 'e.g. Lent to Priya'
-                            : 'e.g. Domino\'s pizza — we\'ll suggest a category'
-                      }
-                      className="input" value={notes} onChange={e => setNotes(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Category */}
-                  {txType !== 'transfer' && (
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <label className="label" style={{ margin: 0 }}>Category</label>
-                        {suggestedCat && (
-                          <button
-                            type="button"
-                            onClick={() => { setCategory(suggestedCat); setSuggestedCat(null) }}
-                            style={{
-                              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 999,
-                              background: 'var(--brand-soft)', color: 'var(--brand-ink)',
-                              border: '1px solid color-mix(in oklch, var(--brand) 30%, transparent)',
-                              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
-                            }}
-                          >
-                            ✦ Use &ldquo;{suggestedCat}&rdquo;
+                          <button type="button" onClick={() => setVehicleInputOpen(o => !o)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 40, padding: '0 13px', borderRadius: 999, border: '1px dashed var(--line2)', background: 'transparent', color: 'var(--t2)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            <Sym name="add" size={18} />Custom
                           </button>
+                        </div>
+                        {vehicleInputOpen && (
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <input value={vehicleDraft} maxLength={40} onChange={e => setVehicleDraft(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (vehicleDraft.trim()) { setSavingsVehicle(vehicleDraft.trim()); setVehicleDraft(''); setVehicleInputOpen(false) } } }}
+                              placeholder="Or type a custom vehicle (e.g. Crypto, REIT)…" style={{ ...textInput, background: 'var(--card)' }} />
+                            <button type="button" onClick={() => { if (vehicleDraft.trim()) { setSavingsVehicle(vehicleDraft.trim()); setVehicleDraft(''); setVehicleInputOpen(false) } }} style={darkBtn}>Add</button>
+                          </div>
                         )}
                       </div>
-                      <CategoryPicker value={category} onChange={v => { setCategory(v); setSuggestedCat(null) }} type={txType === 'income' ? 'income' : 'expense'} />
-                    </div>
-                  )}
+                    )}
 
-                  {/* Fuel fill-up: pump reading + odometer, for mileage */}
-                  {isFuel && (
-                    <FuelFields value={fuel} onChange={patchFuel} auto={fuelAuto} paid={Number(amount) || 0} date={date} editId={editTx?.id} />
-                  )}
-
-                  {/* Tags — free-form labels, independent of category (e.g. "Christmas") */}
-                  <div>
-                    <label className="label">Tags (optional)</label>
-                    <TagPicker value={tags} onChange={setTags} />
-                  </div>
-
-                  {/* ── Debt settlement (expense only) ── */}
-                  {activeTab === 'expense' && (settleablePeople.length > 0 || settledPerson) && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <label className="label">Settle a debt (optional)</label>
-                      <select
-                        className="input"
-                        value={settledPerson}
-                        onChange={e => setSettledPerson(e.target.value)}
-                        style={{ fontSize: 13 }}
-                      >
-                        <option value="">None — log as regular expense</option>
-                        {settleablePeople.map(p => (
-                          <option key={p.person} value={p.person}>
-                            {p.person} · {formatCurrencyFull(p.outstanding)} owed to you
-                          </option>
-                        ))}
-                        {settledPerson && !settleablePeople.some(p => p.person === settledPerson) && (
-                          <option value={settledPerson}>{settledPerson}</option>
-                        )}
-                      </select>
-                      {settledPerson && Number(amount) > 0 && (
-                        <div style={{
-                          display: 'flex', alignItems: 'center', gap: 10,
-                          padding: '10px 12px', borderRadius: 10,
-                          background: 'var(--good-soft)', border: '1px solid color-mix(in oklch, var(--good) 25%, transparent)',
-                        }}>
-                          <div style={{ flex: 1, fontSize: 12, color: 'var(--good-ink)', lineHeight: 1.4 }}>
-                            <strong>{formatCurrencyFull(settleApplied)}</strong>
-                            {' '}will come off <strong>{settledPerson}</strong>&apos;s total balance
-                            {settleApplied >= settleOutstanding && settleOutstanding > 0 && (
-                              <span style={{ marginLeft: 6, fontWeight: 700, color: 'var(--good-ink)' }}>· Fully settled ✓</span>
-                            )}
-                            {Number(amount) > settleApplied && (
-                              <span style={{ marginLeft: 6, color: 'var(--text-3)' }}>
-                                · remaining {formatCurrencyFull(Number(amount) - settleApplied)} logged as a regular expense
-                              </span>
-                            )}
-                          </div>
+                    {/* Transfer: loan kind + person */}
+                    {isTr && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 12 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
+                          {LOAN_KINDS.map(k => {
+                            const sel = transferKind === k.id
+                            return (
+                              <button key={k.id} type="button" onClick={() => setTransferKind(k.id)} aria-pressed={sel}
+                                style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, height: 84, padding: 10, borderRadius: 14, border: sel ? '1.5px solid var(--info)' : '1px solid var(--line)', background: sel ? 'var(--info-soft)' : 'var(--card)', color: sel ? 'var(--info-ink)' : 'var(--t1)', cursor: 'pointer', textAlign: 'left', minWidth: 0 }}>
+                                <span style={{ width: 28, height: 28, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: sel ? 'var(--info)' : 'var(--sunk)', color: sel ? '#fff' : 'var(--t2)' }}>
+                                  <Sym name={k.icon} size={18} />
+                                </span>
+                                <span style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.2 }}>{k.label}</span>
+                              </button>
+                            )
+                          })}
                         </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* ── Refunds (expense edit only) ── */}
-                  {activeTab === 'expense' && editTx && editTx.type === 'expense' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <label className="label">Refunds</label>
-
-                      {existingRefunds.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {existingRefunds.map(r => (
-                            <div key={r.id} style={{
-                              display: 'flex', alignItems: 'center', gap: 10,
-                              padding: '8px 10px', borderRadius: 10,
-                              background: 'var(--good-soft)', border: '1px solid color-mix(in oklch, var(--good) 25%, transparent)',
-                            }}>
-                              <div style={{ flex: 1, fontSize: 12, color: 'var(--good-ink)' }}>
-                                <strong>{formatCurrencyFull(r.amount)}</strong> refunded on {format(parseISO(r.date), 'MMM d, yyyy')}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => removeRefund(r.id)}
-                                style={{ padding: 4, borderRadius: 6, color: 'var(--bad-ink)', background: 'none', border: 'none', cursor: 'pointer' }}
-                                aria-label="Remove refund"
-                              >
-                                <X size={14} />
-                              </button>
-                            </div>
-                          ))}
-                          <div style={{ fontSize: 12, color: 'var(--text-2)', padding: '2px 2px' }}>
-                            Refunded {formatCurrencyFull(totalRefunded)} · Net expense <strong style={{ color: 'var(--text)' }}>{formatCurrencyFull(Math.max(0, editTx.amount - totalRefunded))}</strong>
-                          </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 12.5, color: 'var(--t2)' }}>
+                          <span>{selectedKind?.sub}</span>
+                          <button type="button" onClick={() => setTab('savings')} style={{ border: 0, background: 'transparent', padding: '6px 0', color: 'var(--brand-ink)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>Into savings? →</button>
                         </div>
-                      )}
-
-                      {remainingRefundable > 0 && (
-                        showRefundForm ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <AmountInput
-                                className="input" placeholder={`Up to ${formatCurrencyFull(remainingRefundable)}`}
-                                value={refundAmount} onValueChange={setRefundAmount}
-                                autoFocus
-                                style={{ flex: 1, fontSize: 13 }}
-                              />
-                              <input
-                                type="date" className="input" value={refundDate} onChange={e => setRefundDate(e.target.value)}
-                                style={{ flex: 1, fontSize: 13 }}
-                              />
-                            </div>
-                            <input maxLength={200}
-                              type="text" className="input" placeholder="Notes (optional)"
-                              value={refundNotes} onChange={e => setRefundNotes(e.target.value)}
-                              style={{ fontSize: 13 }}
-                            />
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <button
-                                type="button"
-                                onClick={() => setShowRefundForm(false)}
-                                className="btn-secondary"
-                                style={{ justifyContent: 'center', padding: '9px', fontSize: 13 }}
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                type="button"
-                                onClick={logRefund}
-                                disabled={addingRefund || !refundAmount || Number(refundAmount) <= 0}
-                                className="btn-primary"
-                                style={{ flex: 1, justifyContent: 'center', padding: '9px', fontSize: 13, opacity: addingRefund ? 0.6 : 1 }}
-                              >
-                                {addingRefund ? 'Logging...' : 'Log refund'}
-                              </button>
-                            </div>
+                        <div data-card="person" style={{ ...labelStyle, paddingTop: 4, color: attempted && !loanPersonTrimmed ? 'var(--bad-ink)' : 'var(--t2)' }}>
+                          {transferKind === 'loan_given' ? 'Who are you lending to?' : transferKind === 'loan_repayment_received' ? 'Who paid you back?' : 'Who are you repaying?'}
+                        </div>
+                        {loanPersonTrimmed ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px 8px 10px', borderRadius: 14, background: 'var(--card)', border: '1px solid var(--line)' }}>
+                            <span style={avatar(loanPersonTrimmed, 38)}>{loanPersonTrimmed[0]?.toUpperCase()}</span>
+                            <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loanPersonTrimmed}</span>
+                              <span style={{ fontSize: 12.5, color: 'var(--t3)' }}>{personMeta(loanPersonTrimmed)}</span>
+                            </span>
+                            <button type="button" onClick={() => { setLoanPerson(''); setPersonOpen(true); setAllocation({}) }} style={{ height: 36, padding: '0 12px', borderRadius: 10, border: 0, background: 'var(--sunk)', color: 'var(--t2)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Change</button>
                           </div>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => setShowRefundForm(true)}
-                            className="btn-secondary"
-                            style={{ justifyContent: 'center', gap: 8, padding: '9px', fontSize: 13 }}
-                          >
-                            <RotateCcw size={14} /> Refund
-                          </button>
-                        )
-                      )}
-                    </div>
-                  )}
-
-                  {/* Date */}
-                  <div>
-                    <label className="label">Date</label>
-                    <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} required />
-                  </div>
-
-                  {/* Project */}
-                  {(txType === 'expense' || activeTab === 'savings') && projects.length > 0 && (
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <label className="label" style={{ margin: 0 }}>Link to Project (optional)</label>
-                        {txType === 'expense' && (category === 'Gold' || category === 'Construction') && projectId && (
-                          <span style={{ fontSize: 10.5, color: 'var(--brand-ink)', fontWeight: 500 }}>
-                            Auto-linked {category === 'Gold' ? <IconMedal size={12} stroke={1.5} /> : <IconCrane size={12} stroke={1.5} />}
+                          <div style={{ display: 'flex', flexDirection: 'column', borderRadius: 14, background: 'var(--card)', border: `1px solid ${attempted ? 'var(--bad)' : 'var(--line2)'}`, overflow: 'hidden' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 48, padding: '0 12px' }}>
+                              <Sym name="person_search" style={{ color: 'var(--t3)' }} />
+                              <input value={personQuery} maxLength={60} role="combobox" aria-expanded={personOpen} aria-label="Person"
+                                onChange={e => { setPersonQuery(e.target.value); setPersonOpen(true) }}
+                                onFocus={() => setPersonOpen(true)}
+                                onKeyDown={e => {
+                                  if (e.key !== 'Enter') return
+                                  e.preventDefault()
+                                  const pick = canAddPerson ? personQuery.trim() : personResults[0]
+                                  if (pick) { setLoanPerson(pick); setPersonQuery(''); setPersonOpen(false) }
+                                }}
+                                placeholder="Search people or add someone new"
+                                style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', fontSize: 16, color: 'var(--t1)' }} />
+                            </div>
+                            {personOpen && (personResults.length > 0 || canAddPerson) && (
+                              <div role="listbox" style={{ display: 'flex', flexDirection: 'column', borderTop: '1px solid var(--line)', padding: 4 }}>
+                                {personResults.map(p => (
+                                  <button key={p} type="button" role="option" aria-selected={false}
+                                    onClick={() => { setLoanPerson(p); setPersonQuery(''); setPersonOpen(false) }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 48, padding: '4px 8px', border: 0, borderRadius: 10, background: 'transparent', cursor: 'pointer', textAlign: 'left' }}>
+                                    <span style={avatar(p)}>{p[0]?.toUpperCase()}</span>
+                                    <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                                      <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--t1)' }}>{p}</span>
+                                      <span style={{ fontSize: 12, color: 'var(--t3)' }}>{personMeta(p)}</span>
+                                    </span>
+                                  </button>
+                                ))}
+                                {canAddPerson && (
+                                  <button type="button" onClick={() => { setLoanPerson(personQuery.trim()); setPersonQuery(''); setPersonOpen(false) }}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 48, padding: '4px 8px', border: 0, borderRadius: 10, background: 'var(--sunk)', cursor: 'pointer', textAlign: 'left' }}>
+                                    <span style={{ width: 32, height: 32, borderRadius: '50%', border: '1.5px dashed var(--line2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t2)', flex: 'none' }}><Sym name="add" size={18} /></span>
+                                    <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--t1)' }}>Add &ldquo;{personQuery.trim()}&rdquo;</span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {loanPersonTrimmed && personRecords.length > 0 && (
+                          <span style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 999, background: 'var(--good-soft)', color: 'var(--good-ink)', fontSize: 12.5, fontWeight: 700 }}>
+                            <Sym name="check" size={16} />Linked to existing borrowing record
+                          </span>
+                        )}
+                        {loanPersonTrimmed && isRepaymentKind && personRecords.length === 0 && (
+                          <span style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'flex-start', gap: 6, padding: '7px 10px', borderRadius: 12, background: 'var(--warn-soft)', color: 'var(--warn-ink)', fontSize: 12.5, fontWeight: 600, lineHeight: 1.35 }}>
+                            <Sym name="info" size={16} />No open records for {loanPersonTrimmed.split(' ')[0]} — transaction will still be logged
                           </span>
                         )}
                       </div>
-                      <select className="input" value={projectId} onChange={e => setProjectId(e.target.value)}>
-                        <option value="">None</option>
-                        {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
+                    )}
+
+                    {/* ── Everything below waits for the keypad to close ── */}
+                    {!showKeypad && (
+                      <>
+                        {isFuel && (
+                          <FuelFields value={fuel} onChange={patchFuel} auto={fuelAuto} paid={Number(amount) || 0} date={date} editId={editTx?.id} />
+                        )}
+
+                        {/* Net Worth holding */}
+                        {isSav && savingsVehicle !== EMERGENCY_FUND_VEHICLE && (
+                          <div data-card="holding" style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 14 }}>
+                            {fieldLabel('Net Worth holding')}
+                            <div style={{ borderRadius: 14, background: 'var(--card)', border: '1px solid var(--line)', overflow: 'hidden' }}>
+                              <button type="button" onClick={() => setHoldingOpen(o => !o)} aria-expanded={holdingOpen}
+                                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, minHeight: 52, padding: '0 12px', border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left' }}>
+                                <span style={{ width: 34, height: 34, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', background: holding ? vTone.soft : 'var(--sunk)', color: holding ? vTone.ink : 'var(--t3)', flex: 'none' }}>
+                                  <Sym name={holding ? 'link' : 'link_off'} size={19} />
+                                </span>
+                                <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                                  <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{holding ? holding.name || 'Gold' : 'Not linked'}</span>
+                                  <span style={{ fontSize: 12, color: 'var(--t3)' }}>
+                                    {holding
+                                      ? (() => { const s = linkSummary(holding); return s.unit === 'g' ? `${s.total} g held · ${s.count} linked` : `${R(s.total)} · ${s.count} linked` })()
+                                      : linkableAssets.length ? `${linkableAssets.length} ${savingsVehicle} holding${linkableAssets.length > 1 ? 's' : ''} available` : 'No holdings of this kind'}
+                                  </span>
+                                </span>
+                                <Sym name={holdingOpen ? 'expand_less' : 'expand_more'} style={{ color: 'var(--t3)' }} />
+                              </button>
+                              {holdingOpen && linkableAssets.length > 0 && (
+                                <div role="listbox" style={{ borderTop: '1px solid var(--line)', padding: 4 }}>
+                                  {[{ id: '', name: 'Not linked', bal: '' }, ...linkableAssets.map(a => ({ id: a.id, name: a.name || 'Gold', bal: holdingSummary(a) }))].map(o => (
+                                    <button key={o.id || 'none'} type="button" role="option" aria-selected={holdingId === o.id}
+                                      onClick={() => { holdingTouched.current = true; setHoldingId(o.id); setLinkMode(null); setHoldingOpen(false) }}
+                                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, minHeight: 46, padding: '0 8px', border: 0, borderRadius: 10, background: 'transparent', cursor: 'pointer', textAlign: 'left' }}>
+                                      <span style={radio(holdingId === o.id)} />
+                                      <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}>{o.name}</span>
+                                      <span style={{ fontFamily: MONO, fontSize: 12.5, color: 'var(--t3)' }}>{o.bal}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            {(linkableAssets.length === 0 || !holding) && (
+                              <div style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--t3)' }}>
+                                {linkableAssets.length === 0
+                                  ? `No ${savingsVehicle} holding yet. This counts under Unlinked savings in Net Worth; add a ${savingsVehicle} holding there to link it.`
+                                  : 'Counts under Unlinked savings in Net Worth until it is linked to a holding.'}
+                              </div>
+                            )}
+                            {npsSchemes.length > 1 && (
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {npsSchemes.map(h => (
+                                  <button key={h.schemeCode} type="button" onClick={() => setLinkScheme(h.schemeCode)}
+                                    style={chip((linkScheme || npsSchemes[0].schemeCode) === h.schemeCode, 'brand', { height: 34, fontSize: 12.5 })}>{h.schemeName}</button>
+                                ))}
+                              </div>
+                            )}
+                            {showUnits && (
+                              <>
+                                <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                  <span style={subLabelStyle}>{savingsKind === 'savings_contribution' ? 'Units allotted' : 'Units redeemed'}</span>
+                                  <input value={linkUnits} onChange={e => setLinkUnits(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0.000" style={field({ background: 'var(--card)' })} />
+                                </label>
+                                {!(parseFloat(linkUnits) > 0) && (
+                                  <span style={{ fontSize: 12, color: 'var(--t3)', lineHeight: 1.4 }}>Units not allotted yet? Save now. The holding counts this at cost and shows it as awaiting units until you open this transaction and add them.</span>
+                                )}
+                              </>
+                            )}
+                            {isRetroLink && (
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                                {([
+                                  { id: 'included' as const, label: 'Already in its balance', sub: 'Holding total stays the same' },
+                                  { id: 'add' as const,      label: 'New money',              sub: savingsKind === 'savings_contribution' ? 'Holding total goes up' : 'Holding total goes down' },
+                                ]).map(m => {
+                                  const sel = linkMode === m.id
+                                  return (
+                                    <button key={m.id} type="button" onClick={() => setLinkMode(m.id)} aria-pressed={sel}
+                                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '10px 12px', borderRadius: 14, border: sel ? '1.5px solid var(--brand)' : `1px solid ${attempted && !linkMode ? 'var(--bad)' : 'var(--line)'}`, background: sel ? 'var(--brand-soft)' : 'var(--card)', color: sel ? 'var(--brand-ink)' : 'var(--t1)', cursor: 'pointer', textAlign: 'left' }}>
+                                      <span style={{ fontSize: 13.5, fontWeight: 700 }}>{m.label}</span>
+                                      <span style={{ fontSize: 11.5, fontWeight: 500, opacity: 0.8, lineHeight: 1.3 }}>{m.sub}</span>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            )}
+                            {linkError && (!linkNeedsInput || attempted) && (
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 12.5, lineHeight: 1.4, fontWeight: 600, color: 'var(--bad-ink)' }}>
+                                <Sym name="error" size={16} />{linkError}
+                              </div>
+                            )}
+                            {holding && linkPreview && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '10px 12px', borderRadius: 12, background: 'var(--brand-soft)' }}>
+                                <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 600, color: 'var(--brand-ink)' }}>
+                                  {holding.name || 'Gold'}: {fmtLinked(linkPreview.before.total, linkPreview.before.unit)} → {fmtLinked(linkPreview.after.total, linkPreview.after.unit)}
+                                </span>
+                                <span style={{ fontSize: 12, color: 'var(--t2)' }}>
+                                  {linkPreview.before.total === linkPreview.after.total
+                                    ? 'Already counted — holding total stays the same'
+                                    : `${fmtLinked(linkPreview.after.historical, linkPreview.after.unit)} historical + ${fmtLinked(linkPreview.after.linked, linkPreview.after.unit)} from ${linkPreview.after.count} linked`}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Gold details */}
+                        {showGoldFields && (
+                          <div style={{ marginTop: 14, background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 18, padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Sym name="diamond" style={{ color: 'var(--t2)' }} />
+                              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--t1)' }}>Gold details</span>
+                              <span style={{ flex: 1 }} />
+                              <div style={{ display: 'flex', gap: 2, padding: 2, borderRadius: 10, background: 'var(--sunk)' }}>
+                                {([18, 22, 24] as const).map(k => (
+                                  <button key={k} type="button" onClick={() => setGoldKarat(k)} style={seg(goldKarat === k, { height: 30, padding: '0 10px', fontSize: 12.5, borderRadius: 8 })}>{k}K</button>
+                                ))}
+                              </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                              <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                <span style={subLabelStyle}>{savingsKind === 'savings_contribution' ? 'Grams bought' : 'Grams sold'}{holding?.kind === 'gold_grams' ? '' : ' (optional)'}</span>
+                                <input value={goldGrams} onChange={e => { setGoldGrams(e.target.value.replace(/[^0-9.]/g, '')); setAttempted(false) }} inputMode="decimal" placeholder="0.000"
+                                  style={field(attempted && gramsMissing ? { borderColor: 'var(--bad)', boxShadow: '0 0 0 3px var(--bad-soft)' } : undefined)} />
+                              </label>
+                              <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                <span style={subLabelStyle}>₹/gram</span>
+                                <input value={goldPricePerGram} onChange={e => setGoldPricePerGram(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" style={field()} />
+                              </label>
+                            </div>
+                            {goldCalc > 0 && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ fontFamily: MONO, fontSize: 12.5, fontWeight: 600, color: goldMatch ? 'var(--good-ink)' : 'var(--warn-ink)' }}>
+                                  = {R(goldCalc)} {goldMatch ? '✓ matches the amount' : '— should match the amount'}
+                                </span>
+                                <span style={{ flex: 1 }} />
+                                {!goldMatch && (
+                                  <button type="button" onClick={() => changeAmount(String(Math.round(goldCalc * 100) / 100))} style={{ height: 34, padding: '0 10px', borderRadius: 10, border: 0, background: 'var(--sunk)', color: 'var(--t1)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', flex: 'none' }}>Use as amount</button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Will settle */}
+                        {showAlloc && (
+                          <div data-card="alloc" style={{ marginTop: 14, background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 18, padding: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 2px 6px' }}>
+                              <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', color: 'var(--t3)', whiteSpace: 'nowrap' }}>WILL SETTLE</span>
+                              <span style={{ fontSize: 12, color: 'var(--t3)', whiteSpace: 'nowrap' }}>oldest first</span>
+                            </div>
+                            {pendingForPerson.map(b => {
+                              const outstanding = b.amount - b.repaidAmount
+                              const val = allocation[b.id] ?? ''
+                              const full = Number(val) >= outstanding
+                              return (
+                                <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 56, padding: '4px 2px', borderTop: '1px solid var(--line)' }}>
+                                  <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                    <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.description || 'Loan'} · {format(parseISO(b.date), 'd MMM')}</span>
+                                    <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--t3)' }}>{R(outstanding)} outstanding</span>
+                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 42, width: 116, borderRadius: 10, padding: '0 10px', flex: 'none', border: full ? '1.5px solid var(--good)' : '1px solid var(--line)', background: full ? 'var(--good-soft)' : Number(val) ? 'var(--card)' : 'var(--sheet)' }}>
+                                    <span style={{ fontFamily: MONO, fontSize: 14, color: 'var(--t3)' }}>₹</span>
+                                    <input value={val && Number(val) ? val : ''} inputMode="decimal" placeholder="Untouched" aria-label={`Apply to ${b.description || 'loan'}`}
+                                      onChange={e => { const v = e.target.value.replace(/[^0-9.]/g, ''); setAllocation(prev => ({ ...prev, [b.id]: v })) }}
+                                      style={{ width: '100%', minWidth: 0, border: 0, outline: 0, background: 'transparent', fontFamily: MONO, fontSize: 16, textAlign: 'right', color: 'var(--t1)' }} />
+                                  </div>
+                                </div>
+                              )
+                            })}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 2px 2px', borderTop: '1px solid var(--line)' }}>
+                              {Math.abs(allocationTotal - amt) < 0.01
+                                ? <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--good-ink)' }}>Fully allocated ✓</span>
+                                : allocationTotal < amt
+                                  ? <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--warn-ink)' }}>{R(amt - allocationTotal)} unallocated</span>
+                                  : <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--bad-ink)' }}>{R(allocationTotal - amt)} over-allocated</span>}
+                              <span style={{ fontFamily: MONO, fontSize: 12.5, color: 'var(--t2)' }}>{R(allocationTotal)} / {R(amt)}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {isTr && (
+                          <div style={{ marginTop: 14, display: 'flex', gap: 10, padding: 12, borderRadius: 14, background: 'var(--info-soft)', color: 'var(--info-ink)', fontSize: 12.5, lineHeight: 1.45, fontWeight: 500 }}>
+                            <Sym name="info" size={18} />
+                            <span>Transfers are excluded from income and expense totals — they won’t affect your savings rate, health score, or budget tracking.</span>
+                          </div>
+                        )}
+
+                        {/* Add details */}
+                        {tray.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 16 }}>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                              <span style={labelStyle}>Add details</span>
+                              <span style={{ fontSize: 12, color: 'var(--t4)', fontWeight: 500 }}>optional</span>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {tray.map(c => {
+                                const active = cardOpen(c.k) || (c.k === 'repeat' && isRecurring)
+                                return (
+                                  <button key={c.k} type="button" onClick={() => toggleCard(c.k)} aria-pressed={active}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 40, padding: '0 13px 0 10px', borderRadius: 999, border: active ? '1px solid transparent' : '1px solid var(--line)', background: active ? 'var(--t1)' : 'var(--card)', color: active ? 'var(--sheet)' : 'var(--t1)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                    <Sym name={c.icon} size={18} style={{ color: active ? 'var(--sheet)' : 'var(--t3)' }} />
+                                    {c.label}
+                                    {c.summary && <span style={{ fontWeight: 500, opacity: 0.85 }}>· {c.summary}</span>}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Opened cards, in the order they were opened */}
+                        {openCards.map(k => {
+                          if (k === 'split' && splitOn) {
+                            const unitPre = splitMode === 'manual' ? '₹' : ''
+                            const unitPost = splitMode === 'percentage' ? '%' : ''
+                            const sq = newName.trim().toLowerCase()
+                            const sugg = knownPeople.filter(p => !participants.some(x => x.name === p) && (!sq || p.toLowerCase().includes(sq))).slice(0, 3)
+                            const balColor = isBalanced ? 'var(--good-ink)' : 'var(--bad-ink)'
+                            return (
+                              <SheetCard key={k} card="split" icon="call_split" title="Split expense" closeLabel="Remove split" onClose={() => toggleCard('split')}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, padding: 3, borderRadius: 12, background: 'var(--sunk)' }}>
+                                  {([['equal', 'Equal'], ['percentage', 'Percent %'], ['manual', 'Manual ₹']] as const).map(([m, label]) => (
+                                    <button key={m} type="button" onClick={() => changeSplitMode(m)} style={seg(splitMode === m, { height: 34 })}>{label}</button>
+                                  ))}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 12, background: 'var(--sheet)' }}>
+                                  <span style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--brand-soft)', color: 'var(--brand-ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, flex: 'none' }}>You</span>
+                                  <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                                    <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--t1)' }}>Your share</span>
+                                    <span style={{ fontSize: 12.5, fontWeight: 700, fontFamily: MONO, color: myShare > 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>{R(myShare)} ({myPct}%)</span>
+                                  </span>
+                                  {splitMode !== 'equal' && participants.length > 0 && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 3, height: 40, width: 100, borderRadius: 10, border: '1px solid var(--line)', background: 'var(--card)', padding: '0 10px', flex: 'none' }}>
+                                      <span style={{ fontFamily: MONO, fontSize: 13, color: 'var(--t3)' }}>{unitPre}</span>
+                                      <NumInput value={myShareValue} aria-label="Your share" onChange={setMyShareValue}
+                                        style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', fontFamily: MONO, fontSize: 16, textAlign: 'right', color: 'var(--t1)' }} />
+                                      <span style={{ fontFamily: MONO, fontSize: 13, color: 'var(--t3)' }}>{unitPost}</span>
+                                    </div>
+                                  )}
+                                </div>
+                                {participants.map(p => {
+                                  const sh = getParticipantAmount(p)
+                                  const first = p.name.split(' ')[0]
+                                  return (
+                                    <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 12, border: '1px solid var(--line)' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                        <span style={avatar(p.name)}>{p.name[0]?.toUpperCase()}</span>
+                                        <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                                        {splitMode === 'equal' ? (
+                                          <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 500, color: 'var(--t1)' }}>{R(sh)}</span>
+                                        ) : (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 3, height: 40, width: 100, borderRadius: 10, border: '1px solid var(--line)', background: 'var(--sheet)', padding: '0 10px', flex: 'none' }}>
+                                            <span style={{ fontFamily: MONO, fontSize: 13, color: 'var(--t3)' }}>{unitPre}</span>
+                                            <NumInput value={p.value} aria-label={`${p.name}'s share`} onChange={v => updateParticipant(p.id, { value: v })}
+                                              style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', fontFamily: MONO, fontSize: 16, textAlign: 'right', color: 'var(--t1)' }} />
+                                            <span style={{ fontFamily: MONO, fontSize: 13, color: 'var(--t3)' }}>{unitPost}</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                        <div style={{ display: 'flex', gap: 2, padding: 2, borderRadius: 10, background: 'var(--sunk)', flex: 'none' }}>
+                                          <button type="button" onClick={() => updateParticipant(p.id, { kind: 'lent' })} style={seg(p.kind === 'lent', { height: 30, padding: '0 10px', fontSize: 12, borderRadius: 8 })}>Lent</button>
+                                          <button type="button" onClick={() => updateParticipant(p.id, { kind: 'absorbed' })} style={seg(p.kind === 'absorbed', { height: 30, padding: '0 10px', fontSize: 12, borderRadius: 8 })}>Absorbed</button>
+                                        </div>
+                                        <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--t3)', lineHeight: 1.3 }}>{p.kind === 'lent' ? `${first} owes you ${R(sh)}` : `You cover ${R(sh)}`}</span>
+                                        <button type="button" onClick={() => removeParticipant(p.id)} aria-label="Remove person" style={{ width: 36, height: 36, borderRadius: 10, border: 0, background: 'transparent', color: 'var(--t3)', cursor: 'pointer', flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Sym name="delete" size={19} /></button>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                  <input value={newName} maxLength={60} onChange={e => setNewName(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addParticipant(newName) } }}
+                                    placeholder="Add person..." aria-label="Add person"
+                                    style={{ ...textInput, ...(attempted && newName.trim() ? { borderColor: 'var(--bad)' } : {}) }} />
+                                  <button type="button" onClick={() => addParticipant(newName)} style={darkBtn}>Add</button>
+                                </div>
+                                {sugg.length > 0 && (
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                    {sugg.map(p => (
+                                      <button key={p} type="button" onClick={() => addParticipant(p)}
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 10px 0 4px', borderRadius: 999, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--t1)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                                        <span style={avatar(p, 26)}>{p[0]?.toUpperCase()}</span>{p.split(' ')[0]}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                {participants.length > 0 && totalAmount > 0 && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 4 }}>
+                                    <div style={{ height: 6, borderRadius: 3, background: 'var(--sunk)', overflow: 'hidden' }}>
+                                      <div style={{ height: '100%', width: `${Math.min(sumAssigned / totalAmount, 1) * 100}%`, background: isBalanced ? 'var(--good)' : splitRemaining < 0 ? 'var(--bad)' : 'var(--warn)', borderRadius: 3, transition: 'width .2s' }} />
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                                      <span style={{ fontWeight: 700, color: balColor }}>{isBalanced ? '✓ Balanced' : splitRemaining > 0 ? `${R(splitRemaining)} remaining` : `${R(-splitRemaining)} over`}</span>
+                                      <span style={{ fontFamily: MONO, color: 'var(--t2)' }}>{R(sumAssigned)} / {R(totalAmount)}</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </SheetCard>
+                            )
+                          }
+                          if (k === 'settle' && isExp && (settleablePeople.length > 0 || settledPerson)) {
+                            const options = [
+                              { id: '', label: 'None — log as regular expense' },
+                              ...settleablePeople.map(p => ({ id: p.person, label: `${p.person} · ${R(p.outstanding)} owed to you` })),
+                              ...(settledPerson && !settleablePeople.some(p => p.person === settledPerson) ? [{ id: settledPerson, label: settledPerson }] : []),
+                            ]
+                            return (
+                              <SheetCard key={k} card="settle" icon="handshake" title="Settle a debt" gap={8} onClose={() => toggleCard('settle')}>
+                                {options.map(o => (
+                                  <button key={o.id || 'none'} type="button" onClick={() => setSettledPerson(o.id)} role="radio" aria-checked={settledPerson === o.id}
+                                    style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, padding: '0 4px', border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left' }}>
+                                    <span style={radio(settledPerson === o.id)} />
+                                    <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}>{o.label}</span>
+                                  </button>
+                                ))}
+                                {settledPerson && amt > 0 && (
+                                  <div style={{ padding: '10px 12px', borderRadius: 12, background: 'var(--good-soft)', color: 'var(--good-ink)', fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>
+                                    {R(settleApplied)} will come off {settledPerson.split(' ')[0]}’s total balance
+                                    {settleOutstanding > 0 && (settleApplied >= settleOutstanding ? ' · Fully settled ✓' : ` · ${R(settleOutstanding - settleApplied)} still owed`)}
+                                    {amt > settleApplied && ` · remaining ${R(amt - settleApplied)} logged as a regular expense`}
+                                  </div>
+                                )}
+                              </SheetCard>
+                            )
+                          }
+                          if (k === 'tags' && !isTr && !isRefundEdit) {
+                            const sugg = (settings?.customTags ?? []).filter(t => !tags.includes(t))
+                            const addTag = () => { const t = tagQuery.trim().replace(/,$/, ''); if (t && !tags.includes(t)) setTags([...tags, t]); setTagQuery('') }
+                            return (
+                              <SheetCard key={k} card="tags" icon="sell" title="Tags" onClose={() => toggleCard('tags')}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                                  {tags.map(t => (
+                                    <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 34, padding: '0 6px 0 12px', borderRadius: 999, background: 'var(--t1)', color: 'var(--sheet)', fontSize: 13, fontWeight: 600 }}>
+                                      {t}
+                                      <button type="button" onClick={() => setTags(tags.filter(x => x !== t))} aria-label={`Remove ${t}`} style={{ width: 24, height: 24, border: 0, background: 'transparent', color: 'inherit', cursor: 'pointer', opacity: 0.7, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Sym name="close" size={16} /></button>
+                                    </span>
+                                  ))}
+                                  <input value={tagQuery} maxLength={40} onChange={e => setTagQuery(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag() } }}
+                                    onBlur={addTag}
+                                    placeholder="Add a tag, e.g. Christmas…" aria-label="Add a tag"
+                                    style={{ flex: 1, minWidth: 140, height: 36, border: 0, outline: 0, background: 'transparent', fontSize: 16, color: 'var(--t1)' }} />
+                                </div>
+                                {sugg.length > 0 && (
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                    {sugg.map(t => (
+                                      <button key={t} type="button" onClick={() => setTags([...tags, t])}
+                                        style={{ height: 32, padding: '0 10px', borderRadius: 999, border: '1px dashed var(--line2)', background: 'transparent', color: 'var(--t2)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>+ {t}</button>
+                                    ))}
+                                  </div>
+                                )}
+                              </SheetCard>
+                            )
+                          }
+                          if (k === 'project' && (isExp || isSav) && projects.length > 0) {
+                            return (
+                              <SheetCard key={k} card="project" icon="folder" title="Link to project" onClose={() => toggleCard('project')}
+                                badge={autoLinked && <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: 'var(--info-soft)', color: 'var(--info-ink)', whiteSpace: 'nowrap', flex: 'none' }}>Auto-linked</span>}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                  {projects.map(p => (
+                                    <button key={p.id} type="button" onClick={() => setProjectId(projectId === p.id ? '' : p.id)} aria-pressed={projectId === p.id} style={chip(projectId === p.id)}>{p.name}</button>
+                                  ))}
+                                </div>
+                              </SheetCard>
+                            )
+                          }
+                          if (k === 'repeat' && (isExp || isInc)) {
+                            return (
+                              <button key={k} type="button" role="switch" aria-checked={isRecurring} onClick={() => setIsRecurring(r => !r)}
+                                style={{ marginTop: 12, width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 18, cursor: 'pointer', textAlign: 'left' }}>
+                                <Sym name="event_repeat" style={{ color: 'var(--t2)' }} />
+                                <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--t1)' }}>Repeat monthly</span>
+                                  <span style={{ fontSize: 12.5, color: 'var(--t3)' }}>We’ll remind you to log this every month</span>
+                                </span>
+                                <Switch on={isRecurring} />
+                              </button>
+                            )
+                          }
+                          if (k === 'refunds' && editTx?.type === 'expense' && isExp) {
+                            const rf = Number(refundAmount) || 0
+                            const over = rf > remainingRefundable
+                            const canLog = rf > 0 && !over && !addingRefund
+                            return (
+                              <SheetCard key={k} card="refunds" icon="undo" title="Refunds" gap={8}
+                                action={!showRefundForm && remainingRefundable > 0 && (
+                                  <button type="button" onClick={() => setShowRefundForm(true)} style={{ height: 34, padding: '0 12px', borderRadius: 10, border: 0, background: 'var(--sunk)', color: 'var(--t1)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>↺ Refund</button>
+                                )}>
+                                {existingRefunds.map(r => (
+                                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, borderTop: '1px solid var(--line)' }}>
+                                    <span style={{ flex: 1, fontSize: 13.5, color: 'var(--t1)' }}><span style={{ fontFamily: MONO, fontWeight: 600 }}>{R(r.amount)}</span> refunded on {format(parseISO(r.date), 'MMM d, yyyy')}</span>
+                                    <button type="button" onClick={() => removeRefund(r.id)} style={{ height: 32, padding: '0 10px', borderRadius: 8, border: 0, background: 'transparent', color: 'var(--bad-ink)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Remove</button>
+                                  </div>
+                                ))}
+                                {totalRefunded > 0 && (
+                                  <div style={{ padding: '8px 0 0', borderTop: '1px solid var(--line)', fontSize: 13, color: 'var(--t2)', fontWeight: 600 }}>
+                                    Refunded {R(totalRefunded)} · Net expense {R(Math.max(0, editTx.amount - totalRefunded))}
+                                  </div>
+                                )}
+                                {existingRefunds.length === 0 && !showRefundForm && (
+                                  <div style={{ fontSize: 12.5, color: 'var(--t3)' }}>No refunds logged against this expense.</div>
+                                )}
+                                {showRefundForm && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, borderRadius: 14, background: 'var(--sheet)', marginTop: 4 }}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                                      <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                        <span style={subLabelStyle}>Amount</span>
+                                        <input value={refundAmount} onChange={e => setRefundAmount(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="0" autoFocus
+                                          style={field({ background: 'var(--card)', ...(over ? { borderColor: 'var(--bad)' } : {}) })} />
+                                      </label>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                                        <span style={subLabelStyle}>Date</span>
+                                        <button type="button" onClick={() => openPicker(refundDateRef.current)}
+                                          style={{ position: 'relative', height: 44, borderRadius: 12, border: '1px solid var(--line)', background: 'var(--card)', padding: '0 12px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 600, color: 'var(--t1)', cursor: 'pointer' }}>
+                                          <Sym name="calendar_month" size={17} style={{ color: 'var(--t3)' }} />{dateLabel(refundDate)}
+                                          <input ref={refundDateRef} type="date" tabIndex={-1} aria-hidden value={refundDate}
+                                            onChange={e => { if (e.target.value) setRefundDate(e.target.value) }}
+                                            style={{ position: 'absolute', inset: 0, opacity: 0, pointerEvents: 'none' }} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <input value={refundNotes} maxLength={200} onChange={e => setRefundNotes(e.target.value)} placeholder="Notes (optional)"
+                                      style={{ height: 44, borderRadius: 12, border: '1px solid var(--line)', background: 'var(--card)', padding: '0 12px', fontSize: 16, color: 'var(--t1)', outline: 'none' }} />
+                                    {over && <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--bad-ink)' }}>Refunds can’t exceed the {R(remainingRefundable)} left</span>}
+                                    <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                                      <button type="button" onClick={() => { setShowRefundForm(false); setRefundAmount(''); setRefundNotes('') }} style={{ height: 40, padding: '0 14px', borderRadius: 12, border: 0, background: 'transparent', color: 'var(--t2)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                                      <button type="button" onClick={logRefund} disabled={!canLog}
+                                        style={{ height: 40, padding: '0 16px', borderRadius: 12, border: 0, background: canLog ? 'var(--t1)' : 'var(--sunk2)', color: canLog ? 'var(--sheet)' : 'var(--t3)', fontSize: 14, fontWeight: 700, cursor: canLog ? 'pointer' : 'default' }}>
+                                        {addingRefund ? 'Logging…' : 'Log refund'}
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </SheetCard>
+                            )
+                          }
+                          return null
+                        })}
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {showKeypad && <Keypad onPress={pressKey} />}
+
+              {/* Footer: why Save is off, then Save */}
+              <div style={{
+                flex: 'none', display: 'flex', flexDirection: 'column', gap: 8,
+                padding: isDesktop ? '12px 20px 14px' : kbdOpen ? '10px 16px 10px' : '10px 16px max(16px, env(safe-area-inset-bottom))',
+                borderTop: showKeypad ? 0 : '1px solid var(--line)', background: showKeypad ? 'var(--sunk)' : 'var(--sheet)',
+              }}>
+                {block && (
+                  <div role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: attempted ? 'var(--bad-ink)' : 'var(--t3)' }}>
+                    <Sym name={attempted ? 'error' : 'info'} size={16} />{block.text}
+                  </div>
+                )}
+                <button type="button" onClick={() => save()} aria-disabled={disabled}
+                  style={{
+                    height: 54, width: '100%', borderRadius: 16, border: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                    fontSize: 16, fontWeight: 700, cursor: 'pointer', transition: 'background .2s',
+                    ...(disabled
+                      ? { background: 'var(--sunk2)', color: 'var(--t3)', boxShadow: 'none' }
+                      : { background: 'var(--brand-grad)', color: '#fff', boxShadow: '0 8px 18px -8px var(--brand-glow), inset 0 1px 0 rgba(255,255,255,.22)' }),
+                    ...(saving ? { opacity: 0.85, cursor: 'progress' } : {}),
+                  }}>
+                  {saving && <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2.5px solid rgba(255,255,255,.35)', borderTopColor: '#fff', animation: 'gw-spin .7s linear infinite' }} />}
+                  <span>{saveLabel}</span>
+                  {!disabled && !saving && <span style={{ fontFamily: MONO, fontWeight: 500, opacity: 0.85 }}>{R(amt)}</span>}
+                </button>
+                {isDesktop && (
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 14, fontSize: 12, color: 'var(--t3)', fontWeight: 500 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Kbd>↵</Kbd>Save</span>
+                    {!editTx && <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Kbd>{isMac ? '⌘↵' : 'Ctrl ↵'}</Kbd>Save &amp; add another</span>}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Kbd>esc</Kbd>Close</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Discard? */}
+              {confirmDiscard && (
+                <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(14,15,18,.32)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, animation: 'gw-in .18s ease-out' }}>
+                  <div role="alertdialog" aria-label="Discard this entry?" style={{ width: '100%', maxWidth: 320, background: 'var(--card)', borderRadius: 18, padding: 18, display: 'flex', flexDirection: 'column', gap: 6, boxShadow: '0 20px 50px -12px rgba(0,0,0,.35)' }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--t1)' }}>Discard this entry?</div>
+                    <div style={{ fontSize: 13, color: 'var(--t2)', lineHeight: 1.45 }}>What you’ve entered won’t be saved.</div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                      <button type="button" autoFocus onClick={() => setConfirmDiscard(false)} style={{ flex: 1, height: 44, borderRadius: 12, border: 0, background: 'var(--sunk)', color: 'var(--t1)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Keep editing</button>
+                      <button type="button" onClick={() => { setConfirmDiscard(false); onClose() }} style={{ flex: 1, height: 44, borderRadius: 12, border: 0, background: 'var(--bad)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Discard</button>
                     </div>
-                  )}
-
-                  {/* Recurring */}
-                  {txType !== 'transfer' && (
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 10, cursor: 'pointer', background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-                      <input type="checkbox" checked={isRecurring} onChange={e => setIsRecurring(e.target.checked)} style={{ display: 'none' }} />
-                      <Toggle on={isRecurring} onChange={setIsRecurring} />
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <RefreshCw size={12} style={{ color: 'var(--brand)' }} />
-                          Repeat monthly
-                        </div>
-                        <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 1 }}>We&apos;ll remind you to log this every month</div>
-                      </div>
-                    </label>
-                  )}
-
-                  {/* Transfer note */}
-                  {activeTab === 'transfer' && (
-                    <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--info-soft)', border: '1px solid transparent' }}>
-                      <p style={{ fontSize: 12, color: 'var(--info-ink)', lineHeight: 1.5 }}>
-                        Transfers are <strong>excluded from income and expense totals</strong> — they won&apos;t affect your savings rate, health score, or budget tracking.
-                      </p>
-                    </div>
-                  )}
-
-                </form>
-
-                {/* Fixed footer — outside the scrollable form so it always stays at the bottom */}
-                <div style={{
-                  flexShrink: 0,
-                  padding: '12px 20px 20px',
-                  borderTop: '1px solid var(--border)',
-                  background: 'var(--surface)',
-                }}>
-                  <button
-                    type="submit"
-                    form="add-tx-form"
-                    disabled={saving || !amount || Number(amount) <= 0 || !!linkError}
-                    className="btn-primary"
-                    style={{ width: '100%', justifyContent: 'center', padding: '13px', fontSize: 14, opacity: saving ? 0.6 : 1 }}
-                  >
-                    {saving ? 'Saving...' : editTx ? 'Update'
-                      : splitEnabled && participants.length > 0
-                        ? `Save & Split (${participants.length + 1} records)`
-                        : activeTab === 'savings' ? (savingsKind === 'savings_withdrawal' ? 'Withdraw from Savings' : 'Add to Savings')
-                        : txType === 'transfer' ? 'Log Transfer' : 'Add Transaction'}
-                  </button>
+                  </div>
                 </div>
-              </Dialog.Panel>
-            </Transition.Child>
-          </div>
+              )}
+            </Dialog.Panel>
+          </Transition.Child>
         </div>
       </Dialog>
     </Transition>

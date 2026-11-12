@@ -1,6 +1,6 @@
 'use client'
 
-import { useLayoutEffect, useRef, type InputHTMLAttributes } from 'react'
+import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, type InputHTMLAttributes } from 'react'
 
 // Indian digit grouping for display only: "2323345.5" → "23,23,345.5".
 // The value going in and out stays a plain number string, so nothing stored changes.
@@ -28,8 +28,9 @@ type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 
   onValueChange: (raw: string) => void
 }
 
-export default function AmountInput({ value, onValueChange, ...rest }: Props) {
+const AmountInput = forwardRef<HTMLInputElement, Props>(function AmountInput({ value, onValueChange, ...rest }, outerRef) {
   const ref = useRef<HTMLInputElement>(null)
+  useImperativeHandle(outerRef, () => ref.current as HTMLInputElement)
   // Digits/dot to the left of the caret, so it stays put when commas shift around
   const caret = useRef<number | null>(null)
 
@@ -61,4 +62,6 @@ export default function AmountInput({ value, onValueChange, ...rest }: Props) {
       }}
     />
   )
-}
+})
+
+export default AmountInput

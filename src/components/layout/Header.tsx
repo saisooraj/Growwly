@@ -340,6 +340,7 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
             >
               <Plus size={16} strokeWidth={2.8} />
               Add
+              <span aria-hidden style={{ marginLeft: 2, fontFamily: "'Geist Mono', monospace", fontSize: 11, fontWeight: 500, padding: '2px 6px', borderRadius: 6, background: 'rgba(255,255,255,.22)' }}>N</span>
             </button>
           }
         />

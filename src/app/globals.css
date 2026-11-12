@@ -1,4 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
+/* Material Symbols for the add-transaction sheet, subset to the glyphs it uses (keep icon_names sorted) */
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&icon_names=account_balance,add,apartment,apps,arrow_back,arrow_outward,autorenew,backspace,bolt,bookmark_add,calendar_month,call_split,candlestick_chart,card_giftcard,celebration,chair,check,close,construction,delete,diamond,directions_bus,directions_car,elderly,error,event_repeat,expand_less,expand_more,family_restroom,favorite,fitness_center,flight,folder,handshake,health_and_safety,home_repair_service,icecream,info,key,laptop_mac,link,link_off,local_gas_station,local_post_office,lock,medical_services,more_horiz,movie,north_east,north_west,notes,payments,person_search,redeem,restaurant,savings,school,search,sell,shield,shopping_bag,shopping_basket,south_east,south_west,spa,storefront,trending_up,two_wheeler,undo,volunteer_activism,work&display=block');
 
 @tailwind base;
 @tailwind components;
@@ -941,3 +943,93 @@ button, a, [role="button"] {
 .fire-navbtn { border: 0; background: transparent; color: var(--text-2); font-family: inherit; font-size: 13px; font-weight: 600; min-height: 36px; padding: 0 12px; border-radius: 8px; cursor: pointer; }
 @media (hover: hover) and (pointer: fine) { .fire-navbtn:hover { background: var(--surface-2); color: var(--text); } }
 .fire-sheet-body { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+
+/* ══════════════════════════════════════════
+   Add-transaction sheet
+   Scoped tokens so the sheet matches its design: light uses the app's surfaces,
+   dark and the semantic soft/ink pairs use the sheet's own values.
+══════════════════════════════════════════ */
+.txn-sheet {
+  --sheet: var(--bg);
+  --card:  var(--surface);
+  --sunk:  var(--surface-2);
+  --sunk2: var(--surface-3);
+  --line:  var(--border);
+  --line2: var(--border-strong);
+  --t1: var(--text);
+  --t2: var(--text-2);
+  --t3: #8B8C92;
+  --t4: var(--text-4);
+  --good-soft: oklch(0.94 0.045 158);  --good-ink: oklch(0.44 0.12 158);
+  --bad-soft:  oklch(0.95 0.035 25);   --bad-ink:  oklch(0.5 0.17 25);
+  --warn-soft: oklch(0.95 0.05 80);    --warn-ink: oklch(0.47 0.11 65);
+  --info-soft: oklch(0.95 0.03 245);   --info-ink: oklch(0.45 0.12 245);
+  /* category / vehicle / avatar tints: oklch(L C hue) */
+  --ts-l: 0.95; --ts-c: 0.035;
+  --ti-l: 0.5;  --ti-c: 0.13;
+  --brand-grad: linear-gradient(180deg, var(--brand), var(--brand-deep));
+  --brand-glow: color-mix(in oklch, var(--brand) 70%, transparent);
+  color: var(--t1);
+  -webkit-font-smoothing: antialiased;
+}
+.dark .txn-sheet {
+  --sheet: #14161A;
+  --card:  #1C1E24;
+  --sunk:  #24272E;
+  --sunk2: #2C2F37;
+  --line:  #2A2D34;
+  --line2: #3A3D45;
+  --t1: #F2F2EF;
+  --t2: #B4B5BA;
+  --t4: #5D5F66;
+  --good-soft: oklch(0.3 0.06 158);  --good-ink: oklch(0.82 0.13 158);
+  --bad-soft:  oklch(0.3 0.07 25);   --bad-ink:  oklch(0.8 0.13 25);
+  --warn-soft: oklch(0.32 0.06 75);  --warn-ink: oklch(0.85 0.12 75);
+  --info-soft: oklch(0.3 0.06 245);  --info-ink: oklch(0.82 0.1 245);
+  --ts-l: 0.31; --ts-c: 0.05;
+  --ti-l: 0.82; --ti-c: 0.11;
+}
+/* Brand soft / ink / gradient follow the accent's hue (black accent keeps its own greys) */
+@supports (color: oklch(from red l c h)) {
+  :root:not(.dark):not([data-accent="black"]) .txn-sheet {
+    --brand-soft: oklch(from var(--brand) 0.94 calc(c * 0.3) h);
+    --brand-ink:  oklch(from var(--brand) 0.44 calc(c * 0.8) h);
+  }
+  .dark:not([data-accent="black"]) .txn-sheet {
+    --brand-soft: oklch(from var(--brand) 0.3 calc(c * 0.4) h);
+    --brand-ink:  oklch(from var(--brand) 0.82 calc(c * 0.87) h);
+  }
+  :root:not([data-accent="black"]) .txn-sheet {
+    --brand-grad: linear-gradient(180deg, oklch(from var(--brand) calc(l - 0.02) c h), oklch(from var(--brand) calc(l - 0.1) c h));
+  }
+}
+.txn-sheet input::placeholder { color: var(--t4); }
+.txn-sheet button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+.txn-scrim { background: rgba(14, 15, 18, .42); }
+.dark .txn-scrim { background: rgba(0, 0, 0, .6); }
+.txn-scroll { scrollbar-width: none; }
+.txn-scroll::-webkit-scrollbar { display: none; }
+
+.ms {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  width: 1em;
+  overflow: hidden;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  flex: none;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+@keyframes gw-blink { 50% { opacity: 0; } }
+@keyframes gw-spin  { to { transform: rotate(360deg); } }
+@keyframes gw-in    { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes gw-pulse { 50% { opacity: .4; } }

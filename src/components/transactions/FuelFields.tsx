@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react'
 import { format, parseISO } from 'date-fns'
-import { Plus, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
@@ -10,6 +9,7 @@ import { setUserSettings } from '@/lib/firestore'
 import { defaultVehicle, isFuelExpense, pumpTotal, vehicleOf, type FuelCalc } from '@/lib/fuel'
 import { formatCurrencyFull } from '@/lib/utils'
 import type { Transaction, UserSettings, Vehicle } from '@/types'
+import { MONO, Sym, chip, darkBtn, field, subLabelStyle, textInput } from './TxnSheetParts'
 
 export interface FuelDraft {
   vehicleId: string
@@ -70,7 +70,6 @@ export default function FuelFields({ value, onChange, auto, paid, date, editId }
   const vehicles = settings?.vehicles ?? []
   const [adding, setAdding] = useState(false)
   const [savingVehicle, setSavingVehicle] = useState(false)
-  const [discountOpen, setDiscountOpen] = useState(() => !!value.discount)
 
   const litres = parseFloat(value.litres) || 0
   const price = parseFloat(value.price) || 0
@@ -88,7 +87,6 @@ export default function FuelFields({ value, onChange, auto, paid, date, editId }
     }
     return best?.fuelDiscount ?? 0
   }, [transactions, editId])
-  const showDiscount = discountOpen || !!value.discount
 
   // The latest reading on or before this fill's date, for the same vehicle
   const lastReading = useMemo(() => {
@@ -118,135 +116,115 @@ export default function FuelFields({ value, onChange, auto, paid, date, editId }
   }
 
   const showAddInput = adding || vehicles.length === 0
+  const kmSince = lastReading && odometer > (lastReading.odometerKm ?? 0) ? odometer - lastReading.odometerKm! : 0
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12, borderRadius: 12, background: 'var(--surface-2)' }}>
+    <div data-card="fuel" style={{ marginTop: 14, background: 'var(--card)', border: '1px solid var(--line)', borderRadius: 18, padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Sym name="local_gas_station" style={{ color: 'var(--t2)' }} />
+        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--t1)' }}>Fill-up</span>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontSize: 12, color: 'var(--t3)', whiteSpace: 'nowrap' }}>any 2 fill the 3rd</span>
+      </div>
+
       {/* Vehicle */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <label className="label" style={{ margin: 0 }}>Vehicle</label>
-        {vehicles.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {vehicles.map(v => {
-              const on = v.id === value.vehicleId
-              return (
-                <button key={v.id} type="button" onClick={() => onChange({ vehicleId: v.id })}
-                  style={{
-                    padding: '6px 12px', borderRadius: 999, fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
-                    border: `1.5px solid ${on ? 'var(--brand)' : 'var(--border)'}`,
-                    background: on ? 'var(--brand-soft)' : 'var(--surface)',
-                    color: on ? 'var(--brand-ink)' : 'var(--text-2)',
-                  }}
-                >{v.name}</button>
-              )
-            })}
-            {!adding && (
-              <button type="button" onClick={() => setAdding(true)}
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  padding: '6px 10px', borderRadius: 999, fontSize: 12.5, cursor: 'pointer',
-                  border: '1.5px dashed var(--border)', background: 'transparent', color: 'var(--text-3)',
-                }}
-              ><Plus size={12} /> Add</button>
-            )}
-          </div>
-        )}
-        {showAddInput && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            <input className="input" type="text" placeholder="e.g. Swift, Activa" value={value.newVehicle}
-              onChange={e => onChange({ newVehicle: e.target.value })}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveVehicle() } }}
-              style={{ flex: 1 }} />
-            <button type="button" onClick={saveVehicle} disabled={!value.newVehicle.trim() || savingVehicle}
-              style={{
-                padding: '0 14px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600,
-                background: value.newVehicle.trim() ? 'var(--brand)' : 'var(--surface-3)',
-                color: value.newVehicle.trim() ? '#fff' : 'var(--text-3)',
-              }}
-            >{savingVehicle ? 'Adding…' : 'Add'}</button>
-          </div>
-        )}
-      </div>
-
-      {/* Pump reading */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <div>
-          <label className="label">Litres{auto === 'litres' && <Calculated />}</label>
-          <input className="input" type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00"
-            value={value.litres} onChange={e => onChange({ litres: e.target.value })} />
-        </div>
-        <div>
-          <label className="label">₹ per litre{auto === 'price' && <Calculated />}</label>
-          <input className="input" type="number" inputMode="decimal" min="0" step="0.01" placeholder="0.00"
-            value={value.price} onChange={e => onChange({ price: e.target.value })} />
-        </div>
-      </div>
-
-      {/* Discount — tucked away; most fills have none */}
-      {showDiscount ? (
-        <div>
-          <label className="label">Discount (₹){' '}<span style={{ fontWeight: 400, color: 'var(--text-4)' }}>taken off what you paid</span></label>
-          <div style={{ display: 'flex', gap: 6 }}>
-            <input className="input" type="number" inputMode="decimal" min="0" step="0.01" placeholder="0"
-              value={value.discount} onChange={e => onChange({ discount: e.target.value })} style={{ flex: 1 }} autoFocus={discountOpen && !value.discount} />
-            <button type="button" aria-label="Remove discount" onClick={() => { onChange({ discount: '' }); setDiscountOpen(false) }}
-              style={{ padding: '0 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-3)', cursor: 'pointer' }}>
-              <X size={14} />
+      {vehicles.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {vehicles.map(v => (
+            <button key={v.id} type="button" onClick={() => onChange({ vehicleId: v.id })} style={chip(v.id === value.vehicleId)}>
+              <Sym name={TWO_WHEELER.test(v.name) ? 'two_wheeler' : 'directions_car'} size={17} />{v.name}
             </button>
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          <button type="button" onClick={() => setDiscountOpen(true)} style={linkChip}>
-            <Plus size={12} /> Discount
-          </button>
-          {lastDiscount > 0 && (
-            <button type="button" onClick={() => onChange({ discount: String(lastDiscount) })} style={linkChip}>
-              {formatCurrencyFull(lastDiscount)} off, like last time
-            </button>
+          ))}
+          {!adding && (
+            <button type="button" onClick={() => setAdding(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 40, padding: '0 12px', borderRadius: 999, border: '1px dashed var(--line2)', background: 'transparent', color: 'var(--t2)', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flex: 'none' }}
+            >+ Add</button>
           )}
         </div>
       )}
-
-      {pump > 0 && paid > 0 && (
-        Math.abs(gap) < 1 ? (
-          <p style={{ fontSize: 11.5, margin: 0, color: 'var(--text-3)' }}>
-            {discount > 0
-              ? <>Pump {formatCurrencyFull(pump)} − {formatCurrencyFull(discount)} = <strong>{formatCurrencyFull(paid)}</strong> paid</>
-              : <>Pump total {formatCurrencyFull(pump)}</>}
-            {(auto === 'litres' || auto === 'price') && ` · ${auto === 'litres' ? 'litres' : 'price'} worked out from the amount`}
-          </p>
-        ) : gap >= 1 && discount === 0 ? (
-          <p style={{ fontSize: 11.5, margin: 0, color: 'var(--text-3)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
-            <span>{formatCurrencyFull(gap)} less than the pump total {formatCurrencyFull(pump)}</span>
-            <button type="button" onClick={() => onChange({ discount: String(gap) })}
-              style={{ ...linkChip, padding: '2px 9px', color: 'var(--good-ink)', borderColor: 'color-mix(in oklch, var(--good) 35%, transparent)' }}>
-              Add as discount
-            </button>
-          </p>
-        ) : (
-          <p style={{ fontSize: 11.5, margin: 0, color: 'var(--warn-ink)' }}>
-            Pump {formatCurrencyFull(pump)}{discount > 0 ? ` − ${formatCurrencyFull(discount)}` : ''} = {formatCurrencyFull(Math.round((pump - discount) * 100) / 100)}, but the amount is {formatCurrencyFull(paid)}. Check the numbers
-          </p>
-        )
+      {showAddInput && (
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input type="text" placeholder="e.g. Swift, Activa" value={value.newVehicle} maxLength={40}
+            onChange={e => onChange({ newVehicle: e.target.value })}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveVehicle() } }}
+            style={textInput} />
+          <button type="button" onClick={saveVehicle} disabled={!value.newVehicle.trim() || savingVehicle}
+            style={{ ...darkBtn, ...(value.newVehicle.trim() ? {} : { background: 'var(--sunk2)', color: 'var(--t3)' }) }}
+          >{savingVehicle ? 'Adding…' : 'Add'}</button>
+        </div>
       )}
 
+      {/* Pump reading */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <span style={{ display: 'flex', justifyContent: 'space-between', ...subLabelStyle }}>Litres{auto === 'litres' && <Calculated />}</span>
+          <input inputMode="decimal" placeholder="0.00" value={value.litres} onChange={e => onChange({ litres: decimal(e.target.value) })}
+            style={field(auto === 'litres' ? calcStyle : undefined)} />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <span style={{ display: 'flex', justifyContent: 'space-between', ...subLabelStyle }}>₹ per litre{auto === 'price' && <Calculated />}</span>
+          <input inputMode="decimal" placeholder="0.00" value={value.price} onChange={e => onChange({ price: decimal(e.target.value) })}
+            style={field(auto === 'price' ? calcStyle : undefined)} />
+        </label>
+      </div>
+
+      {/* Discount */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <span style={subLabelStyle}>Discount (₹) <span style={{ color: 'var(--t3)', fontWeight: 500 }}>· taken off what you paid</span></span>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input inputMode="decimal" placeholder="0" value={value.discount} onChange={e => onChange({ discount: decimal(e.target.value) })}
+            style={field({ flex: 1, width: 'auto' })} />
+          {lastDiscount > 0 && (
+            <button type="button" onClick={() => onChange({ discount: String(lastDiscount) })}
+              style={{ height: 44, padding: '0 12px', borderRadius: 12, border: 0, background: 'var(--sunk)', color: 'var(--t1)', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >↺ Last: {formatCurrencyFull(lastDiscount)}</button>
+          )}
+        </div>
+        {pump > 0 && paid > 0 && (
+          Math.abs(gap) < 1 ? (
+            <span style={{ fontFamily: MONO, fontSize: 12.5, color: 'var(--t2)' }}>
+              {discount > 0
+                ? `Pump ${formatCurrencyFull(pump)} − ${formatCurrencyFull(discount)} = ${formatCurrencyFull(paid)} paid`
+                : `Pump total ${formatCurrencyFull(pump)}`}
+            </span>
+          ) : gap >= 1 && discount === 0 ? (
+            <span style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, fontSize: 12.5, color: 'var(--t2)' }}>
+              <span>{formatCurrencyFull(gap)} less than the pump total {formatCurrencyFull(pump)}</span>
+              <button type="button" onClick={() => onChange({ discount: String(gap) })}
+                style={{ height: 30, padding: '0 10px', borderRadius: 999, border: 0, background: 'var(--good-soft)', color: 'var(--good-ink)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+              >Add as discount</button>
+            </span>
+          ) : (
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--warn-ink)', lineHeight: 1.4 }}>
+              Pump {formatCurrencyFull(pump)}{discount > 0 ? ` − ${formatCurrencyFull(discount)}` : ''} = {formatCurrencyFull(Math.round((pump - discount) * 100) / 100)}, but the amount is {formatCurrencyFull(paid)}. Check the numbers
+            </span>
+          )
+        )}
+      </div>
+
       {/* Odometer */}
-      <div>
-        <label className="label">Odometer (km){' '}<span style={{ fontWeight: 400, color: 'var(--text-4)' }}>for mileage</span></label>
-        <input className="input" type="number" inputMode="numeric" min="0" step="1"
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <span style={subLabelStyle}>Odometer (km) <span style={{ color: 'var(--t3)', fontWeight: 500 }}>· for mileage</span></span>
+        <input inputMode="numeric" value={value.odometer} onChange={e => onChange({ odometer: e.target.value.replace(/[^0-9]/g, '') })}
           placeholder={lastReading ? `Last: ${lastReading.odometerKm!.toLocaleString('en-IN')}` : 'Reading on the dashboard'}
-          value={value.odometer} onChange={e => onChange({ odometer: e.target.value })} />
-        <p style={{ fontSize: 11, margin: '4px 0 0', color: odometerBehind ? 'var(--warn-ink)' : 'var(--text-4)' }}>
-          {odometerBehind
-            ? `Lower than ${lastReading!.odometerKm!.toLocaleString('en-IN')} km on ${format(parseISO(lastReading!.date), 'd MMM')}`
-            : lastReading
-              ? `${lastReading.odometerKm!.toLocaleString('en-IN')} km on ${format(parseISO(lastReading.date), 'd MMM')}${odometer > (lastReading.odometerKm ?? 0) ? ` · ${(odometer - lastReading.odometerKm!).toLocaleString('en-IN')} km since` : ''}`
-              : 'Mileage shows from your second full tank with a reading'}
-        </p>
+          style={field(odometerBehind ? { borderColor: 'var(--bad)' } : undefined)} />
+        {odometerBehind ? (
+          <span style={{ fontSize: 12.5, color: 'var(--bad-ink)', fontWeight: 600 }}>
+            Behind your last reading ({lastReading!.odometerKm!.toLocaleString('en-IN')} km on {format(parseISO(lastReading!.date), 'd MMM')}) — check the number
+          </span>
+        ) : kmSince > 0 ? (
+          <span style={{ fontSize: 12.5, color: 'var(--good-ink)', fontWeight: 600 }}>
+            {litres > 0 && !value.partial && !value.missedBefore
+              ? `≈ ${(kmSince / litres).toFixed(1)} km/l since your last reading`
+              : `${kmSince.toLocaleString('en-IN')} km since your last reading`}
+          </span>
+        ) : !lastReading ? (
+          <span style={{ fontSize: 12.5, color: 'var(--t3)' }}>Mileage shows from your second full tank with a reading</span>
+        ) : null}
       </div>
 
       {/* Rare cases */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Check checked={value.partial} onChange={v => onChange({ partial: v })} label="Didn't fill to full" />
         <Check checked={value.missedBefore} onChange={v => onChange({ missedBefore: v })} label="Missed logging a fill-up before this" />
       </div>
@@ -254,21 +232,25 @@ export default function FuelFields({ value, onChange, auto, paid, date, editId }
   )
 }
 
-const linkChip: React.CSSProperties = {
-  display: 'inline-flex', alignItems: 'center', gap: 4,
-  padding: '4px 10px', borderRadius: 999, fontSize: 12, cursor: 'pointer',
-  border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-3)',
-}
+// Scooters and bikes get the two-wheeler glyph; everything else is a car
+const TWO_WHEELER = /activa|scoot|bike|splendor|pulsar|jupiter|ntorq|bullet|enfield|classic|duke|apache|shine|access|dio|fascino|ather|ola s1|chetak/i
+
+const calcStyle: React.CSSProperties = { background: 'var(--brand-soft)', color: 'var(--brand-ink)', borderColor: 'transparent' }
+
+const decimal = (v: string) => v.replace(/[^0-9.]/g, '')
 
 function Calculated() {
-  return <span style={{ fontWeight: 400, color: 'var(--brand-ink)', marginLeft: 6 }}>calculated</span>
+  return <span style={{ color: 'var(--brand-ink)', fontWeight: 700 }}>calculated</span>
 }
 
 function Check({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-3)', cursor: 'pointer' }}>
-      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ accentColor: 'var(--brand)' }} />
-      {label}
-    </label>
+    <button type="button" role="checkbox" aria-checked={checked} onClick={() => onChange(!checked)}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 40, border: 0, background: 'transparent', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+      <span style={{ width: 22, height: 22, borderRadius: 7, border: checked ? 0 : '2px solid var(--line2)', background: checked ? 'var(--brand)' : 'transparent', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+        {checked && <Sym name="check" size={16} />}
+      </span>
+      <span style={{ fontSize: 13.5, color: 'var(--t1)', fontWeight: 500 }}>{label}</span>
+    </button>
   )
 }
