@@ -165,6 +165,7 @@ export interface UserSettings {
   seenAnnouncements?: string[]                     // announcement ids already shown — "id:platform" when the announcement is oncePerPlatform, else just "id" (cross-device)
   featureUsage?: Record<string, { useCount: number; lastUsedAt: string }>  // per-feature usage counters, used to trigger nudges for unused features
   dashboardCardOrder?: string[]                   // ordered list of dashboard block IDs
+  dashboardHiddenCards?: string[]                 // dashboard block IDs the user turned off
   vehicles?: Vehicle[]                             // for fuel fill-ups
   defaultVehicleId?: string                        // preselected on the next fill-up — the last one used
   dateOfBirth?: string                             // YYYY-MM-DD, used by the FIRE planner for ages

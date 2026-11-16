@@ -512,12 +512,75 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   }
 }
 
-/* Transactions 2-col desktop grid */
-@media (min-width: 1024px) {
-  .lg\:txn-grid {
-    grid-template-columns: 1fr 300px !important;
-  }
+/* ── Transactions redesign ──────────────────────────────────────────────────
+   The design's own tokens, scoped to the transactions screens (page, row, detail,
+   filter sheet). Base surfaces and text match the app; the semantic soft/ink pairs
+   are tuned for this ledger. */
+.txn-scope {
+  --t1: var(--text); --t2: var(--text-2); --t3: var(--text-3); --t4: var(--text-4);
+  --s2: var(--surface-2); --s3: var(--surface-3);
+  --good: oklch(0.62 0.15 158); --good-soft: oklch(0.95 0.035 158); --good-ink: oklch(0.45 0.12 158);
+  --warn: oklch(0.74 0.14 75);  --warn-soft: oklch(0.95 0.05 80);   --warn-ink: oklch(0.5 0.11 65);
+  --bad:  oklch(0.6 0.18 25);   --bad-soft:  oklch(0.95 0.03 25);   --bad-ink:  oklch(0.5 0.17 25);
+  --info: oklch(0.6 0.13 245);  --info-soft: oklch(0.95 0.03 245);  --info-ink: oklch(0.46 0.12 245);
+  --wants: oklch(0.6 0.15 305); --wants-soft: oklch(0.95 0.035 305); --wants-ink: oklch(0.47 0.14 305);
+  --shadow: 0 1px 2px rgba(20,21,26,.04), 0 8px 24px -12px rgba(20,21,26,.10);
+  --shadow-lg: 0 24px 60px -12px rgba(20,21,26,.24), 0 4px 12px rgba(20,21,26,.06);
+  --scrim: rgba(20,21,26,.36);
+  --glass: rgba(255,255,255,.72);
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  color: var(--t1);
 }
+.dark .txn-scope {
+  --good-soft: oklch(0.29 0.055 158); --good-ink: oklch(0.8 0.13 158);
+  --warn-soft: oklch(0.31 0.06 75);   --warn-ink: oklch(0.84 0.13 80);
+  --bad-soft:  oklch(0.3 0.07 25);    --bad-ink:  oklch(0.77 0.14 25);
+  --info-soft: oklch(0.3 0.06 245);   --info-ink: oklch(0.8 0.1 245);
+  --wants-soft: oklch(0.3 0.07 305);  --wants-ink: oklch(0.8 0.12 305);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  --shadow-lg: 0 24px 60px -12px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.04);
+  --scrim: rgba(0,0,0,.6);
+  --glass: rgba(28,30,36,.72);
+}
+.txn-scope button { font: inherit; color: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.txn-scope input::placeholder { color: var(--t3); }
+
+/* Row — hover only on devices that hover, press feedback everywhere */
+.txr {
+  display: grid; grid-template-columns: 44px minmax(0,1fr) auto; column-gap: 12px; align-items: start;
+  width: 100%; padding: 12px; border: 0; border-radius: 14px; background: transparent; text-align: left;
+  outline: none; -webkit-tap-highlight-color: transparent;
+  transition: background-color .18s cubic-bezier(0.23,1,0.32,1), transform .14s cubic-bezier(0.23,1,0.32,1);
+}
+@media (hover: hover) { .txr:hover { background-color: var(--s2); } }
+.txr:active { transform: scale(0.985); background-color: var(--s2); }
+.txr:focus-visible { box-shadow: 0 0 0 2px var(--good); }
+@media (hover: hover) { .txn-hover:hover { background: var(--s2) !important; } }
+
+@keyframes txn-sheet { from { transform: translateY(100%) } to { transform: none } }
+@keyframes txn-fade  { from { opacity: 0 } to { opacity: 1 } }
+@keyframes txn-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .5 } }
+@keyframes txn-in    { from { opacity: 0; transform: translateY(6px) scale(.98) } to { opacity: 1; transform: none } }
+.txn-anim-sheet { animation: txn-sheet .36s cubic-bezier(0.32,0.72,0,1); }
+.txn-anim-fade  { animation: txn-fade .2s ease; }
+.txn-anim-in    { animation: txn-in .22s cubic-bezier(0.23,1,0.32,1); }
+.txn-skel { background: var(--s2); animation: txn-pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .txn-anim-sheet, .txn-anim-fade, .txn-anim-in, .txn-skel { animation: none; }
+  .txr { transition: none; }
+}
+
+/* The page runs edge to edge and sets its own gutters and header */
+.txn-page { margin: -24px -28px -40px; }
+/* Same breakpoint as .main-content's phone padding */
+@media (max-width: 1024px) {
+  .txn-page { margin: -16px -16px 0; }
+}
+.txn-anim-pop { animation: txn-in .26s cubic-bezier(0.32,0.72,0,1); }
+.txn-anim-pop-sm { animation: txn-in .18s cubic-bezier(0.23,1,0.32,1); }
+@media (prefers-reduced-motion: reduce) { .txn-anim-pop, .txn-anim-pop-sm { animation: none; } }
+.txn-noscroll { scrollbar-width: none; }
+.txn-noscroll::-webkit-scrollbar { display: none; }
 
 /* Spending breakdown page: donut | checklist */
 .spend-grid {
@@ -587,57 +650,121 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   .fuel-row { grid-template-columns: 46px minmax(0, 1fr) 70px 64px; gap: 6px; font-size: 12px; }
 }
 
-/* Dashboard responsive grids */
-/* Hero: Spent on the left; This Month + Streak, Emergency fund and the four KPI
-   tiles stacked on the right. Below 1280px the two halves stack. */
-.dash-hero {
-  display: grid;
-  grid-template-columns: minmax(360px, 1.25fr) minmax(0, 2fr);
-  gap: var(--row-gap);
+/* ══════════════════════════════════════════
+   Overview (home) — Nov 2026 redesign
+   Tokens are scoped to .ov so the rest of the app keeps its own.
+══════════════════════════════════════════ */
+.ov {
+  --ink:  #1C1B18;
+  --ink2: #68655C;
+  --ink3: #9C998F;
+  --line: rgba(28,27,24,0.09);
+  --surface2: #EFEDE6;
+  --shadow: 0 1px 2px rgba(28,27,24,0.05), 0 12px 32px -14px rgba(28,27,24,0.14);
+  --brand-ink: color-mix(in oklch, var(--brand) 68%, black);
+  --good-soft: oklch(0.95 0.035 158); --good-ink: oklch(0.42 0.11 158);
+  --warn-soft: oklch(0.95 0.05 80);   --warn-ink: oklch(0.46 0.1 65);
+  --bad-soft:  oklch(0.95 0.035 25);  --bad-ink:  oklch(0.5 0.17 25);
+  --info-soft: oklch(0.95 0.035 245); --info-ink: oklch(0.46 0.12 245);
+  /* The Month card and bars mix from --brand, so they follow the accent colour */
+  --hero: color-mix(in oklch, var(--brand) 24%, #0E110F);
+  --bar:  color-mix(in oklch, var(--brand) 32%, var(--surface));
+  --skel: #ECE9E1;
+  --ring-good: oklch(0.8 0.15 158);
+  --ring-warn: oklch(0.84 0.13 80);
+  --ring-bad:  oklch(0.74 0.16 25);
+  color: var(--ink);
 }
-.dash-hero-side {
+.dark .ov {
+  --ink:  #ECEBE6;
+  --ink2: #A3A198;
+  --ink3: #6F6D67;
+  --line: rgba(255,255,255,0.08);
+  --surface2: #21232A;
+  --shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 12px 32px -14px rgba(0,0,0,0.7);
+  --brand-ink: color-mix(in oklch, var(--brand) 50%, white);
+  --brand-soft: color-mix(in oklch, var(--brand) 30%, var(--surface));
+  --good-soft: oklch(0.3 0.06 158);  --good-ink: oklch(0.82 0.12 158);
+  --warn-soft: oklch(0.28 0.05 70);  --warn-ink: oklch(0.86 0.11 80);
+  --bad-soft:  oklch(0.3 0.06 25);   --bad-ink:  oklch(0.8 0.12 25);
+  --info-soft: oklch(0.3 0.06 245);  --info-ink: oklch(0.82 0.09 245);
+  --wants: oklch(0.7 0.14 305);
+  --hero: color-mix(in oklch, var(--brand) 22%, #0A0C0B);
+  --bar:  color-mix(in oklch, var(--brand) 38%, var(--surface));
+  --skel: #21232A;
+}
+@supports (color: oklch(from red l c h)) {
+  /* Scale chroma rather than set it, so a grey accent (black) stays grey instead of gaining a hue */
+  .ov       { --brand-ink: oklch(from var(--brand) 0.42 calc(c * 0.73) h); }
+  .dark .ov { --brand-ink: oklch(from var(--brand) 0.82 calc(c * 0.8) h); }
+}
+
+/* 12-column grid. Blocks get their spans from packRows() on the page, so every row ends flush
+   whatever the order; the data-span rules below only size the loading skeleton.
+   Every block is full width on a phone. */
+.ov-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--row-gap);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 12px;
   align-content: start;
-  container-type: inline-size;
 }
-.dash-hero-side > .span-all { grid-column: 1 / -1; }
-@media (max-width: 1279px) {
-  .dash-hero { grid-template-columns: 1fr; }
+.ov-grid > * { grid-column: span 12; min-width: 0; }
+.ov-grid > :empty { display: none; }
+@media (min-width: 768px) {
+  .ov-grid { gap: 16px; }
+  .ov-grid > [data-tspan="4"] { grid-column: span 4; }
+  .ov-grid > [data-tspan="5"] { grid-column: span 5; }
+  .ov-grid > [data-tspan="6"] { grid-column: span 6; }
+  .ov-grid > [data-tspan="7"] { grid-column: span 7; }
+  .ov-grid > [data-tspan="8"] { grid-column: span 8; }
 }
-/* 3-equal-col row: pie | bar chart | smart insight */
-.dash-mid {
-  display: grid;
-  grid-template-columns: 1.2fr 1.2fr 1fr;
-  gap: var(--row-gap);
+@media (min-width: 1280px) {
+  .ov-grid > [data-span="3"]  { grid-column: span 3; }
+  .ov-grid > [data-span="4"]  { grid-column: span 4; }
+  .ov-grid > [data-span="5"]  { grid-column: span 5; }
+  .ov-grid > [data-span="7"]  { grid-column: span 7; }
+  .ov-grid > [data-span="8"]  { grid-column: span 8; }
+  .ov-grid > [data-span="12"] { grid-column: span 12; }
 }
-.dash-charts {
-  display: grid;
-  grid-template-columns: 1.4fr 1fr;
-  gap: var(--row-gap);
+/* Trends on desktop: In vs out sits beside the donut with a side rule, or below it with a top rule */
+.ov-trends { container-type: inline-size; }
+.ov-trends-flow { padding-left: 28px; border-left: 1px solid var(--line); }
+@container (max-width: 720px) {
+  .ov-trends-flow { padding-left: 0; border-left: none; padding-top: 18px; border-top: 1px solid var(--line); }
 }
-/* A dashboard block whose card renders nothing (e.g. Goals with no goals) shouldn't take a gap */
-.dash-block:empty { display: none; }
-.dash-bottom {
-  display: grid;
-  /* Two side by side when both show; a lone card fills the row instead of leaving half of it empty */
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-  gap: var(--row-gap);
+.ov-card {
+  background: var(--surface);
+  border-radius: 24px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
 }
-/* 2-col row: net worth | existing cards */
-.dash-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--row-gap);
+.ov-title   { font-size: 15px; font-weight: 800; }
+.ov-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink2); }
+.ov-mono    { font-family: 'Geist Mono', monospace; }
+.ov-link    { font-size: 12.5px; font-weight: 700; color: var(--brand-ink); text-decoration: none; background: none; border: none; padding: 0; cursor: pointer; font-family: inherit; text-align: left; }
+.ov-btn     { border: none; cursor: pointer; font-family: inherit; text-decoration: none; }
+.ov-serif   { font-family: 'Instrument Serif', serif; font-weight: 400; }
+.ov-rail    { scrollbar-width: none; }
+.ov-rail::-webkit-scrollbar { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  .ov-link:hover { text-decoration: underline; }
+  .ov-row:hover  { background: color-mix(in oklch, var(--surface2) 55%, transparent); }
 }
-@media (max-width: 1024px) {
-  .dash-mid     { grid-template-columns: 1fr; }
-  .dash-charts  { grid-template-columns: 1fr; }
-  .dash-pair    { grid-template-columns: 1fr; }
-}
-@media (max-width: 640px) {
-  .dash-hero-side { grid-template-columns: 1fr; }
+
+/* Cards fade in 40 ms apart; bars grow over 450 ms; skeletons pulse at 1.2 s */
+@keyframes ov-in   { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes ov-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes ov-skel { 50% { opacity: 0.55; } }
+.ov-in   { animation: ov-in 320ms var(--ease-out) both; }
+.ov-grow { transform-origin: bottom; animation: ov-grow 450ms var(--ease-out) both; }
+.ov-skel { animation: ov-skel 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ov-in, .ov-grow, .ov-skel { animation: none; }
 }
 
 /* ══════════════════════════════════════════

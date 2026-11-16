@@ -11,6 +11,7 @@ import { exportAllUserData } from '@/lib/firestore'
 import { getCategoryDisplayName } from '@/lib/categoryIcons'
 import { format, subMonths, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
+import type { Borrowing, Transaction, UserSettings } from '@/types'
 
 const STORAGE_KEY = 'recap_seen_month'
 
@@ -37,10 +38,21 @@ function TrendRow({ diff, pct, label }: { diff: number; pct: number; label: stri
   )
 }
 
-export default function MonthlyRecap() {
+// Whether last cycle's recap hasn't been opened yet (and there's something to recap)
+export function isRecapPending(
+  transactions: Transaction[], settings: UserSettings | null, borrowings: Borrowing[],
+): boolean {
+  if (transactions.length === 0) return false
+  const currMonth = getCycleMonth(settings)
+  try { if (localStorage.getItem(STORAGE_KEY) === currMonth) return false } catch { /* storage blocked: still offer it */ }
+  const prev = buildMonthlySummary(transactions, format(subMonths(parseISO(`${currMonth}-01`), 1), 'yyyy-MM'), settings, borrowings)
+  return prev.totalExpenses > 0 || prev.totalIncome > 0
+}
+
+// Opened from the "recap is ready" row in Needs attention, no longer on its own
+export default function MonthlyRecap({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { transactions, emergencyFund, borrowings, settings } = useAppStore()
   const { user } = useAuth()
-  const [open, setOpen] = useState(false)
   const [slide, setSlide] = useState(0)
   const [exporting, setExporting] = useState(false)
 
@@ -50,15 +62,12 @@ export default function MonthlyRecap() {
   const prevSummary   = buildMonthlySummary(transactions, prevMonth, settings, borrowings)
   const twoAgoSummary = buildMonthlySummary(transactions, twoMonthsAgo, settings, borrowings)
 
-  useEffect(() => {
-    if (transactions.length === 0) return
-    const seen = localStorage.getItem(STORAGE_KEY)
-    if (seen === currMonth) return
-    if (prevSummary.totalExpenses === 0 && prevSummary.totalIncome === 0) return
-    setOpen(true)
-  }, [transactions])
+  useEffect(() => { if (open) setSlide(0) }, [open])
 
-  function close() { localStorage.setItem(STORAGE_KEY, currMonth); setOpen(false) }
+  function close() {
+    try { localStorage.setItem(STORAGE_KEY, currMonth) } catch { /* not remembered */ }
+    onClose()
+  }
 
   async function handleExport() {
     if (!user) return

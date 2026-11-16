@@ -773,12 +773,20 @@ interface Props {
   open: boolean
   onClose: () => void
   pulse: FinancialPulse
+  /** Section to scroll to on open: the In/Out breakdown behind the Month card's figures */
+  focus?: 'cash'
 }
 
-export default function PulseSheet({ open, onClose, pulse }: Props) {
+export default function PulseSheet({ open, onClose, pulse, focus }: Props) {
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => { setMounted(true) }, [])
+
+  useEffect(() => {
+    if (!open || !mounted || focus !== 'cash') return
+    const t = setTimeout(() => document.getElementById('pulse-cash')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 120)
+    return () => clearTimeout(t)
+  }, [open, mounted, focus])
 
   useEffect(() => {
     if (!open) return
@@ -877,7 +885,7 @@ export default function PulseSheet({ open, onClose, pulse }: Props) {
               <HealthSection health={pulse.health} />
             </div>
 
-            <div>
+            <div id="pulse-cash" style={{ scrollMarginTop: 12 }}>
               <SectionTitle>Cash This Month</SectionTitle>
               <CashSection cash={pulse.cashPosition} />
             </div>

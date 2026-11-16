@@ -13,7 +13,7 @@ import { format } from 'date-fns'
 import type { Transaction } from '@/types'
 import toast from 'react-hot-toast'
 
-function getDueRecurring(transactions: Transaction[]): Transaction[] {
+export function getDueRecurring(transactions: Transaction[]): Transaction[] {
   const currentMonth = getCurrentMonth()
   const today = new Date()
 
@@ -39,24 +39,26 @@ function getDueRecurring(transactions: Transaction[]): Transaction[] {
 
 const STORAGE_KEY = 'recurring_dismissed_month'
 
-export default function RecurringPromptModal() {
+// "Skip for now" hides the Needs attention row until next month
+export function isRecurringSkipped(): boolean {
+  try { return localStorage.getItem(STORAGE_KEY) === getCurrentMonth() } catch { return false }
+}
+
+// Opened from the "N recurring items to log" row in Needs attention, no longer on its own
+export default function RecurringPromptModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { transactions } = useAppStore()
   const { user } = useAuth()
   const refresh = useRefreshData()
-  const [open, setOpen] = useState(false)
   const [due, setDue] = useState<Transaction[]>([])
   const [logging, setLogging] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (transactions.length === 0) return
-    const currentMonth = getCurrentMonth()
-    const dismissed = localStorage.getItem(STORAGE_KEY)
-    if (dismissed === currentMonth) return
-    const dueItems = getDueRecurring(transactions)
-    if (dueItems.length > 0) { setDue(dueItems); setOpen(true) }
-  }, [transactions])
+  // Snapshot the list on open, so rows can leave as they're logged
+  useEffect(() => { if (open) setDue(getDueRecurring(transactions)) }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function dismiss() { localStorage.setItem(STORAGE_KEY, getCurrentMonth()); setOpen(false) }
+  function dismiss() {
+    try { localStorage.setItem(STORAGE_KEY, getCurrentMonth()) } catch { /* not remembered */ }
+    onClose()
+  }
 
   async function logOne(template: Transaction) {
     if (!user) return
@@ -71,7 +73,7 @@ export default function RecurringPromptModal() {
       })
       setDue(prev => prev.filter(t => t.id !== template.id))
       toast.success(`Logged ${getCategoryDisplayName(template.category)}`)
-      if (due.length <= 1) { dismiss(); await refresh() }
+      if (due.length <= 1) { onClose(); await refresh() }
     } catch {
       toast.error('Failed to log')
     } finally {
@@ -89,7 +91,7 @@ export default function RecurringPromptModal() {
 
   return (
     <Transition appear show={open} as={Fragment}>
-      <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={dismiss}>
+      <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={onClose}>
         <Transition.Child as={Fragment}
           enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
           leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
@@ -129,7 +131,7 @@ export default function RecurringPromptModal() {
                     </p>
                   </div>
                   <button
-                    onClick={dismiss}
+                    onClick={onClose}
                     style={{ width: 30, height: 30, borderRadius: 9, border: 'none', background: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                   >
                     <X size={14} />

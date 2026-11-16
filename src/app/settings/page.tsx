@@ -6,7 +6,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import AppShell from '@/components/layout/AppShell'
-import { DEFAULT_CARD_ORDER } from '@/lib/dashboardConstants'
+import { DEFAULT_CARD_ORDER, CARD_LABELS, HIDEABLE_EXTRAS, resolveCardOrder } from '@/lib/dashboardConstants'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
 import { setUserSettings, exportAllUserData, importAllUserData, deleteAllUserData } from '@/lib/firestore'
@@ -14,7 +14,7 @@ import { useRefreshData } from '@/hooks/useData'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { downloadJSON, getLast6Months, computeLongestMoneyStreak, EXPENSE_CATEGORIES } from '@/lib/utils'
 import { getCycleRange, getLastWorkingDay, formatCycleRange } from '@/lib/cycle'
-import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, ChevronUp, ChevronDown, Trash2, AlertTriangle, Leaf, Bug, Lightbulb, MessageCircle, Send, Smartphone, Copy, KeyRound } from 'lucide-react'
+import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, ChevronUp, ChevronDown, Eye, EyeOff, Trash2, AlertTriangle, Leaf, Bug, Lightbulb, MessageCircle, Send, Smartphone, Copy, KeyRound } from 'lucide-react'
 import { buildQuickAddShortcut } from '@/lib/iosShortcutPlist'
 import { BADGES, getBadgeEarnedDate, type BadgeDef } from '@/lib/badges'
 import { IconLeaf, IconFlame } from '@tabler/icons-react'
@@ -105,6 +105,7 @@ export default function SettingsPage() {
 
   // Dashboard card order
   const [cardOrder, setCardOrder] = useState<string[]>(DEFAULT_CARD_ORDER)
+  const [hiddenCards, setHiddenCards] = useState<string[]>([])
   const [orderDirty, setOrderDirty] = useState(false)
   const [savingOrder, setSavingOrder] = useState(false)
 
@@ -130,13 +131,9 @@ export default function SettingsPage() {
       setShowHealthTab(settings.showHealthTab ?? false)
       setShowTasksTab(settings.showTasksTab ?? false)
       setAccentColor((settings.accentColor as typeof accentColor) ?? 'green')
-      // A saved order predates newer blocks — append any default block missing
-      // from it so it shows up here and can be reordered (mirrors src/app/page.tsx).
-      const saved = settings.dashboardCardOrder
-      // Blocks since removed from the home screen (e.g. 'upcoming') are dropped.
-      setCardOrder(saved
-        ? [...saved.filter(id => DEFAULT_CARD_ORDER.includes(id)), ...DEFAULT_CARD_ORDER.filter(id => !saved.includes(id))]
-        : DEFAULT_CARD_ORDER)
+      // Old block IDs map onto the new blocks, same as on the home screen
+      setCardOrder(resolveCardOrder(settings.dashboardCardOrder))
+      setHiddenCards(settings.dashboardHiddenCards ?? [])
     }
   }, [settings])
 
@@ -1054,52 +1051,58 @@ export default function SettingsPage() {
             <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Dashboard Order</h2>
           </div>
           <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
-            Reorder the sections on your home screen using the arrows, then save.
+            Reorder the sections on your home screen with the arrows, or hide the ones you don't need, then save.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {cardOrder.map((id, idx) => {
-              const labels: Record<string, string> = {
-                hero: 'Hero — Spent, This Month, Streak, Emergency Fund',
-                insights: 'Smart Insights',
-                charts: 'Charts — Category Pie + Monthly Bar',
-                savings: 'Savings Trend + Breakdown',
-                goals: 'Savings Goals',
-                pulse: 'Monthly Pulse & Financial Health',
-                weekly: 'Upcoming + Loans',
-              }
+            {[...cardOrder, ...HIDEABLE_EXTRAS].map((id, idx) => {
+              const hidden = hiddenCards.includes(id)
+              const fixed = HIDEABLE_EXTRAS.includes(id)
               return (
                 <div key={id} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
                   padding: '10px 12px', borderRadius: 10,
                   background: 'var(--surface-2)', border: '1px solid var(--border)',
                 }}>
-                  <span style={{ flex: 1, fontSize: 13, color: 'var(--text-2)', fontWeight: 500 }}>{labels[id] ?? id}</span>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    <button
-                      disabled={idx === 0}
-                      onClick={() => {
-                        const next = [...cardOrder]
-                        ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
-                        setCardOrder(next)
-                        setOrderDirty(true)
-                      }}
-                      style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.3 : 1, display: 'flex' }}
-                    >
-                      <ChevronUp size={13} />
-                    </button>
-                    <button
-                      disabled={idx === cardOrder.length - 1}
-                      onClick={() => {
-                        const next = [...cardOrder]
-                        ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
-                        setCardOrder(next)
-                        setOrderDirty(true)
-                      }}
-                      style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', cursor: idx === cardOrder.length - 1 ? 'default' : 'pointer', opacity: idx === cardOrder.length - 1 ? 0.3 : 1, display: 'flex' }}
-                    >
-                      <ChevronDown size={13} />
-                    </button>
-                  </div>
+                  <span style={{ flex: 1, fontSize: 13, color: hidden ? 'var(--text-4)' : 'var(--text-2)', fontWeight: 500, textDecoration: hidden ? 'line-through' : 'none' }}>{CARD_LABELS[id] ?? id}</span>
+                  <button
+                    onClick={() => {
+                      setHiddenCards(h => hidden ? h.filter(x => x !== id) : [...h, id])
+                      setOrderDirty(true)
+                    }}
+                    aria-label={hidden ? `Show ${CARD_LABELS[id]}` : `Hide ${CARD_LABELS[id]}`}
+                    aria-pressed={!hidden}
+                    style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', display: 'flex', color: hidden ? 'var(--text-4)' : 'var(--text-2)' }}
+                  >
+                    {hidden ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
+                  {!fixed && (
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button
+                        disabled={idx === 0}
+                        onClick={() => {
+                          const next = [...cardOrder]
+                          ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
+                          setCardOrder(next)
+                          setOrderDirty(true)
+                        }}
+                        style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.3 : 1, display: 'flex' }}
+                      >
+                        <ChevronUp size={13} />
+                      </button>
+                      <button
+                        disabled={idx === cardOrder.length - 1}
+                        onClick={() => {
+                          const next = [...cardOrder]
+                          ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
+                          setCardOrder(next)
+                          setOrderDirty(true)
+                        }}
+                        style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', cursor: idx === cardOrder.length - 1 ? 'default' : 'pointer', opacity: idx === cardOrder.length - 1 ? 0.3 : 1, display: 'flex' }}
+                      >
+                        <ChevronDown size={13} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -1108,6 +1111,7 @@ export default function SettingsPage() {
             <button
               onClick={() => {
                 setCardOrder(DEFAULT_CARD_ORDER)
+                setHiddenCards([])
                 setOrderDirty(true)
               }}
               style={{ fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
@@ -1119,10 +1123,10 @@ export default function SettingsPage() {
                 if (!user) return
                 setSavingOrder(true)
                 try {
-                  await setUserSettings(user.uid, { dashboardCardOrder: cardOrder })
+                  await setUserSettings(user.uid, { dashboardCardOrder: cardOrder, dashboardHiddenCards: hiddenCards })
                   await refresh()
                   setOrderDirty(false)
-                  toast.success('Dashboard order saved')
+                  toast.success('Home screen saved')
                 } catch {
                   toast.error('Failed to save order')
                 } finally {
@@ -1138,7 +1142,7 @@ export default function SettingsPage() {
                 cursor: !orderDirty || savingOrder ? 'default' : 'pointer',
               }}
             >
-              {savingOrder ? 'Saving…' : 'Save order'}
+              {savingOrder ? 'Saving…' : 'Save'}
             </button>
           </div>
         </div>

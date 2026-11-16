@@ -2,98 +2,36 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import LandingPage from '@/components/LandingPage'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import AppShell from '@/components/layout/AppShell'
-
-// ── New design cards ────────────────────────────────────────────────────────
-import SafeToSpendCard   from '@/components/dashboard/SafeToSpendCard'
-import ThisMonthCard     from '@/components/dashboard/ThisMonthCard'
-import MoneyStreakCard   from '@/components/dashboard/MoneyStreakCard'
-import SmartInsights     from '@/components/dashboard/SmartInsights'
-import CategoryPieChart  from '@/components/dashboard/CategoryPieChart'
-import MonthlyBarChart   from '@/components/dashboard/MonthlyBarChart'
-import SavingsTrendChart from '@/components/dashboard/SavingsTrendChart'
-import SavingsBreakdown  from '@/components/dashboard/SavingsBreakdown'
-import DashboardGoals    from '@/components/dashboard/DashboardGoals'
-
-// ── Existing cards (preserved below the new design section) ─────────────────
-import EmergencyFundCard    from '@/components/dashboard/EmergencyFundCard'
-import PulseCard            from '@/components/dashboard/PulseCard'
-import MonthlyRecap         from '@/components/dashboard/MonthlyRecap'
-import UpcomingCard, { hasPendingUpcoming } from '@/components/dashboard/UpcomingCard'
-import RecurringPromptModal from '@/components/dashboard/RecurringPromptModal'
-
-import Link from 'next/link'
-import { AlertCircle, ArrowRight, Eye, EyeOff, Handshake } from 'lucide-react'
-import { useAppStore } from '@/store/appStore'
-import { formatCurrencyFull } from '@/lib/utils'
 import CardErrorBoundary from '@/components/ui/CardErrorBoundary'
-import { DEFAULT_CARD_ORDER } from '@/lib/dashboardConstants'
+import { useAppStore } from '@/store/appStore'
+import { usePrivacy } from '@/store/privacyStore'
+import { usePulse } from '@/hooks/usePulse'
+import { resolveCardOrder } from '@/lib/dashboardConstants'
 
-// What you owe and what's owed to you, side by side; each half shows only when non-zero
-function LoansCard({ owe, owed, owedCount }: { owe: number; owed: number; owedCount: number }) {
-  const [masked, setMasked] = useState(true)
-  const amount = (v: number) => masked ? '₹ ••••' : formatCurrencyFull(v)
-  return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span className="h-eyebrow" style={{ flex: 1 }}>Loans</span>
-        <button
-          onClick={() => setMasked(v => !v)}
-          aria-label={masked ? 'Show amounts' : 'Hide amounts'}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', display: 'flex', padding: 2 }}
-        >
-          {masked ? <Eye size={14} /> : <EyeOff size={14} />}
-        </button>
-        <Link href="/borrowings" aria-label="Open borrowings" style={{ color: 'var(--brand)', display: 'flex', padding: 2 }}>
-          <ArrowRight size={15} />
-        </Link>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: owe > 0 && owed > 0 ? '1fr 1fr' : '1fr', gap: 16 }}>
-        {owed > 0 && (
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>
-              <Handshake size={13} style={{ color: 'var(--warn)' }} /> Owed to you
-            </div>
-            <div className="display-num" style={{ fontSize: 24, lineHeight: 1, color: 'var(--warn-ink)' }}>{amount(owed)}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>
-              {owedCount} record{owedCount !== 1 ? 's' : ''} pending
-            </div>
-          </div>
-        )}
-        {owe > 0 && (
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text-3)', marginBottom: 6 }}>
-              <AlertCircle size={13} style={{ color: 'var(--warn)' }} /> Borrowed by me
-            </div>
-            <div className="display-num" style={{ fontSize: 24, lineHeight: 1, color: 'var(--text)' }}>{amount(owe)}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 6 }}>Pending repayment</div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
+import MonthCard from '@/components/overview/MonthCard'
+import AttentionCard from '@/components/overview/AttentionCard'
+import TodayCard from '@/components/overview/TodayCard'
+import WeekCard from '@/components/overview/WeekCard'
+import StreakCard, { RESTORE_EVENT } from '@/components/overview/StreakCard'
+import UpcomingCard, { relevantUpcoming } from '@/components/overview/UpcomingCard'
+import EmergencyCard, { type EmergencyHandle } from '@/components/overview/EmergencyCard'
+import SavingsCard, { useSavingsHistory } from '@/components/overview/SavingsCard'
+import LoansCard, { useLoans } from '@/components/overview/LoansCard'
+import GoalsCard from '@/components/overview/GoalsCard'
+import TrendsCard from '@/components/overview/TrendsCard'
+import { OverviewSkeleton, PrivacyBar, SetupTray, type TrayChip } from '@/components/overview/Extras'
+import { OverviewCtx, scrollToBlock, useMediaQuery, type OverviewActions } from '@/components/overview/ui'
 
-// Upcoming and Loans side by side; each shows only when it has something
-function UpcomingLoansRow({ showUpcoming, pendingBorrowed, pendingLent, pendingLentCount }: {
-  showUpcoming: boolean; pendingBorrowed: number; pendingLent: number; pendingLentCount: number
-}) {
-  return (
-    <div className="dash-bottom">
-      {showUpcoming && <CardErrorBoundary label="Upcoming"><UpcomingCard /></CardErrorBoundary>}
-      {(pendingBorrowed > 0 || pendingLent > 0) && (
-        <CardErrorBoundary label="Loans">
-          <LoansCard owe={pendingBorrowed} owed={pendingLent} owedCount={pendingLentCount} />
-        </CardErrorBoundary>
-      )}
-    </div>
-  )
-}
-
+import PulseSheet from '@/components/pulse/PulseSheet'
+import MonthlyRecap from '@/components/dashboard/MonthlyRecap'
+import RecurringPromptModal from '@/components/dashboard/RecurringPromptModal'
+import LogPaymentModal from '@/components/upcoming/LogPaymentModal'
+import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 
 export default function RootPage() {
   const { user, loading: authLoading } = useAuth()
@@ -113,82 +51,143 @@ export default function RootPage() {
   return <LandingPage />
 }
 
+// Starting desktop (≥1280) and tablet (≥768) spans on the 12-column grid; packRows widens them to fill each row
+const NAME: Record<string, string> = {
+  month: 'Month', attention: 'Needs attention', spend: 'Today', week: 'This week', streak: 'Streak',
+  upcoming: 'Upcoming', emergency: 'Emergency fund', savings: 'Savings', loans: 'Loans', goals: 'Goals', trends: 'Trends',
+}
+const SPAN: Record<string, [number, number]> = {
+  month: [8, 12], attention: [4, 6], spend: [4, 6], week: [5, 8], streak: [3, 4],
+  upcoming: [4, 6], emergency: [4, 6], savings: [7, 12], loans: [4, 12], goals: [12, 12], trends: [5, 12],
+}
+
+// Lays blocks out row by row on the 12-column grid. When the next block doesn't fit, a later one
+// that does is pulled up (as dense packing would); whatever is still left is shared across the
+// row's blocks in proportion to their width, so any order or set of hidden blocks ends flush.
+function packRows(items: { id: string; span: number }[]): { id: string; span: number }[] {
+  const queue = [...items]
+  const out: { id: string; span: number }[] = []
+  while (queue.length) {
+    const row = [queue.shift()!]
+    let used = row[0].span
+    for (let k = 0; k < queue.length && used < 12;) {
+      if (used + queue[k].span <= 12) { used += queue[k].span; row.push(...queue.splice(k, 1)) }
+      else k++
+    }
+    const left = 12 - used
+    let given = 0
+    row.forEach((b, k) => {
+      const add = k === row.length - 1 ? left - given : Math.min(left - given, Math.round((left * b.span) / used))
+      out.push({ id: b.id, span: b.span + add })
+      given += add
+    })
+  }
+  return out
+}
+
 function DashboardPage() {
-  const loading  = useAppStore((s) => s.loading)
-  const settings = useAppStore((s) => s.settings)
-  const borrowings       = useAppStore((s) => s.borrowings)
-  const upcomingExpenses = useAppStore((s) => s.upcomingExpenses)
-  const upcomingPayments = useAppStore((s) => s.upcomingPayments)
-  const pendingBorrowed = borrowings
-    .filter(b => b.type === 'borrowed' && b.status !== 'repaid')
-    .reduce((s, b) => s + Math.max(0, b.amount - b.repaidAmount), 0)
-  const pendingLentRecords = borrowings.filter(b => b.type === 'lent' && b.status !== 'repaid')
-  const pendingLent = pendingLentRecords.reduce((s, b) => s + Math.max(0, b.amount - b.repaidAmount), 0)
-  const showUpcoming = hasPendingUpcoming(upcomingExpenses, upcomingPayments)
-  // A saved order predates newer blocks (e.g. 'goals', 'savings') — append any
-  // default block missing from it so new dashboard sections aren't silently hidden.
-  const savedOrder = settings?.dashboardCardOrder
-  const cardOrder = savedOrder
-    ? [...savedOrder, ...DEFAULT_CARD_ORDER.filter(id => !savedOrder.includes(id))]
-    : DEFAULT_CARD_ORDER
+  const loading = useAppStore(s => s.loading)
+  const settings = useAppStore(s => s.settings)
+  const transactions = useAppStore(s => s.transactions)
+  const upcoming = useAppStore(s => s.upcomingExpenses)
+  const payments = useAppStore(s => s.upcomingPayments)
+  const goals = useAppStore(s => s.savingsGoals)
+  const masked = usePrivacy(s => s.masked)
+  const hydratePrivacy = usePrivacy(s => s.hydrate)
+  const pulse = usePulse()
+  const wide = useMediaQuery('(min-width: 1280px)')
+  const mid = useMediaQuery('(min-width: 768px)')
+  const savingsHist = useSavingsHistory()
+  const loans = useLoans()
+  useEffect(() => { hydratePrivacy() }, [hydratePrivacy])
+
+  const [details, setDetails] = useState<{ open: boolean; focus?: 'cash' }>({ open: false })
+  const [recapOpen, setRecapOpen] = useState(false)
+  const [recurringOpen, setRecurringOpen] = useState(false)
+  const [payId, setPayId] = useState<string | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
+  const [tick, setTick] = useState(0)
+  const emergency = useRef<EmergencyHandle>(null)
+  const bump = useCallback(() => setTick(t => t + 1), [])
+
+  const actions: OverviewActions = useMemo(() => ({
+    openAdd: () => setAddOpen(true),
+    openDetails: focus => setDetails({ open: true, focus }),
+    openRecap: () => setRecapOpen(true),
+    openRecurring: () => setRecurringOpen(true),
+    openPay: id => setPayId(id),
+    restoreStreak: () => { scrollToBlock('streak'); window.dispatchEvent(new Event(RESTORE_EVENT)) },
+    setupEmergency: () => { scrollToBlock('emergency'); emergency.current?.setup() },
+    tick,
+  }), [tick])
+
+  const isNew = transactions.length === 0
+  const order = resolveCardOrder(settings?.dashboardCardOrder)
+  const hidden = new Set(settings?.dashboardHiddenCards ?? [])
+
+  // Blocks with nothing to show hide on their own (and offer a chip in the setup tray)
+  const has: Record<string, boolean> = {
+    month: true, spend: true, week: true, streak: true, emergency: true,
+    attention: !isNew,
+    upcoming: relevantUpcoming(upcoming).length > 0,
+    savings: savingsHist.some(h => h.contributed > 0 || h.withdrawn > 0),
+    loans: loans.owed > 0 || loans.owe > 0,
+    goals: goals.length > 0,
+    trends: transactions.filter(t => t.type === 'expense').length >= 3,
+  }
+  const chips: TrayChip[] = []
+  if (!has.upcoming) chips.push({ label: 'Upcoming bill', href: '/upcoming' })
+  if (!has.goals || !has.savings) chips.push({ label: 'Savings goal', href: '/goals' })
+  if (!has.loans) chips.push({ label: 'Money lent or borrowed', href: '/borrowings' })
+  if (!transactions.some(t => t.isRecurring)) chips.push({ label: 'Recurring payment', onClick: () => setAddOpen(true) })
 
   const BLOCKS: Record<string, React.ReactNode> = {
-    hero: (
-      <div className="dash-hero">
-        <CardErrorBoundary label="Spent"><SafeToSpendCard /></CardErrorBoundary>
-        <div className="dash-hero-side">
-          <CardErrorBoundary label="This Month"><ThisMonthCard /></CardErrorBoundary>
-          <CardErrorBoundary label="Money Streak"><MoneyStreakCard /></CardErrorBoundary>
-          <div className="span-all"><CardErrorBoundary label="Emergency Fund"><EmergencyFundCard /></CardErrorBoundary></div>
-        </div>
-      </div>
-    ),
-    // On desktop Smart Insights lives in the charts row, so this block is hidden there (see BLOCK_CLASS)
-    insights: <CardErrorBoundary label="Smart Insights"><SmartInsights /></CardErrorBoundary>,
-    charts: (
-      <div className="dash-mid">
-        <CardErrorBoundary label="Category Chart"><CategoryPieChart /></CardErrorBoundary>
-        <CardErrorBoundary label="Monthly Chart"><MonthlyBarChart /></CardErrorBoundary>
-        <div className="hidden lg:block"><CardErrorBoundary label="Smart Insights"><SmartInsights /></CardErrorBoundary></div>
-      </div>
-    ),
-    savings: (
-      <div className="dash-charts">
-        <CardErrorBoundary label="Savings Trend"><SavingsTrendChart /></CardErrorBoundary>
-        <CardErrorBoundary label="Savings Breakdown"><SavingsBreakdown /></CardErrorBoundary>
-      </div>
-    ),
-    goals: <CardErrorBoundary label="Goals"><DashboardGoals /></CardErrorBoundary>,
-    pulse:   <CardErrorBoundary label="Pulse"><PulseCard /></CardErrorBoundary>,
-    // The whole row is left out when neither card has anything to show
-    weekly: (showUpcoming || pendingBorrowed > 0 || pendingLent > 0)
-      ? <UpcomingLoansRow showUpcoming={showUpcoming} pendingBorrowed={pendingBorrowed} pendingLent={pendingLent} pendingLentCount={pendingLentRecords.length} />
-      : null,
+    month: <MonthCard isNew={isNew} />,
+    attention: <AttentionCard />,
+    spend: <TodayCard />,
+    week: <WeekCard isNew={isNew} />,
+    streak: <StreakCard isNew={isNew} />,
+    upcoming: <UpcomingCard />,
+    emergency: <EmergencyCard ref={emergency} />,
+    savings: <SavingsCard />,
+    loans: <LoansCard />,
+    goals: <GoalsCard />,
+    trends: <TrendsCard />,
   }
-
-  // Classes on a block's wrapper itself, so a block hidden at this width doesn't leave an empty slot (and a double gap)
-  const BLOCK_CLASS: Record<string, string> = { insights: 'lg:hidden' }
+  const visible = order.filter(id => BLOCKS[id] && has[id] && !hidden.has(id))
+  // Phones stack every block full width in the saved order
+  const layout = mid ? packRows(visible.map(id => ({ id, span: SPAN[id][wide ? 0 : 1] }))) : visible.map(id => ({ id, span: 12 }))
+  const payItem = payId ? upcoming.find(u => u.id === payId) ?? null : null
+  const paidSoFar = payId ? payments.filter(p => p.upcomingId === payId).reduce((s, p) => s + p.amount, 0) : 0
 
   return (
     <AppShell title="Overview">
-      {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
-          {[180, 96, 72, 200, 140, 96].map((h, i) => (
-            <div
-              key={i}
-              className="animate-pulse"
-              style={{ height: h, borderRadius: 24, background: 'var(--surface-2)', opacity: 1 - i * 0.1 }}
-            />
-          ))}
+      <OverviewCtx.Provider value={actions}>
+        <div className="ov">
+          {loading ? <OverviewSkeleton /> : (
+            <div className="ov-grid">
+              {masked && <div className="ov-in"><PrivacyBar /></div>}
+              {layout.map(({ id, span }, i) => (
+                <div
+                  key={id} id={`ov-${id}`}
+                  className="ov-in" style={{ gridColumn: `span ${span}`, animationDelay: `${(i + 1) * 40}ms`, scrollMarginTop: 96 }}
+                >
+                  <CardErrorBoundary label={NAME[id]}>{BLOCKS[id]}</CardErrorBoundary>
+                </div>
+              ))}
+              {chips.length > 0 && !hidden.has('tray') && (
+                <div className="ov-in" style={{ animationDelay: `${(visible.length + 1) * 40}ms` }}><SetupTray chips={chips} /></div>
+              )}
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="gw-stagger" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
-          {cardOrder.map(id => BLOCKS[id] ? <div key={id} className={`dash-block ${BLOCK_CLASS[id] ?? ''}`}>{BLOCKS[id]}</div> : null)}
-        </div>
-      )}
 
-      <MonthlyRecap />
-      <RecurringPromptModal />
+        <PulseSheet open={details.open} focus={details.focus} onClose={() => setDetails({ open: false })} pulse={pulse} />
+        <MonthlyRecap open={recapOpen} onClose={() => { setRecapOpen(false); bump() }} />
+        <RecurringPromptModal open={recurringOpen} onClose={() => { setRecurringOpen(false); bump() }} />
+        <LogPaymentModal open={!!payItem} onClose={() => setPayId(null)} item={payItem} alreadyPaid={paidSoFar} />
+        <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />
+      </OverviewCtx.Provider>
     </AppShell>
   )
 }

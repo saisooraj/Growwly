@@ -10,6 +10,8 @@ import { AddEntryMenu } from '@/components/transactions/AddEntryMenu'
 import { getLast6Months, getMonthLabel, computeMoneyStreak } from '@/lib/utils'
 import { getCycleRange, formatCycleRange } from '@/lib/cycle'
 import { usePathname, useRouter } from 'next/navigation'
+import { usePrivacy } from '@/store/privacyStore'
+import { format, parseISO } from 'date-fns'
 
 // `back` marks a sub-page: the header shows an arrow to its parent page.
 const PAGE_META: Record<string, { title: string; sub: string; back?: { href: string; label: string } }> = {
@@ -72,6 +74,78 @@ function ThemeToggle() {
     >
       {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
     </button>
+  )
+}
+
+// ── Privacy (home): one switch hides every ₹ figure ────────────────────────────
+
+function EyeIcon({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
+      <ellipse cx="12" cy="12" rx="10" ry="6.5" />
+      <circle cx="12" cy="12" r="2.5" />
+    </svg>
+  )
+}
+
+function PrivacyButton({ round }: { round?: boolean }) {
+  const masked = usePrivacy(s => s.masked)
+  const toggle = usePrivacy(s => s.toggle)
+  const hydrate = usePrivacy(s => s.hydrate)
+  useEffect(() => { hydrate() }, [hydrate])
+  const colors = masked ? { background: 'var(--ink)', color: 'var(--bg)' } : { background: 'var(--surface)', color: 'var(--ink)' }
+  return (
+    <button
+      onClick={toggle}
+      aria-pressed={masked}
+      aria-label={masked ? 'Show amounts' : 'Hide amounts'}
+      className={round ? 'ov' : 'ov hidden lg:flex'}
+      style={round ? {
+        width: 44, height: 44, borderRadius: '50%', border: 'none', cursor: 'pointer', flex: 'none',
+        display: 'grid', placeItems: 'center', boxShadow: 'var(--shadow)', ...colors,
+      } : {
+        height: 40, padding: '0 14px', alignItems: 'center', gap: 8, borderRadius: 12, border: 'none', cursor: 'pointer',
+        boxShadow: 'var(--shadow)', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', flexShrink: 0, ...colors,
+      }}
+    >
+      <EyeIcon size={round ? 20 : 18} />
+      {!round && (masked ? 'Amounts hidden' : 'Hide amounts')}
+    </button>
+  )
+}
+
+// Phone header on the home screen: who, which cycle, and the privacy eye
+function HomePhoneHeader({ firstName, greeting }: { firstName: string; greeting: string }) {
+  const { user } = useAuth()
+  const { selectedMonth, setSelectedMonth, settings, transactions } = useAppStore()
+  const months = getLast6Months()
+  const idx = months.indexOf(selectedMonth)
+  const { start, end } = getCycleRange(selectedMonth, settings)
+  const initial = (user?.displayName || user?.email || '?').trim().charAt(0).toUpperCase()
+  const arrow = (dir: -1 | 1) => {
+    const ok = dir < 0 ? idx > 0 : idx < months.length - 1
+    return (
+      <button
+        onClick={() => ok && setSelectedMonth(months[idx + dir])} disabled={!ok}
+        aria-label={dir < 0 ? 'Previous month' : 'Next month'}
+        style={{ border: 'none', background: 'none', padding: '0 2px', font: 'inherit', color: 'inherit', cursor: ok ? 'pointer' : 'default', opacity: ok ? 1 : 0.3 }}
+      >{dir < 0 ? '‹' : '›'}</button>
+    )
+  }
+  return (
+    <div className="ov" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--brand-soft)', color: 'var(--brand-ink)', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 15, flex: 'none' }}>{initial}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, color: 'var(--ink2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {transactions.length === 0 ? `Welcome to Growwly, ${firstName}` : `${greeting} ${firstName}`}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 17, fontWeight: 800, letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>
+          <span>{arrow(-1)} {format(parseISO(`${selectedMonth}-01`), 'MMMM')} {arrow(1)}</span>
+          <span style={{ fontSize: 11.5, fontWeight: 500, color: 'var(--ink3)', letterSpacing: 0 }}>{format(parseISO(start), 'd MMM')} – {format(parseISO(end), 'd MMM')}</span>
+        </div>
+      </div>
+      <PrivacyButton round />
+    </div>
   )
 }
 
@@ -171,15 +245,18 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
   function prev() { if (canPrev) setSelectedMonth(months[currentIdx - 1]) }
   function next() { if (canNext) setSelectedMonth(months[currentIdx + 1]) }
 
+  // Transactions draws its own header: the month switcher there also reads "All time" while searching
+  if (pathname === '/transactions') return null
+
   return (
     <header
       className="app-header"
       style={{
         display: 'flex', alignItems: 'center', gap: 10,
-        borderBottom: '1px solid var(--hair)',
+        borderBottom: `1px solid ${isHome && !scrolled ? 'transparent' : 'var(--hair)'}`,
         background: scrolled
           ? 'color-mix(in oklch, var(--sidebar) 88%, transparent)'
-          : 'var(--sidebar)',
+          : isHome ? 'var(--bg)' : 'var(--sidebar)',
         backdropFilter: scrolled ? 'blur(20px) saturate(180%)' : 'none',
         WebkitBackdropFilter: scrolled ? 'blur(20px) saturate(180%)' : 'none',
         position: 'sticky', top: 0, zIndex: 5,
@@ -187,6 +264,11 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
       }}
     >
       {/* ── MOBILE title ── */}
+      {isHome ? (
+        <div className="lg:hidden" style={{ flex: 1, minWidth: 0 }}>
+          <HomePhoneHeader firstName={firstName} greeting={greeting} />
+        </div>
+      ) : (
       <div className="lg:hidden" style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           transform: scrolled ? 'translateY(-6px)' : 'translateY(0)',
@@ -234,18 +316,14 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
           </div>
         </div>
       </div>
+      )}
 
       {/* ── DESKTOP title ── */}
       <div className="hidden lg:block" style={{ minWidth: 0 }}>
         {isHome ? (
-          <>
-            <div className="serif" style={{ fontSize: 16, fontStyle: 'italic', color: 'var(--text-3)', lineHeight: 1, marginBottom: 3 }}>
-              {greeting}
-            </div>
-            <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1, color: 'var(--text)' }}>
-              {firstName}
-            </h1>
-          </>
+          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1.1, color: 'var(--text)' }}>
+            Overview
+          </h1>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {meta.back && <BackLink href={meta.back.href} label={meta.back.label} size={36} />}
@@ -267,6 +345,7 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
       {/* ── Search bar (desktop, hidden on /transactions which has its own) ── */}
       {pathname !== '/transactions' && <SearchBar />}
 
+      <div className={isHome ? 'hidden lg:flex' : 'flex'} style={{ alignItems: 'center', gap: 10, flexShrink: 0 }}>
       {/* ── Month switcher ── */}
       <div style={{
         display: 'flex', alignItems: 'center',
@@ -310,6 +389,9 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
         <Flame size={14} />
         {moneyStreak}
       </div>
+      </div>
+
+      {isHome && <PrivacyButton />}
 
       {/* ── + Add button (desktop) ── */}
       {onAdd && (
