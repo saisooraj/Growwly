@@ -16,6 +16,7 @@ import {
   linkWithPopup,
   unlink,
   fetchSignInMethodsForEmail,
+  sendPasswordResetEmail,
   updatePassword,
   reauthenticateWithCredential,
   RecaptchaVerifier,
@@ -30,13 +31,14 @@ export interface AuthContextType {
   user: User | null
   loading: boolean
 
-  // Google
-  signInWithGoogle: () => void
+  // Google — resolves once the popup settles or the redirect starts
+  signInWithGoogle: () => Promise<void>
 
   // Email / password
   signInWithEmail: (email: string, password: string) => Promise<void>
   signUpWithEmail: (email: string, password: string) => Promise<void>
   getSignInMethodsForEmail: (email: string) => Promise<string[]>
+  sendPasswordReset: (email: string) => Promise<void>
 
   // Phone OTP
   sendPhoneOTP: (phone: string) => Promise<ConfirmationResult>
@@ -186,17 +188,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Google ──────────────────────────────────────────────────────────────────
 
-  function signInWithGoogle() {
+  async function signInWithGoogle() {
     // All iOS browsers (Safari, Chrome, Firefox) use WKWebView and will always
     // block popups — skip straight to redirect to avoid the race condition that
     // caused the "stuck on login" bug in iOS Safari.
     if (isIOSDevice()) {
       ssSet(SS_REDIRECT_PENDING, 'ios')
-      signInWithRedirect(auth, googleProvider)
+      await signInWithRedirect(auth, googleProvider)
       return
     }
 
-    signInWithPopup(auth, googleProvider).catch((err) => {
+    try {
+      await signInWithPopup(auth, googleProvider)
+    } catch (err) {
       const code = (err as { code?: string })?.code ?? ''
       const shouldRedirect =
         code === 'auth/popup-blocked' ||
@@ -205,9 +209,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         code === 'auth/operation-not-supported-in-this-environment'
       if (shouldRedirect) {
         ssSet(SS_REDIRECT_PENDING, 'popup-blocked')
-        signInWithRedirect(auth, googleProvider)
+        await signInWithRedirect(auth, googleProvider)
       }
-    })
+    }
   }
 
   // ── Email / Password ────────────────────────────────────────────────────────
@@ -222,6 +226,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function getSignInMethodsForEmail(email: string) {
     return fetchSignInMethodsForEmail(auth, email)
+  }
+
+  async function sendPasswordReset(email: string) {
+    await sendPasswordResetEmail(auth, email)
   }
 
   // ── Phone OTP ───────────────────────────────────────────────────────────────
@@ -301,7 +309,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthContextType = {
     user, loading,
     signInWithGoogle,
-    signInWithEmail, signUpWithEmail, getSignInMethodsForEmail,
+    signInWithEmail, signUpWithEmail, getSignInMethodsForEmail, sendPasswordReset,
     sendPhoneOTP, confirmPhoneOTP,
     linkGoogle, linkEmailPassword, linkPhone, confirmPhoneLink, unlinkProvider,
     changePassword, setInitialPassword,
