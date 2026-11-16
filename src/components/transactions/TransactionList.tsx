@@ -1,429 +1,154 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
-import { format, parseISO, isToday, isYesterday } from 'date-fns'
-import { ArrowLeftRight, ChevronDown, ChevronRight, ArrowUp, ArrowDown, UserMinus, UserPlus, RotateCcw } from 'lucide-react'
+import { Fragment, useMemo } from 'react'
+import { ChevronDown, ChevronsDown, Repeat } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
-import { formatCurrencyFull, CATEGORY_COLORS, getTransactionsForMonth, getTransferDisplay, isSavingsTransfer } from '@/lib/utils'
-import { findLinkedAsset } from '@/lib/holdingLinks'
-import { isFuelExpense, mileageFor } from '@/lib/fuel'
-import { getCycleRange } from '@/lib/cycle'
-import { getSavingsVehicleMeta, getCategoryDisplayName, CategoryIcon } from '@/lib/categoryIcons'
-import type { Transaction, Borrowing } from '@/types'
-import TransactionDetailModal from './TransactionDetailModal'
-
-interface Props {
-  filterMonth?: boolean
-  limit?: number
-  transactions?: Transaction[]
-  groupByDay?: boolean
-  defaultExpandAll?: boolean
-  showBorrowings?: boolean
-}
-
-// Synthetic row type — Transaction extended with borrowing metadata
-type ViewTx = Transaction & { _borrowDir?: 'lent' | 'borrowed'; _person?: string; _refundedAmount?: number }
-
-// ── Borrowing → synthetic ViewTx ────────────────────────────────────────────
-
-function borrowingToViewTx(b: Borrowing): ViewTx {
-  return {
-    id: `borrow-${b.id}`,
-    userId: b.userId,
-    type: b.type === 'lent' ? 'expense' : 'income',
-    amount: b.amount,
-    category: b.type === 'lent' ? 'Lent' : 'Borrowed',
-    date: b.date,
-    notes: `${b.type === 'lent' ? 'To' : 'From'} ${b.person}${b.description ? ' · ' + b.description : ''}`,
-    createdAt: b.createdAt,
-    borrowingId: b.id,
-    _borrowDir: b.type as 'lent' | 'borrowed',
-    _person: b.person,
-  }
-}
-
-function dayLabel(dateStr: string): string {
-  const d = parseISO(dateStr)
-  if (isToday(d))     return `Today · ${format(d, 'MMM d')}`
-  if (isYesterday(d)) return `Yesterday · ${format(d, 'MMM d')}`
-  // Search and date filters span every month, so older rows need the year to be unambiguous
-  return format(d, d.getFullYear() === new Date().getFullYear() ? 'EEE, MMM d' : 'EEE, MMM d, yyyy')
-}
-
-const MAX_TAGS = 3
+import { MONO, avatarStyle, dayLabel, dayTotals, initialStyle, rowModel, type ViewTx } from './txnView'
 
 // ── Single transaction row ───────────────────────────────────────────────────
 
-function TxRow({ tx, onSelect }: { tx: ViewTx; onSelect: (t: Transaction) => void }) {
-  const isBorrowing = !!tx._borrowDir
-  const isTransfer  = tx.type === 'transfer'
-  const isIncome    = tx.type === 'income'
-  const isRefund    = tx.type === 'refund'
-  const isSavings   = isSavingsTransfer(tx)
-  const holdingName = useAppStore(s => {
-    if (!isSavings) return undefined
-    const asset = findLinkedAsset(s.assets, tx.id)
-    return asset ? asset.name || 'Gold' : undefined
-  })
-  const isFill = isFuelExpense(tx) && !!tx.fuelLitres
-  const kmPerLitre = useAppStore(s => isFill ? mileageFor(s.transactions, s.settings, tx.id) : undefined)
-  const vehicleName = useAppStore(s => {
-    const vehicles = s.settings?.vehicles ?? []
-    return isFill && vehicles.length > 1 ? vehicles.find(v => v.id === tx.vehicleId)?.name : undefined
-  })
-
-  const notes = tx.notes?.trim()
-  const hasBadges = isBorrowing || isTransfer || !!tx.settledPerson || !!tx.isRecurring || !!tx._refundedAmount
-
-  let color: string, icon: React.ReactNode, label: string, amountColor: string, prefix: string
-
-  if (isRefund) {
-    color       = 'var(--good)'
-    icon        = <RotateCcw size={17} style={{ color }} />
-    label       = `${getCategoryDisplayName(tx.category)} Refund`
-    amountColor = 'var(--good-ink)'
-    prefix      = '+'
-  } else if (isBorrowing) {
-    const isLent = tx._borrowDir === 'lent'
-    color       = isLent ? 'var(--warn)' : 'var(--info)'
-    icon        = isLent
-      ? <UserMinus size={17} style={{ color }} />
-      : <UserPlus  size={17} style={{ color }} />
-    label       = tx._person ?? (isLent ? 'Lent' : 'Borrowed')
-    amountColor = isLent ? 'var(--warn-ink)' : 'var(--info-ink)'
-    prefix      = isLent ? '−' : '+'
-  } else if (isTransfer) {
-    const disp = getTransferDisplay(tx)
-    if (disp.isSavings) {
-      const vehicle = tx.savingsVehicle || disp.label
-      const meta = getSavingsVehicleMeta(vehicle)
-      color     = meta.color
-      icon      = <meta.Icon size={17} style={{ color }} stroke={1.5} />
-      label     = disp.label
-    } else {
-      color     = 'var(--info)'
-      icon      = <ArrowLeftRight size={17} style={{ color }} />
-      label     = disp.label
-    }
-    amountColor = disp.dir === 'in' ? 'var(--good-ink)' : 'var(--text-2)'
-    prefix      = disp.dir === 'in' ? '+' : '−'
-  } else {
-    color       = CATEGORY_COLORS[tx.category] ?? 'var(--text-3)'
-    icon        = <CategoryIcon category={tx.category} size={17} color={color} />
-    label       = getCategoryDisplayName(tx.category)
-    amountColor = isIncome ? 'var(--good-ink)' : 'var(--text)'
-    prefix      = isIncome ? '+' : '−'
-  }
+export function TxnRow({ tx, onOpen }: { tx: ViewTx; onOpen: (t: ViewTx) => void }) {
+  const assets = useAppStore(s => s.assets)
+  const transactions = useAppStore(s => s.transactions)
+  const settings = useAppStore(s => s.settings)
+  const m = useMemo(() => rowModel(tx, { assets, transactions, settings }), [tx, assets, transactions, settings])
 
   return (
-    <button
-      onClick={() => onSelect(tx)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 13,
-        padding: '11px 12px', borderRadius: 14,
-        background: 'transparent', border: 'none',
-        cursor: 'pointer', textAlign: 'left', width: '100%',
-        transition: 'background .12s, transform .14s cubic-bezier(.2,.8,.2,1)',
-        WebkitTapHighlightColor: 'transparent',
-        fontFamily: 'inherit',
-      }}
-      onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-      onPointerDown={e => (e.currentTarget.style.transform = 'scale(0.985)')}
-      onPointerUp={e => (e.currentTarget.style.transform = 'scale(1)')}
-      onPointerLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
-    >
-      {/* Category avatar — 44px matching design */}
-      <div style={{
-        width: 44, height: 44, borderRadius: 14, flexShrink: 0,
-        background: `color-mix(in oklch, ${color} 18%, var(--surface))`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        {icon}
+    <button className="txr" onClick={() => onOpen(tx)} style={{ color: 'var(--t1)' }}>
+      <div style={avatarStyle(m.look.color)}>
+        {m.look.initial
+          ? <span style={initialStyle(m.look.color)}>{m.look.initial}</span>
+          : m.look.icon?.(20)}
       </div>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {label}
+      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 6, rowGap: 4, minHeight: 22 }}>
+          <span style={{ fontSize: 15, fontWeight: 600, lineHeight: '22px', letterSpacing: '-0.005em', overflowWrap: 'anywhere' }}>{m.title}</span>
+          {m.badges.map(b => (
+            <span key={b.label} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4, height: 20, padding: '0 7px', borderRadius: 999,
+              fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap', lineHeight: 1,
+              background: `var(--${b.tone === 'neutral' ? 's2' : b.tone + '-soft'})`,
+              color: b.tone === 'neutral' ? 'var(--t2)' : `var(--${b.tone}-ink)`,
+            }}>
+              {b.repeat && <Repeat size={11} />}
+              {b.label}
+            </span>
+          ))}
         </div>
-        {hasBadges && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 3, minWidth: 0 }}>
-          {isBorrowing && (
-            <span
-              className="pill"
-              style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0,
-                background: tx._borrowDir === 'lent' ? 'var(--warn-soft)' : 'var(--info-soft)',
-                color:      tx._borrowDir === 'lent' ? 'var(--warn-ink)'  : 'var(--info-ink)',
-                border: 'none',
-              }}
-            >
-              {tx._borrowDir}
-            </span>
-          )}
-          {isTransfer && (
-            getTransferDisplay(tx).isSavings
-              ? <span className="pill" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0, background: 'var(--good-soft)', color: 'var(--good-ink)', border: 'none' }}>savings</span>
-              : <span className="pill info" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0 }}>transfer</span>
-          )}
-          {tx.settledPerson && (
-            <span className="pill" style={{ fontSize: 10.5, padding: '1px 7px', minWidth: 0, maxWidth: '100%', background: 'var(--warn-soft)', color: 'var(--warn-ink)', border: 'none' }}>
-              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>via {tx.settledPerson}</span>
-            </span>
-          )}
-          {tx.isRecurring && (
-            <span className="pill" style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0 }}>recurring</span>
-          )}
-          {!!tx._refundedAmount && (
-            <span
-              className="pill"
-              style={{ fontSize: 10.5, padding: '1px 7px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 3,
-                background: 'var(--good-soft)', color: 'var(--good-ink)', border: 'none' }}
-            >
-              <RotateCcw size={9} /> refunded {formatCurrencyFull(tx._refundedAmount)}
-            </span>
-          )}
-        </div>
-        )}
-        {/* 9, 10 — whitespace-only notes don't render; RTL notes keep their own direction */}
-        {notes && (
-          <div dir="auto" style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {notes}
+
+        {m.lines.map((ln, i) => (
+          <div key={i} dir="auto" style={{
+            fontSize: 13, lineHeight: '18px', color: 'var(--t2)', overflowWrap: 'anywhere', minWidth: 0,
+            ...(ln.clamp ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}),
+          }}>
+            {ln.segs.map((sg, j) => <span key={j} style={sg.style}>{sg.text}</span>)}
           </div>
-        )}
-        {!!tx.goldGrams && (
-          <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {tx.goldGrams}g · {tx.goldKarat ?? 22}K{tx.goldPricePerGram ? ` · ₹${tx.goldPricePerGram.toLocaleString('en-IN')}/g` : ''}
-          </div>
-        )}
-        {isFill && (
-          <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {vehicleName ? `${vehicleName} · ` : ''}{tx.fuelLitres} L
-            {tx.fuelPricePerLitre ? ` · ₹${tx.fuelPricePerLitre.toLocaleString('en-IN')}/L` : ''}
-            {tx.fuelDiscount ? ` · ₹${tx.fuelDiscount.toLocaleString('en-IN')} off` : ''}
-            {kmPerLitre ? <span style={{ color: 'var(--good-ink)', fontWeight: 600 }}> · {kmPerLitre.toFixed(1)} km/l</span> : ''}
-          </div>
-        )}
-        {holdingName && (
-          <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            → {holdingName}
-          </div>
-        )}
-        {tx.tags && tx.tags.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, minWidth: 0 }}>
-            {tx.tags.slice(0, MAX_TAGS).map(tag => (
-              <span
-                key={tag}
-                style={{
-                  fontSize: 10, fontWeight: 500, padding: '1px 6px', borderRadius: 20,
-                  border: '1px solid var(--border)', color: 'var(--text-3)', background: 'var(--surface-2)',
-                  whiteSpace: 'nowrap', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}
-              >
-                #{tag}
-              </span>
+        ))}
+
+        {m.tags.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
+            {m.tags.map(tg => (
+              <span key={tg} style={{ height: 20, display: 'inline-flex', alignItems: 'center', padding: '0 7px', borderRadius: 6, background: 'var(--s2)', color: 'var(--t2)', fontSize: 12, fontWeight: 500, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tg}</span>
             ))}
-            {tx.tags.length > MAX_TAGS && (
-              <span style={{ fontSize: 10, fontWeight: 600, padding: '1px 4px', color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-                +{tx.tags.length - MAX_TAGS}
-              </span>
+            {m.more && (
+              <span style={{ height: 20, display: 'inline-flex', alignItems: 'center', padding: '0 6px', borderRadius: 6, border: '1px solid var(--border)', color: 'var(--t2)', fontSize: 12, fontWeight: 600 }}>{m.more}</span>
             )}
           </div>
         )}
       </div>
 
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 700, color: amountColor, letterSpacing: '-0.01em', fontFamily: "'Geist Mono', monospace" }}>
-          {prefix}{formatCurrencyFull(tx.amount)}
-        </div>
-        {!!tx._refundedAmount && (
-          <div style={{ fontSize: 10.5, color: 'var(--text-3)', marginTop: 1, fontFamily: "'Geist Mono', monospace" }}>
-            net {formatCurrencyFull(Math.max(0, tx.amount - tx._refundedAmount))}
-          </div>
-        )}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+        <span style={{
+          fontFamily: MONO, fontSize: 15, fontWeight: 500, lineHeight: '22px', color: m.amountColor, whiteSpace: 'nowrap',
+          fontVariantNumeric: 'tabular-nums', textDecoration: m.fullyRefunded ? 'line-through' : 'none',
+        }}>{m.amount}</span>
+        {m.net && <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--t2)', whiteSpace: 'nowrap' }}>{m.net}</span>}
       </div>
     </button>
   )
 }
 
-// ── Day group ────────────────────────────────────────────────────────────────
+// ── Day-grouped list ─────────────────────────────────────────────────────────
 
-function DayGroup({ date, txs, defaultOpen, onSelect }: {
-  date: string
-  txs: ViewTx[]
-  defaultOpen: boolean
-  onSelect: (t: Transaction) => void
-}) {
-  const [open, setOpen] = useState(defaultOpen)
-  useEffect(() => { setOpen(defaultOpen) }, [defaultOpen])
+export interface DayGroup { key: string; items: ViewTx[]; monthBreak: string | null }
 
-  const { income, expenses, saved, refunded } = useMemo(() => {
-    let income = 0, expenses = 0, saved = 0, refunded = 0
-    for (const tx of txs) {
-      if (tx._borrowDir) continue  // borrowings don't count in P&L summary
-      if (tx.type === 'income') income += tx.amount
-      else if (tx.type === 'expense') expenses += tx.amount
-      // refunds aren't income and aren't a reduction of today's spend (often for
-      // a much older purchase) — shown as their own "money back" figure instead
-      else if (tx.type === 'refund') refunded += tx.amount
-      else {
-        const { dir, isSavings } = getTransferDisplay(tx)
-        if (dir === 'in') income += tx.amount
-        else if (isSavings) saved += tx.amount
-        else expenses += tx.amount
-      }
-    }
-    return { income, expenses, saved, refunded }
-  }, [txs])
+/** Busy days show this many rows until expanded */
+const LIMIT = 6
 
-  return (
-    <div>
-      <button
-        onClick={() => setOpen(v => !v)}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-          padding: '10px 12px 6px', borderRadius: 12,
-          background: 'transparent', border: 'none', cursor: 'pointer',
-          transition: 'background .12s', fontFamily: 'inherit',
-        }}
-        onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-      >
-        {open
-          ? <ChevronDown  size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} />
-          : <ChevronRight size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} />
-        }
-        <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-2)', flexShrink: 0, whiteSpace: 'nowrap', textAlign: 'left' }}>
-          {dayLabel(date)}
-        </span>
-        {/* Totals take the remaining width and wrap onto a second line on narrow screens */}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', columnGap: 10, rowGap: 2 }}>
-          {income > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--good-ink)' }}>
-              <ArrowDown size={11} />{formatCurrencyFull(income)}
-            </span>
-          )}
-          {refunded > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--good-ink)' }}>
-              <RotateCcw size={11} />{formatCurrencyFull(refunded)}
-            </span>
-          )}
-          {expenses > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--bad-ink)' }}>
-              <ArrowUp size={11} />{formatCurrencyFull(expenses)}
-            </span>
-          )}
-          {saved > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', color: 'var(--warn-ink)' }}>
-              <ArrowUp size={11} />{formatCurrencyFull(saved)}
-            </span>
-          )}
-        </div>
-      </button>
+const chevron = (open: boolean) => (
+  <ChevronDown size={16} color="var(--t3)" style={{ flex: 'none', transform: open ? 'none' : 'rotate(-90deg)', transition: 'transform .2s cubic-bezier(0.23,1,0.32,1)' }} />
+)
+const countChip = (n: number) => (
+  <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--t3)', padding: '1px 6px', borderRadius: 6, background: 'var(--s2)' }}>{n}</span>
+)
+const totalSpan = (x: { text: string; color: string }) => (
+  <span key={x.text} style={{ fontFamily: MONO, fontSize: 12, fontWeight: 500, color: x.color, whiteSpace: 'nowrap' }}>{x.text}</span>
+)
+const moreText = (n: number, label: string) => `Show ${n - 5} more on ${label.replace(/^Today · |^Yesterday · /, '')}`
 
-      {open && (
-        <div style={{ paddingLeft: 4 }}>
-          {txs.map(tx => <TxRow key={tx.id} tx={tx} onSelect={onSelect} />)}
-        </div>
-      )}
-    </div>
-  )
+interface ListProps {
+  groups: DayGroup[]
+  collapsed: Record<string, boolean>
+  expanded: Record<string, boolean>
+  onToggle: (key: string) => void
+  onExpand: (key: string) => void
+  onOpen: (t: ViewTx) => void
+  /** Desktop: day headers stick under the page header, on the list card's surface */
+  desktop?: boolean
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
-
-export default function TransactionList({ filterMonth = false, limit, transactions: txOverride, groupByDay = false, defaultExpandAll = false, showBorrowings = true }: Props) {
-  const { transactions: storeTxs, borrowings, selectedMonth, settings } = useAppStore()
-  const [selected, setSelected] = useState<Transaction | null>(null)
-
-  // Total refunded per original expense id, across all time (not just the visible range)
-  const refundedByOriginal = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const t of storeTxs) {
-      if (t.type === 'refund' && t.refundOf) {
-        map.set(t.refundOf, (map.get(t.refundOf) ?? 0) + t.amount)
-      }
-    }
-    return map
-  }, [storeTxs])
-
-  const base: ViewTx[] = useMemo(() => {
-    const txs: Transaction[] = txOverride ?? (filterMonth
-      ? getTransactionsForMonth(storeTxs, selectedMonth, settings)
-      : storeTxs)
-
-    const withRefunds: ViewTx[] = txs.map(t =>
-      t.type === 'expense' && refundedByOriginal.has(t.id)
-        ? { ...t, _refundedAmount: refundedByOriginal.get(t.id) }
-        : t
-    )
-
-    if (!showBorrowings) return withRefunds
-
-    // Filter borrowings to the same date range
-    const { start, end } = getCycleRange(selectedMonth, settings)
-    const borrowingRows = borrowings
-      .filter(b => b.date >= start && b.date <= end)
-      .map(borrowingToViewTx)
-
-    // Only hide loan_given transactions — they're represented by synthetic borrowing rows.
-    // Repayment transactions are shown as real entries so users can delete them and reverse the borrowing.
-    const filteredTxs = withRefunds.filter(t => !(t.type === 'transfer' && t.transferKind === 'loan_given'))
-
-    return [...filteredTxs, ...borrowingRows]
-  }, [txOverride, storeTxs, borrowings, selectedMonth, settings, filterMonth, showBorrowings, refundedByOriginal])
-
-  const list  = [...base].sort((a, b) => {
-    const dateDiff = b.date.localeCompare(a.date)
-    if (dateDiff !== 0) return dateDiff
-    return b.createdAt.localeCompare(a.createdAt) // newest logged first → at top within a day
-  })
-  const shown = limit ? list.slice(0, limit) : list
-
-  const today = format(new Date(), 'yyyy-MM-dd')
-
-  const groups: [string, ViewTx[]][] = useMemo(() => {
-    if (!groupByDay) return []
-    const map = new Map<string, ViewTx[]>()
-    for (const tx of shown) {
-      if (!map.has(tx.date)) map.set(tx.date, [])
-      map.get(tx.date)!.push(tx)
-    }
-    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]))
-  }, [shown, groupByDay])
-
-  if (shown.length === 0) {
-    return (
-      <div style={{ padding: '40px 0', textAlign: 'center' }}>
-        <p style={{ color: 'var(--text-3)', fontSize: 13 }}>No transactions found.</p>
-      </div>
-    )
-  }
-
-  if (!groupByDay) {
-    return (
-      <>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {shown.map(tx => <TxRow key={tx.id} tx={tx} onSelect={setSelected} />)}
-        </div>
-        <TransactionDetailModal tx={selected} onClose={() => setSelected(null)} onNavigate={setSelected} />
-      </>
-    )
-  }
-
+export default function TransactionList({ groups, collapsed, expanded, onToggle, onExpand, onOpen, desktop = false }: ListProps) {
   return (
     <>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {groups.map(([date, txs]) => (
-          <DayGroup
-            key={date}
-            date={date}
-            txs={txs}
-            defaultOpen={date === today || defaultExpandAll}
-            onSelect={setSelected}
-          />
-        ))}
-      </div>
-      <TransactionDetailModal tx={selected} onClose={() => setSelected(null)} onNavigate={setSelected} />
+      {groups.map((g, i) => {
+        const open = !collapsed[g.key]
+        const long = g.items.length > LIMIT + 1 && !expanded[g.key]
+        const items = long ? g.items.slice(0, 5) : g.items
+        const label = dayLabel(g.key)
+        const totals = dayTotals(g.items)
+        return (
+          <Fragment key={g.key}>
+            {g.monthBreak && (desktop
+              ? <div style={{ padding: '20px 12px 4px', fontFamily: "'Instrument Serif', serif", fontStyle: 'italic', fontSize: 24, lineHeight: 1.1 }}>{g.monthBreak}</div>
+              : <div style={{ padding: '18px 12px 0', fontFamily: "'Instrument Serif', serif", fontStyle: 'italic', fontSize: 22 }}>{g.monthBreak}</div>)}
+            {desktop ? (
+              <div style={{ position: 'sticky', top: 'var(--txn-head, 0px)', zIndex: 2, background: 'var(--surface)', borderTop: i === 0 || g.monthBreak ? '0' : '1px solid var(--border)' }}>
+                <button onClick={() => onToggle(g.key)} aria-expanded={open} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '14px 12px 8px', background: 'transparent', border: 0, textAlign: 'left' }}>
+                  {chevron(open)}
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{label}</span>
+                  {countChip(g.items.length)}
+                  <span style={{ flex: 1 }} />
+                  <span style={{ display: 'flex', gap: 14, flexWrap: 'wrap', justifyContent: 'flex-end' }}>{totals.map(totalSpan)}</span>
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => onToggle(g.key)} aria-expanded={open} style={{ width: '100%', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 8px', minHeight: 44, padding: '12px 12px 6px', background: 'transparent', border: 0, textAlign: 'left' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 0 auto' }}>
+                  {chevron(open)}
+                  <span style={{ fontSize: 13, fontWeight: 700 }}>{label}</span>
+                  {countChip(g.items.length)}
+                </span>
+                <span style={{ display: 'flex', gap: '4px 12px', flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto' }}>{totals.map(totalSpan)}</span>
+              </button>
+            )}
+            {open && (
+              <div style={{ display: 'flex', flexDirection: 'column', paddingBottom: desktop ? 4 : 0 }}>
+                {items.map(tx => <TxnRow key={tx.id} tx={tx} onOpen={onOpen} />)}
+                {long && (desktop ? (
+                  <button className="txn-hover" onClick={() => onExpand(g.key)} style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 12px 6px 68px', height: 36, padding: '0 12px', border: '1px dashed var(--border)', borderRadius: 10, background: 'transparent', fontSize: 13, fontWeight: 600, color: 'var(--t2)' }}>
+                    <ChevronsDown size={14} />{moreText(g.items.length, label)}
+                  </button>
+                ) : (
+                  <button onClick={() => onExpand(g.key)} style={{ margin: '2px 12px 6px', height: 44, border: '1px dashed var(--border)', borderRadius: 12, background: 'transparent', fontSize: 14, fontWeight: 600, color: 'var(--t2)' }}>
+                    {moreText(g.items.length, label)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </Fragment>
+        )
+      })}
     </>
   )
 }

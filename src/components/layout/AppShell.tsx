@@ -537,8 +537,11 @@ export default function AppShell({ title, children, fillPage }: Props) {
             style={{
               flex: 1,
               background: 'var(--bg)',
-              overflowY: fillPage ? 'hidden' : 'auto',
-              overflowX: 'hidden',
+              // The document scrolls, not <main> (it grows with its content). `clip` trims sideways
+              // overflow without making <main> a scroll container, so sticky elements in a page
+              // stick to the window instead of to a <main> that never scrolls.
+              overflowY: fillPage ? 'hidden' : 'visible',
+              overflowX: fillPage ? 'hidden' : 'clip',
               position: 'relative',
               WebkitOverflowScrolling: 'touch' as never,
               ...(fillPage ? { padding: 0, display: 'flex', flexDirection: 'column' } : {}),

@@ -2,53 +2,58 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useMemo, useEffect, Suspense } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback, Suspense, type CSSProperties, type ReactNode } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Download, Plus, SlidersHorizontal, Eye, EyeOff, Search, X, PiggyBank, CalendarRange } from 'lucide-react'
+import { format, parseISO, subDays } from 'date-fns'
+import { ArrowDown, Calendar, CalendarRange, ChevronLeft, ChevronRight, Download, Hash, ListFilter, PiggyBank, Search, Shapes, SlidersHorizontal, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import AppShell from '@/components/layout/AppShell'
-import TransactionList from '@/components/transactions/TransactionList'
+import TransactionList, { type DayGroup } from '@/components/transactions/TransactionList'
+import TransactionDetailModal, { useIsDesktop, type Notify } from '@/components/transactions/TransactionDetailModal'
+import AddTransactionModal from '@/components/transactions/AddTransactionModal'
 import BillScannerModal from '@/components/transactions/BillScannerModal'
+import {
+  CategoryList, DateRangePicker, FilterSheet, Popover, TagChips, TYPE_OPTS, chipStyle, segStyle,
+  type CatItem, type Filters, type FilterType, type Preset, type TagItem, type VehicleItem,
+} from '@/components/transactions/TxnFilters'
+import {
+  EmptyFilter, EmptyMonth, EmptySearch, FilterSummary, ListSkeleton, PageToast, SavingsSummary,
+  StatusRow, SummaryPhone, type MonthSummary, type Note,
+} from '@/components/transactions/TxnParts'
+import {
+  ChipInner, DesktopHeader, EmptyFilterD, EmptyMonthD, EmptySearchD, FilteredBy, MonthCard, SavingsLine, StatusLine, TopCard,
+  filterChipStyle, type TopRow,
+} from '@/components/transactions/TxnDesktop'
+import { MONO, R, borrowingToViewTx, kindOf, lookOf, matchesQuery, titleOf, type ViewTx } from '@/components/transactions/txnView'
 import { getPendingSharedImage, clearPendingSharedImage } from '@/lib/shareTargetDb'
 import { useAppStore } from '@/store/appStore'
 import {
-  buildMonthlySummary,
-  buildSavingsByVehicle,
-  isSavingsTransfer,
-  formatCurrencyFull,
-  EXPENSE_CATEGORIES,
-  INCOME_CATEGORIES,
-  getTransactionsForMonth,
-  CATEGORY_COLORS,
-  getLast6Months,
-  getMonthLabel,
-  computeCarryForward,
+  buildMonthlySummary, buildSavingsByVehicle, isSavingsTransfer, EXPENSE_CATEGORIES, INCOME_CATEGORIES,
+  getTransactionsForMonth, CATEGORY_COLORS, getLast6Months, computeCarryForward, computeMoneyStreak,
 } from '@/lib/utils'
-import type { TransactionType } from '@/types'
-import { getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
+import { getCycleRange } from '@/lib/cycle'
+import { CategoryIcon, getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
 
-type FilterType = TransactionType | 'all' | 'savings'
+/** Rows render in pages of this many, loading the next as the list end nears */
+const PAGE = 100
+const REVEAL_KEY = 'txn-reveal'
+const TYPE_IDS = new Set<FilterType>(['all', 'expense', 'income', 'savings', 'transfer'])
 
-const TAG_COLOR_PALETTE = ['#f97316', '#6366f1', '#22c55e', '#ec4899', '#0ea5e9', '#f59e0b', '#a855f7', '#14b8a6']
-function colorForTag(tag: string): string {
-  let hash = 0
-  for (let i = 0; i < tag.length; i++) hash = (hash * 31 + tag.charCodeAt(i)) >>> 0
-  return TAG_COLOR_PALETTE[hash % TAG_COLOR_PALETTE.length]
-}
-
-const TYPE_OPTS: { id: FilterType; label: string }[] = [
-  { id: 'all',      label: 'All' },
-  { id: 'expense',  label: 'Expenses' },
-  { id: 'income',   label: 'Income' },
-  { id: 'savings',  label: 'Savings' },
-  { id: 'transfer', label: 'Transfers' },
-]
+const monthLabel = (m: string) => format(parseISO(`${m}-01`), 'MMM yyyy')
+const dm = (d: string) => format(parseISO(d), 'd MMM')
+/** "7 – 13 Nov", or "15 Oct – 13 Nov" across months */
+const rangeSub = (a: string, b: string) => (a.slice(0, 7) === b.slice(0, 7) ? `${format(parseISO(a), 'd')} – ${dm(b)}` : `${dm(a)} – ${dm(b)}`)
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+const KIND_LABEL = { exp: 'Expense', inc: 'Income', ref: 'Refund', lent: 'Lent', borr: 'Borrowed', sav: 'Savings', savout: 'Savings withdrawal', tin: 'Repayment received', tout: 'Loan repaid' } as const
 
 function TransactionsInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const [pendingShareBlob, setPendingShareBlob] = useState<Blob | null>(null)
+  const desktop = useIsDesktop()
+  const { transactions, borrowings, selectedMonth, setSelectedMonth, settings, assets, initialized } = useAppStore()
 
+  // ── Shared image → bill scanner ─────────────────────────────────────────────
+  const [pendingShareBlob, setPendingShareBlob] = useState<Blob | null>(null)
   useEffect(() => {
     const scanParam = searchParams.get('scan')
     if (scanParam === 'shared') {
@@ -68,740 +73,587 @@ function TransactionsInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const [typeFilter, setTypeFilter] = useState<FilterType>((searchParams.get('type') as FilterType) ?? 'all')
-  const [catFilter, setCatFilter]   = useState<string>(searchParams.get('cat') ?? 'all')
-  const [tagFilter, setTagFilter]   = useState<string>(searchParams.get('tag') ?? 'all')
-  const [vehicleFilter, setVehicleFilter] = useState<string>(searchParams.get('vehicle') ?? 'all')
-  const [searchQuery, setSearchQuery]   = useState<string>(searchParams.get('search') ?? '')
-  const [dateFrom, setDateFrom] = useState<string>(searchParams.get('from') ?? '')
-  const [dateTo,   setDateTo]   = useState<string>(searchParams.get('to') ?? '')
-  const [showIncome,    setShowIncome]   = useState(false)
-  const [showExpenses,  setShowExpenses] = useState(false)
-  const [showNet,       setShowNet]      = useState(false)
-  const [mobileMasked,  setMobileMasked] = useState(true)
-
-  const { transactions, borrowings, selectedMonth, settings } = useAppStore()
-
-  const VISIBLE_COUNT = 100
-  const [visibleCount, setVisibleCount] = useState(VISIBLE_COUNT)
-
-  // Reset visible count when filters change
-  useEffect(() => { setVisibleCount(VISIBLE_COUNT) }, [typeFilter, catFilter, tagFilter, vehicleFilter, searchQuery, selectedMonth, dateFrom, dateTo])
-  const summary  = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
-  const monthTxs = getTransactionsForMonth(transactions, selectedMonth, settings)
-  // True cash leaving the account: category spend + money still out on new loans this cycle + borrowed money repaid
-  const moneyOutTotal = summary.totalExpenses + summary.lentOut + summary.repaymentPaid
-  // Net cash parked in savings this cycle (contributions minus anything pulled back out)
-  const savingsNet = summary.savingsContributed - summary.savingsWithdrawn
-
-  const { carryForward, prevMonthLabel } = useMemo(() => {
-    const months  = getLast6Months()
-    const curIdx  = months.indexOf(selectedMonth)
-    const prev    = curIdx > 0 ? months[curIdx - 1] : null
+  // ── Filters (deep links fill them in) ───────────────────────────────────────
+  const [filters, setFiltersState] = useState<Filters>(() => {
+    const t = searchParams.get('type') as FilterType | null
     return {
-      carryForward:   curIdx > 0 ? computeCarryForward(months.slice(0, curIdx), transactions, settings, borrowings) : 0,
-      prevMonthLabel: prev ? getMonthLabel(prev) : '',
+      type: t && TYPE_IDS.has(t) ? t : 'all',
+      cat: searchParams.get('cat'),
+      tag: searchParams.get('tag'),
+      vehicle: searchParams.get('vehicle'),
+      from: searchParams.get('from'),
+      to: searchParams.get('to'),
+      preset: searchParams.get('from') || searchParams.get('to') ? 'custom' : null,
+      q: searchParams.get('search') ?? '',
     }
-  }, [transactions, selectedMonth, settings, borrowings])
+  })
+  const setFilters = useCallback((p: Partial<Filters>) => setFiltersState(f => ({ ...f, ...p })), [])
+  const clearAll = useCallback(() => setFiltersState({ type: 'all', cat: null, tag: null, vehicle: null, from: null, to: null, preset: null, q: '' }), [])
+  const backToMonth = () => setFilters({ q: '', from: null, to: null, preset: null })
 
-  const filtered = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase()
-    const usesDateFilter = dateFrom || dateTo
-    const source = (q || usesDateFilter)
-      ? [...transactions].sort((a, b) => b.date.localeCompare(a.date))
-      : monthTxs
-    return source.filter(t => {
-      if (dateFrom && t.date < dateFrom) return false
-      if (dateTo   && t.date > dateTo)   return false
-      const savings = isSavingsTransfer(t)
-      if (typeFilter === 'savings') {
-        if (!savings) return false
-        if (vehicleFilter !== 'all' && (t.savingsVehicle ?? '') !== vehicleFilter) return false
-      } else {
-        if (typeFilter === 'transfer' && !(t.type === 'transfer' && !savings)) return false
-        if (typeFilter !== 'all' && typeFilter !== 'transfer' && t.type !== typeFilter) return false
-        if (catFilter !== 'all' && t.category !== catFilter) return false
-      }
-      if (tagFilter !== 'all' && !(t.tags ?? []).includes(tagFilter)) return false
-      if (q) {
-        const catDisplay = getCategoryDisplayName(t.category ?? '').toLowerCase()
-        const notes      = (t.notes ?? '').toLowerCase()
-        const category   = (t.category ?? '').toLowerCase()
-        const amount     = String(t.amount)
-        const kind       = (t.transferKind ?? '').replace(/_/g, ' ').toLowerCase()
-        const vehicle    = (t.savingsVehicle ?? '').toLowerCase()
-        const tags       = (t.tags ?? []).join(' ').toLowerCase()
-        if (
-          !notes.includes(q) &&
-          !category.includes(q) &&
-          !catDisplay.includes(q) &&
-          !amount.includes(q) &&
-          !kind.includes(q) &&
-          !vehicle.includes(q) &&
-          !tags.includes(q)
-        ) return false
-      }
-      return true
+  // ── View state ──────────────────────────────────────────────────────────────
+  const [reveal, setReveal] = useState(false)
+  useEffect(() => { try { setReveal(localStorage.getItem(REVEAL_KEY) === '1') } catch { /* private mode */ } }, [])
+  function toggleReveal() {
+    setReveal(r => {
+      try { localStorage.setItem(REVEAL_KEY, r ? '0' : '1') } catch { /* private mode */ }
+      return !r
     })
-  }, [monthTxs, transactions, typeFilter, catFilter, tagFilter, vehicleFilter, searchQuery, dateFrom, dateTo])
+  }
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [visible, setVisible] = useState(PAGE)
+  const [sel, setSel] = useState<ViewTx | null>(null)
+  const [sheet, setSheet] = useState(false)
+  const [pop, setPop] = useState<null | 'cat' | 'tag' | 'date' | 'export' | 'add'>(null)
+  const [popCatQ, setPopCatQ] = useState('')
+  const [addOpen, setAddOpen] = useState(false)
+  const [scanOpen, setScanOpen] = useState(false)
+  const [toastState, setToastState] = useState<{ text: string; undo?: () => void } | null>(null)
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>()
+  const notify: Notify = useCallback((text, undo) => {
+    clearTimeout(toastTimer.current)
+    setToastState({ text, undo })
+    toastTimer.current = setTimeout(() => setToastState(null), 5000)
+  }, [])
+  useEffect(() => () => clearTimeout(toastTimer.current), [])
 
-  // Any filter narrowing the list — used to show/hide the "Clear filters" affordance
-  const hasAnyFilter = typeFilter !== 'all' || catFilter !== 'all' || tagFilter !== 'all' || vehicleFilter !== 'all'
-    || !!searchQuery.trim() || !!dateFrom || !!dateTo
+  // Desktop: only the header sticks and the page scrolls under it. The right column and day
+  // headers stop just below the header rather than behind it. Measured from a ref callback, since
+  // the header only mounts once the app's auth gate lets the page render.
+  const [headEl, setHeadEl] = useState<HTMLElement | null>(null)
+  const [headH, setHeadH] = useState(0)
+  useEffect(() => {
+    if (!headEl) return
+    const ro = new ResizeObserver(() => setHeadH(headEl.offsetHeight))
+    ro.observe(headEl)
+    return () => ro.disconnect()
+  }, [headEl])
 
-  function clearAllFilters() {
-    setTypeFilter('all')
-    setCatFilter('all')
-    setTagFilter('all')
-    setVehicleFilter('all')
-    setSearchQuery('')
-    setDateFrom('')
-    setDateTo('')
+  // Open at the top, so nothing starts out tucked under the sticky header after a reload
+  useEffect(() => { window.scrollTo(0, 0) }, [])
+
+  // "/" jumps to search on desktop
+  const searchRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (!desktop) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return
+      if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return
+      e.preventDefault()
+      searchRef.current?.focus()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [desktop])
+
+  // ── Month ───────────────────────────────────────────────────────────────────
+  const months = getLast6Months()
+  const mi = months.indexOf(selectedMonth)
+  const homeMonth = monthLabel(selectedMonth)
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const { start, end } = getCycleRange(selectedMonth, settings)
+  const rangeText = `${dm(start)} – ${dm(end)}`
+  const monthTxs = useMemo(() => getTransactionsForMonth(transactions, selectedMonth, settings), [transactions, selectedMonth, settings])
+
+  const q = filters.q.trim()
+  const allTime = !!(q || filters.from || filters.to)
+  const anyFilter = allTime || !!filters.cat || !!filters.tag || !!filters.vehicle || filters.type !== 'all'
+  const dateActive = !!(filters.from || filters.to)
+  const showCat = filters.type !== 'savings' && filters.type !== 'transfer'
+
+  function goMonth(i: number) {
+    if (i < 0 || i >= months.length) return
+    setSelectedMonth(months[i])
+    if (allTime) backToMonth()
   }
 
-  // Spend/income total for the current category/tag/date filters, within the filtered view
-  const hasActiveFilter = catFilter !== 'all' || tagFilter !== 'all' || !!dateFrom || !!dateTo
-  const filterSummary = useMemo(() => {
-    if (!hasActiveFilter) return null
-    let expense = 0, income = 0
-    for (const t of filtered) {
-      if (t.type === 'expense') expense += t.amount
-      else if (t.type === 'refund') expense -= t.amount
-      else if (t.type === 'income') income += t.amount
-    }
-    const badges: string[] = []
-    if (catFilter !== 'all') badges.push(getCategoryDisplayName(catFilter))
-    if (tagFilter !== 'all') badges.push(`#${tagFilter}`)
-    if (dateFrom || dateTo) badges.push(`${dateFrom || '…'} → ${dateTo || '…'}`)
-    return { count: filtered.length, expense, income, net: income - expense, badges }
-  }, [filtered, hasActiveFilter, catFilter, tagFilter, dateFrom, dateTo])
+  // ── The list ────────────────────────────────────────────────────────────────
+  const refundedByOriginal = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const t of transactions) if (t.type === 'refund' && t.refundOf) map.set(t.refundOf, (map.get(t.refundOf) ?? 0) + t.amount)
+    return map
+  }, [transactions])
 
-  // All tags in use (from transactions + saved custom tags), for the filter dropdown
-  const allTags = useMemo(() => {
-    const set = new Set<string>(settings?.customTags ?? [])
-    for (const t of transactions) for (const tag of t.tags ?? []) set.add(tag)
-    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  const list: ViewTx[] = useMemo(() => {
+    const source: ViewTx[] = (allTime ? transactions : monthTxs).map(t =>
+      t.type === 'expense' && refundedByOriginal.has(t.id) ? { ...t, _refundedAmount: refundedByOriginal.get(t.id) } : t)
+    // Unfiltered, loans show as one row per borrowing; their loan_given transfers would double them
+    const rows = anyFilter
+      ? source
+      : [
+          ...source.filter(t => !(t.type === 'transfer' && t.transferKind === 'loan_given')),
+          ...borrowings.filter(b => b.date >= start && b.date <= end).map(borrowingToViewTx),
+        ]
+    return rows.filter(t => {
+      if (filters.from && t.date < filters.from) return false
+      if (filters.to && t.date > filters.to) return false
+      const savings = isSavingsTransfer(t)
+      switch (filters.type) {
+        case 'expense': if (t.type !== 'expense' && t.type !== 'refund') return false; break
+        case 'income': if (t.type !== 'income') return false; break
+        case 'savings': if (!savings) return false; break
+        case 'transfer': if (t.type !== 'transfer' || savings) return false; break
+      }
+      if (filters.type === 'savings' && filters.vehicle && (t.savingsVehicle ?? '') !== filters.vehicle) return false
+      if (showCat && filters.cat && t.category !== filters.cat) return false
+      if (filters.tag && !(t.tags ?? []).includes(filters.tag)) return false
+      if (q && !matchesQuery(t, q, assets)) return false
+      return true
+    }).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))
+  }, [allTime, transactions, monthTxs, refundedByOriginal, anyFilter, borrowings, start, end, filters, showCat, q, assets])
+
+  // Back to the first page whenever what's listed changes
+  useEffect(() => { setVisible(PAGE) }, [filters, selectedMonth])
+
+  const groupsFor = useCallback((rows: ViewTx[]): DayGroup[] => {
+    const out: DayGroup[] = []
+    let lastMonth: string | null = null
+    for (const t of rows) {
+      const cur = out[out.length - 1]
+      if (cur && cur.key === t.date) { cur.items.push(t); continue }
+      const mk = t.date.slice(0, 7)
+      out.push({ key: t.date, items: [t], monthBreak: allTime && mk !== lastMonth ? format(parseISO(t.date), 'MMMM yyyy') : null })
+      lastMonth = mk
+    }
+    return out
+  }, [allTime])
+  const groups = useMemo(() => groupsFor(list.slice(0, visible)), [groupsFor, list, visible])
+  const allDays = useMemo(() => Array.from(new Set(list.map(t => t.date))), [list])
+  const hasMore = list.length > visible
+  const count = list.length
+  const anyOpen = allDays.some(d => !collapsed[d])
+  function toggleAll() {
+    if (!anyOpen) { setCollapsed({}); return }
+    setCollapsed(Object.fromEntries(allDays.map(d => [d, true])))
+  }
+
+  // Load the next page as the end of the list comes near
+  const sentinel = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = sentinel.current
+    if (!el || !hasMore) return
+    const io = new IntersectionObserver(es => { if (es[0].isIntersecting) setVisible(v => v + PAGE) }, { rootMargin: '600px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [hasMore, visible])
+
+  // ── Month summary ───────────────────────────────────────────────────────────
+  const summary = buildMonthlySummary(transactions, selectedMonth, settings, borrowings)
+  const carryForward = useMemo(() => (mi > 0 ? computeCarryForward(months.slice(0, mi), transactions, settings, borrowings) : 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [transactions, selectedMonth, settings, borrowings])
+  const monthSummary: MonthSummary = useMemo(() => {
+    const inNotes: Note[] = []
+    if (summary.totalBorrowed > 0) inNotes.push([`incl. ${R(summary.totalBorrowed)} borrowed`, 'var(--info-ink)'])
+    if (summary.repaymentIn > 0) inNotes.push([`← ${R(summary.repaymentIn)} repaid to you`, 'var(--good-ink)'])
+    if (carryForward > 0 && mi > 0) inNotes.push([`↩ ${R(carryForward)} from ${monthLabel(months[mi - 1])}`, 'var(--t2)'])
+    const outNotes: Note[] = []
+    if (summary.totalExpenses > 0) outNotes.push([`${R(summary.totalExpenses)} spent`, 'var(--bad-ink)'])
+    if (summary.lentOut > 0) outNotes.push([`${R(summary.lentOut)} lent out`, 'var(--info-ink)'])
+    if (summary.repaymentPaid > 0) outNotes.push([`${R(summary.repaymentPaid)} loan repaid`, 'var(--t2)'])
+    if (summary.savingsContributed > 0) {
+      const net = summary.savingsContributed - summary.savingsWithdrawn
+      outNotes.push([`${net < 0 ? '−' : ''}${R(net)} → savings${summary.savingsWithdrawn > 0 ? ` · ${R(summary.savingsContributed)} in − ${R(summary.savingsWithdrawn)} out` : ''}`, 'var(--t2)'])
+    }
+    return {
+      in: summary.totalIncome + summary.totalBorrowed + summary.repaymentIn + carryForward,
+      out: summary.totalExpenses + summary.lentOut + summary.repaymentPaid,
+      net: summary.cashNet + carryForward,
+      inNotes, outNotes, rangeText,
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summary.totalIncome, summary.totalBorrowed, summary.repaymentIn, summary.totalExpenses, summary.lentOut, summary.repaymentPaid, summary.savingsContributed, summary.savingsWithdrawn, summary.cashNet, carryForward, rangeText, mi])
+
+  // ── Picker data ─────────────────────────────────────────────────────────────
+  const { expCats, incCats } = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const t of monthTxs) counts[t.category] = (counts[t.category] ?? 0) + 1
+    const builtIn = new Set([...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES])
+    const item = (id: string, custom = false): CatItem => ({ id, name: getCategoryDisplayName(id), color: CATEGORY_COLORS[id] ?? '#94a3b8', count: counts[id] ?? 0, custom })
+    const byName = (a: CatItem, b: CatItem) => a.name.localeCompare(b.name)
+    return {
+      expCats: [...EXPENSE_CATEGORIES.map(c => item(c)), ...(settings?.customCategories ?? []).filter(c => !builtIn.has(c)).map(c => item(c, true))].sort(byName),
+      incCats: INCOME_CATEGORIES.map(c => item(c)).sort(byName),
+    }
+  }, [monthTxs, settings])
+
+  const tagItems: TagItem[] = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const tag of settings?.customTags ?? []) counts[tag] = 0
+    for (const t of transactions) for (const tag of t.tags ?? []) counts[tag] = (counts[tag] ?? 0) + 1
+    return Object.keys(counts).sort((a, b) => a.localeCompare(b)).map(tag => ({ tag, count: counts[tag] }))
   }, [transactions, settings])
 
+  const balances = useMemo(() => buildSavingsByVehicle(transactions, settings?.savingsOpeningBalances ?? {}), [transactions, settings])
+  const usedVehicles = useMemo(() => Object.keys(balances).sort((a, b) => a.localeCompare(b)), [balances])
+  const vehicleItems: VehicleItem[] = [
+    { id: null, label: 'All vehicles' },
+    ...usedVehicles.map(v => {
+      const meta = getSavingsVehicleMeta(v)
+      return { id: v, label: v, icon: <meta.Icon size={14} stroke={2} color={filters.vehicle === v ? 'currentColor' : meta.color} /> }
+    }),
+  ]
 
-  // Savings aggregates (selected month, respecting the vehicle sub-filter)
+  const presets: Preset[] = [
+    { id: 'cycle', label: 'This month', sub: rangeSub(start, end), from: start, to: end },
+    { id: '7d', label: 'Last 7 days', sub: rangeSub(format(subDays(new Date(), 6), 'yyyy-MM-dd'), today), from: format(subDays(new Date(), 6), 'yyyy-MM-dd'), to: today },
+    { id: '30d', label: 'Last 30 days', sub: rangeSub(format(subDays(new Date(), 29), 'yyyy-MM-dd'), today), from: format(subDays(new Date(), 29), 'yyyy-MM-dd'), to: today },
+    { id: 'custom', label: 'Custom', sub: 'Pick on calendar', from: null, to: null },
+  ]
+  const preset = presets.find(p => p.id === filters.preset)
+  const dateLabel = dateActive
+    ? preset && preset.id !== 'custom' ? preset.label : `${filters.from ? dm(filters.from) : '…'} – ${filters.to ? dm(filters.to) : '…'}`
+    : 'Date'
+
+  // ── Summaries over the filtered list ────────────────────────────────────────
+  const fsBadges: { label: string; onRemove: () => void }[] = []
+  if (showCat && filters.cat) fsBadges.push({ label: getCategoryDisplayName(filters.cat), onRemove: () => setFilters({ cat: null }) })
+  if (filters.tag) fsBadges.push({ label: `#${filters.tag}`, onRemove: () => setFilters({ tag: null }) })
+  if (dateActive) fsBadges.push({ label: dateLabel, onRemove: () => setFilters({ from: null, to: null, preset: null }) })
+  const showFS = fsBadges.length > 0 && filters.type !== 'savings' && count > 0
+  const fsTotals = useMemo(() => {
+    let spent = 0, income = 0
+    for (const t of list) {
+      const k = kindOf(t)
+      if (k === 'exp') spent += t.amount
+      else if (k === 'ref') spent -= t.amount
+      else if (k === 'inc') income += t.amount
+    }
+    return { spent, income }
+  }, [list])
+
   const savingsView = useMemo(() => {
-    const openingBalances = settings?.savingsOpeningBalances ?? {}
-    const inScope = monthTxs.filter(t => isSavingsTransfer(t) && (vehicleFilter === 'all' || (t.savingsVehicle ?? '') === vehicleFilter))
-    let contributed = 0, withdrawn = 0
-    for (const t of inScope) {
-      if (t.transferKind === 'savings_withdrawal' || t.transferKind === 'ef_withdrawal') withdrawn += t.amount
-      else contributed += t.amount
-    }
-    const allTime = buildSavingsByVehicle(transactions, openingBalances)
-    const balance = vehicleFilter === 'all'
-      ? Object.values(allTime).reduce((s, v) => s + v.balance, 0)
-      : (allTime[vehicleFilter]?.balance ?? 0)
-    return { contributed, withdrawn, net: contributed - withdrawn, balance }
-  }, [monthTxs, transactions, vehicleFilter, settings])
-
-  // Vehicles the user has actually used (for the sub-filter dropdown)
-  const usedVehicles = useMemo(
-    () => Object.keys(buildSavingsByVehicle(transactions, settings?.savingsOpeningBalances ?? {})).sort((a, b) => a.localeCompare(b)),
-    [transactions, settings]
-  )
-
-  const customCats = settings?.customCategories ?? []
-  const allCats = [
-    ...EXPENSE_CATEGORIES,
-    ...INCOME_CATEGORIES,
-    ...customCats.filter(c => ![...EXPENSE_CATEGORIES, ...INCOME_CATEGORIES].includes(c)),
-  ].sort((a, b) => getCategoryDisplayName(a).localeCompare(getCategoryDisplayName(b)))
-
-  function exportCSV() {
-    const rows = [
-      ['Date', 'Type', 'Category', 'Transfer Kind', 'Amount', 'Tags', 'Notes'],
-      ...monthTxs.map(t => [t.date, t.type, t.category, t.transferKind ?? '', String(t.amount), (t.tags ?? []).join('; '), t.notes]),
-    ]
-    const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n')
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href = url; a.download = `transactions-${selectedMonth}.csv`; a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  // Top expense categories for sidebar
-  const topCats = useMemo(() =>
-    Object.entries(summary.byCategory)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5),
-    [summary.byCategory]
-  )
-  const topCatsTotal = topCats.reduce((s, [, v]) => s + v, 0) || 1
-
-  // Top tags for sidebar (expense spend grouped by tag, current month)
-  const topTags = useMemo(() => {
-    const byTag: Record<string, number> = {}
+    let inAmt = 0, outAmt = 0
     for (const t of monthTxs) {
-      if (t.type !== 'expense') continue
-      for (const tag of t.tags ?? []) byTag[tag] = (byTag[tag] ?? 0) + t.amount
+      if (!isSavingsTransfer(t) || (filters.vehicle && (t.savingsVehicle ?? '') !== filters.vehicle)) continue
+      if (t.transferKind === 'savings_withdrawal' || t.transferKind === 'ef_withdrawal') outAmt += t.amount
+      else inAmt += t.amount
     }
-    return Object.entries(byTag)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5)
-  }, [monthTxs])
-  const topTagsTotal = topTags.reduce((s, [, v]) => s + v, 0) || 1
+    const total = filters.vehicle ? (balances[filters.vehicle]?.balance ?? 0) : Object.values(balances).reduce((s, v) => s + v.balance, 0)
+    return { inAmt, outAmt, total }
+  }, [monthTxs, filters.vehicle, balances])
+  const savMeta = filters.vehicle ? getSavingsVehicleMeta(filters.vehicle) : null
+  const savingsSummary = filters.type === 'savings' && (
+    <SavingsSummary
+      phone={!desktop}
+      title={filters.vehicle ? `${filters.vehicle} · balance` : 'Total saved (all-time)'}
+      total={savingsView.total}
+      color={savMeta?.color ?? '#22c55e'}
+      icon={savMeta ? <savMeta.Icon size={20} stroke={2} color={savMeta.color} /> : <PiggyBank size={20} color="#22c55e" />}
+      inAmt={savingsView.inAmt} outAmt={savingsView.outAmt}
+    />
+  )
+
+  // ── Export ──────────────────────────────────────────────────────────────────
+  function exportRows(rows: ViewTx[], file: string) {
+    const refundLink = (t: ViewTx) => {
+      if (t.refundOf) { const o = transactions.find(x => x.id === t.refundOf); return o ? `Refund of ${getCategoryDisplayName(o.category)} ${R(o.amount)} on ${o.date}` : 'Refund' }
+      const r = refundedByOriginal.get(t.id)
+      return r ? `Refunded ${R(r)}` : ''
+    }
+    const out = [
+      ['Date', 'Title', 'Category', 'Type', 'Amount', 'Notes', 'Tags', 'Refund links'],
+      ...rows.map(t => {
+        const k = kindOf(t)
+        return [t.date, titleOf(k, lookOf(t, k)), t._borrowDir ? '' : getCategoryDisplayName(t.category), KIND_LABEL[k], String(t.amount), t.notes ?? '', (t.tags ?? []).join('; '), refundLink(t)]
+      }),
+    ]
+    const csv = out.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    const a = document.createElement('a')
+    a.href = url; a.download = file; a.click()
+    URL.revokeObjectURL(url)
+    notify(`Exported ${plural(rows.length, 'row')} · ${file}`)
+  }
+  const monthFile = `growwly-${format(parseISO(`${selectedMonth}-01`), 'MMM-yyyy').toLowerCase()}.csv`
+  const exportView = () => { setPop(null); exportRows(list, allTime ? 'growwly-search.csv' : monthFile) }
+  const exportViewText = `${plural(count, 'row')} · ${allTime ? 'all time, ' : ''}${anyFilter ? 'with your filters' : 'everything shown'}`
+  const exportMonth = () => { setPop(null); exportRows(monthTxs, monthFile) }
+
+  // ── Rail insights ───────────────────────────────────────────────────────────
+  const showInsights = filters.type !== 'income' && filters.type !== 'savings'
+  const topCats: TopRow[] = Object.entries(summary.byCategory).filter(([, v]) => v > 0).sort(([, a], [, b]) => b - a).slice(0, 5)
+    .map(([cat, amount]) => {
+      const color = CATEGORY_COLORS[cat] ?? '#94a3b8'
+      return {
+        key: cat, name: getCategoryDisplayName(cat), amount, color, active: filters.cat === cat,
+        icon: <CategoryIcon category={cat} size={14} color={color} stroke={2} />,
+        onClick: () => setFilters({ cat: filters.cat === cat ? null : cat, type: showCat ? filters.type : 'all' }),
+      }
+    })
+  const topTags: TopRow[] = useMemo(() => {
+    const byTag: Record<string, number> = {}
+    for (const t of monthTxs) if (t.type === 'expense') for (const tag of t.tags ?? []) byTag[tag] = (byTag[tag] ?? 0) + t.amount
+    return Object.entries(byTag).sort(([, a], [, b]) => b - a).slice(0, 5).map(([tag, amount]) => ({
+      key: tag, name: `#${tag}`, amount, color: 'var(--wants)', active: filters.tag === tag,
+      onClick: () => setFilters({ tag: filters.tag === tag ? null : tag }),
+    }))
+  }, [monthTxs, filters.tag, setFilters])
+
+  // ── Shared pieces ───────────────────────────────────────────────────────────
+  const loading = !initialized
+  const nFilters = [filters.type !== 'all', filters.cat, filters.tag, filters.vehicle, dateActive].filter(Boolean).length
+  const scopeLabel = q ? 'Searching all time' : 'Date range · all months'
+  const monthsSpanned = new Set(list.map(t => t.date.slice(0, 7))).size
+  const scopeText = `${plural(count, 'result')}${count ? ` across ${plural(monthsSpanned, 'month')}` : ''}`
+  const streak = computeMoneyStreak(transactions, settings?.noSpendDays ?? [])
+  const setType = (t: FilterType) => setFilters({ type: t, cat: t === 'savings' || t === 'transfer' ? null : filters.cat, vehicle: t === 'savings' ? filters.vehicle : null })
+
+  const listCard: CSSProperties = { marginTop: 16, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 18, boxShadow: 'var(--shadow)', padding: '4px 8px 8px' }
+  const pillBtn: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, height: 32, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 999, background: 'var(--surface)', fontSize: 13, fontWeight: 600, color: 'var(--t1)' }
+  const continueToPrev = () => { goMonth(mi - 1); setCollapsed({}); setExpanded({}); window.scrollTo({ top: 0 }) }
+
+  const desktopList = loading ? <div style={listCard}><ListSkeleton /></div> : count > 0 ? (
+    <div style={listCard}>
+      <TransactionList
+        groups={groups} collapsed={collapsed} expanded={expanded} desktop
+        onToggle={k => setCollapsed(c => ({ ...c, [k]: !c[k] }))}
+        onExpand={k => setExpanded(e => ({ ...e, [k]: true }))}
+        onOpen={setSel}
+      />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '18px 12px 10px', borderTop: '1px solid var(--border)', fontSize: 13, color: 'var(--t3)' }}>
+        {hasMore ? (
+          <>
+            <div ref={sentinel} />
+            <span>Showing {visible} of {count}</span>
+            <button className="txn-hover" onClick={() => setVisible(v => v + PAGE)} style={pillBtn}>Show more<ArrowDown size={14} /></button>
+          </>
+        ) : (
+          <>
+            <span>{allTime ? 'End of results · searched all time' : `That’s everything in ${homeMonth}`}</span>
+            {!allTime && mi > 0 && <button className="txn-hover" onClick={continueToPrev} style={pillBtn}>Continue to {monthLabel(months[mi - 1])}<ArrowDown size={14} /></button>}
+          </>
+        )}
+      </div>
+    </div>
+  ) : !anyFilter ? <EmptyMonthD rangeText={rangeText} onAdd={() => setAddOpen(true)} onScan={() => setScanOpen(true)} />
+    : q ? <EmptySearchD q={q} onClear={() => setFilters({ q: '' })} />
+    : <EmptyFilterD onClear={clearAll} />
+
+  const listBody = loading ? <ListSkeleton /> : count > 0 ? (
+    <div style={{ padding: '4px 4px 0' }}>
+      <TransactionList
+        groups={groups} collapsed={collapsed} expanded={expanded}
+        onToggle={k => setCollapsed(c => ({ ...c, [k]: !c[k] }))}
+        onExpand={k => setExpanded(e => ({ ...e, [k]: true }))}
+        onOpen={setSel}
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '20px 12px 8px', fontSize: 13, color: 'var(--t3)' }}>
+        {hasMore ? (
+          <>
+            <div ref={sentinel} />
+            <span>Showing {visible} of {count}</span>
+            <button onClick={() => setVisible(v => v + PAGE)} style={{ height: 44, padding: '0 16px', border: '1px solid var(--border)', borderRadius: 999, background: 'var(--surface)', fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}>Show more</button>
+          </>
+        ) : (
+          <>
+            <span>{allTime ? 'End of results · searched all time' : `That’s everything in ${homeMonth}`}</span>
+            {!allTime && mi > 0 && (
+              <button
+                onClick={continueToPrev}
+                style={{ height: 44, padding: '0 16px', border: '1px solid var(--border)', borderRadius: 999, background: 'var(--surface)', fontSize: 14, fontWeight: 600, color: 'var(--t1)' }}
+              >Continue to {monthLabel(months[mi - 1])}</button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  ) : !anyFilter ? <EmptyMonth rangeText={rangeText} onAdd={() => setAddOpen(true)} onScan={() => setScanOpen(true)} />
+    : q ? <EmptySearch q={q} onClear={() => setFilters({ q: '' })} />
+    : <EmptyFilter onClear={clearAll} />
+
+  const status = !loading && (
+    <StatusRow
+      pad="6px 16px 0" allTime={allTime} scopeLabel={scopeLabel} scopeText={scopeText}
+      countLabel={plural(count, 'transaction')} hasRows={count > 0}
+      collapseLabel={anyOpen ? 'Collapse all' : 'Expand all'} onToggleAll={toggleAll}
+    />
+  )
+
+  // ── Desktop chips with popovers ─────────────────────────────────────────────
+  const togglePop = (key: NonNullable<typeof pop>) => { setPop(p => (p === key ? null : key)); setPopCatQ('') }
+  const closePop = useCallback(() => setPop(null), [])
+  const exportOption = (icon: ReactNode, title: string, sub: string, onClick: () => void) => (
+    <button className="txn-hover" onClick={onClick} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', width: '100%', padding: 10, border: 0, borderRadius: 10, background: 'transparent', color: 'var(--t1)', textAlign: 'left' }}>
+      <span style={{ display: 'grid', marginTop: 2, flex: 'none' }}>{icon}</span>
+      <span>
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 600 }}>{title}</span>
+        <span style={{ display: 'block', fontSize: 12, color: 'var(--t2)', marginTop: 2 }}>{sub}</span>
+      </span>
+    </button>
+  )
 
   return (
     <AppShell title="Transactions">
-      {/* ── Desktop 2-col / mobile single-col layout ── */}
-      <div className="txn-layout anim-page" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+      <div className="txn-scope txn-page anim-page" style={{ '--txn-head': `${headH}px` } as CSSProperties}>
+        {desktop ? (
+          // ── Desktop ──────────────────────────────────────────────────────────
+          <>
+            <DesktopHeader
+              headRef={setHeadEl} monthLabel={allTime ? 'All time' : homeMonth} canPrev={mi > 0} canNext={mi < months.length - 1}
+              onPrev={() => goMonth(mi - 1)} onNext={() => goMonth(mi + 1)} streak={streak}
+              addOpen={pop === 'add'} onAddToggle={() => togglePop('add')} onAddClose={closePop}
+              onManual={() => { setPop(null); setAddOpen(true) }} onScan={() => { setPop(null); setScanOpen(true) }}
+            />
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 300px', gap: 28, padding: '0 32px 56px', alignItems: 'start' }}>
+              <main style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ position: 'relative', zIndex: 3, paddingTop: 24 }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <label style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, height: 44, padding: '0 8px 0 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, boxShadow: 'var(--shadow)', cursor: 'text' }}>
+                    <Search size={18} color="var(--t3)" style={{ flex: 'none' }} />
+                    <input
+                      ref={searchRef} value={filters.q} onChange={e => setFilters({ q: e.target.value })} placeholder="Search by name, category, amount…"
+                      style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', font: 'inherit', fontSize: 15, color: 'var(--t1)' }}
+                    />
+                    {filters.q && (
+                      <button onClick={() => setFilters({ q: '' })} aria-label="Clear search" style={{ width: 28, height: 28, border: 0, borderRadius: 999, background: 'var(--s2)', display: 'grid', placeItems: 'center', color: 'var(--t2)', flex: 'none' }}><X size={14} /></button>
+                    )}
+                    <kbd style={{ fontFamily: MONO, fontSize: 11, padding: '2px 7px', borderRadius: 5, border: '1px solid var(--border)', color: 'var(--t3)' }}>/</kbd>
+                  </label>
+                  <div role="tablist" style={{ display: 'flex', padding: 4, gap: 2, background: 'var(--s2)', borderRadius: 12, height: 44, boxSizing: 'border-box', flex: 'none' }}>
+                    {TYPE_OPTS.map(o => <button key={o.id} role="tab" aria-selected={filters.type === o.id} onClick={() => setType(o.id)} style={segStyle(filters.type === o.id)}>{o.label}</button>)}
+                  </div>
+                </div>
 
-        {/* Mobile summary strip — hidden on desktop */}
-        <div className="flex flex-col lg:hidden" style={{ gap: 8 }}>
-          {/* Strip header with eye toggle */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingInline: 2 }}>
-            <span className="h-eyebrow">This month</span>
-            <button
-              onClick={() => setMobileMasked(v => !v)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 4 }}
-            >
-              {mobileMasked ? <Eye size={14} /> : <EyeOff size={14} />}
-              <span style={{ fontSize: 11, fontWeight: 600 }}>{mobileMasked ? 'Show' : 'Hide'}</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-3" style={{ gap: 10 }}>
-            {/* Income */}
-            <div className="card-sm" style={{ padding: '12px 14px' }}>
-              <div className="h-eyebrow" style={{ marginBottom: 6 }}>Money in</div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--good-ink)', letterSpacing: '-0.015em', whiteSpace: 'nowrap' }}>
-                {mobileMasked ? <span style={{ letterSpacing: '0.05em', color: 'var(--text-4)' }}>••••</span> : formatCurrencyFull(summary.totalIncome + summary.totalBorrowed + summary.repaymentIn + carryForward)}
-              </div>
-              {!mobileMasked && summary.repaymentIn > 0 && (
-                <div style={{ fontSize: 10, color: 'var(--good-ink)', fontWeight: 600, marginTop: 3 }}>
-                  ← {formatCurrencyFull(summary.repaymentIn)} repaid to you
-                </div>
-              )}
-              {!mobileMasked && carryForward > 0 && (
-                <div style={{ fontSize: 10, color: 'var(--brand-ink)', fontWeight: 600, marginTop: 3 }}>
-                  ↩ {formatCurrencyFull(carryForward)} CF
-                </div>
-              )}
-            </div>
-            {/* Expenses */}
-            <div className="card-sm" style={{ padding: '12px 14px' }}>
-              <div className="h-eyebrow" style={{ marginBottom: 6 }}>Money out</div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.015em', whiteSpace: 'nowrap' }}>
-                {mobileMasked ? <span style={{ letterSpacing: '0.05em', color: 'var(--text-4)' }}>••••</span> : formatCurrencyFull(moneyOutTotal)}
-              </div>
-              {!mobileMasked && summary.totalExpenses > 0 && (
-                <div style={{ fontSize: 10, color: 'var(--bad-ink)', fontWeight: 600, marginTop: 3 }}>
-                  {formatCurrencyFull(summary.totalExpenses)} spent
-                </div>
-              )}
-              {!mobileMasked && summary.lentOut > 0 && (
-                <div style={{ fontSize: 10, color: 'var(--info-ink)', fontWeight: 600, marginTop: 3 }}>
-                  {formatCurrencyFull(summary.lentOut)} lent out
-                </div>
-              )}
-              {!mobileMasked && summary.repaymentPaid > 0 && (
-                <div style={{ fontSize: 10, color: 'var(--good-ink)', fontWeight: 600, marginTop: 3 }}>
-                  {formatCurrencyFull(summary.repaymentPaid)} loan repaid
-                </div>
-              )}
-              {!mobileMasked && summary.savingsContributed > 0 && (
-                <div style={{ fontSize: 10, color: 'var(--brand-ink)', fontWeight: 600, marginTop: 3 }}>
-                  + {formatCurrencyFull(savingsNet)} saved
-                  {summary.savingsWithdrawn > 0 && (
-                    <span style={{ color: 'var(--text-4)', fontWeight: 500 }}>
-                      {' '}({formatCurrencyFull(summary.savingsContributed)} in − {formatCurrencyFull(summary.savingsWithdrawn)} out)
-                    </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                  {showCat && (
+                    <Popover open={pop === 'cat'} onClose={closePop} anchor={
+                      <button onClick={() => togglePop('cat')} aria-expanded={pop === 'cat'} style={filterChipStyle(!!filters.cat)}>
+                        <ChipInner icon={<Shapes size={14} />} label={filters.cat ? getCategoryDisplayName(filters.cat) : 'Category'} active={!!filters.cat} onClear={() => setFilters({ cat: null })} clearLabel="Remove category" />
+                      </button>
+                    }>
+                      <CategoryList exp={expCats} inc={incCats} selected={filters.cat} phone={false} query={popCatQ} onQuery={setPopCatQ}
+                        onPick={id => { setFilters({ cat: filters.cat === id ? null : id }); setPop(null) }} />
+                    </Popover>
                   )}
-                </div>
-              )}
-            </div>
-            {/* Net */}
-            <div className="card-sm" style={{ padding: '12px 14px' }}>
-              <div className="h-eyebrow" style={{ marginBottom: 6 }}>Net</div>
-              <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-0.015em', whiteSpace: 'nowrap', color: (summary.cashNet + carryForward) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
-                {mobileMasked
-                  ? <span style={{ letterSpacing: '0.05em', color: 'var(--text-4)' }}>••••</span>
-                  : <>{(summary.cashNet + carryForward) >= 0 ? '+' : '−'}{formatCurrencyFull(Math.abs(summary.cashNet + carryForward))}</>
-                }
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 'var(--row-gap)' }}
-             className="lg:txn-grid">
-          {/* ── Left: filters + list ── */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)', minWidth: 0 }}>
-
-            {/* Filter bar */}
-            <div className="card-sm" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-              {/* ── Search input (all screen sizes) ── */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '9px 12px', borderRadius: 11,
-                border: `1px solid ${searchQuery ? 'var(--brand)' : 'var(--border)'}`,
-                background: searchQuery ? 'var(--brand-soft)' : 'var(--surface-2)',
-                transition: 'border-color .15s, background .15s',
-              }}>
-                <Search size={14} style={{ color: searchQuery ? 'var(--brand-ink)' : 'var(--text-4)', flexShrink: 0 }} />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search by name, category, amount…"
-                  style={{
-                    border: 'none', background: 'transparent', outline: 'none', flex: 1,
-                    fontSize: 13.5, color: 'var(--text)', fontFamily: 'inherit',
-                  }}
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 0, color: 'var(--text-3)', flexShrink: 0 }}
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </div>
-
-              {/* Type pills */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <SlidersHorizontal size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} />
-                <div style={{ display: 'flex', gap: 4, flex: 1, overflowX: 'auto', scrollbarWidth: 'none' }}>
-                  {TYPE_OPTS.map(opt => (
-                    <button
-                      key={opt.id}
-                      onClick={() => setTypeFilter(opt.id)}
-                      style={{
-                        padding: '6px 14px', borderRadius: 999, flexShrink: 0,
-                        fontSize: 12.5, fontWeight: 600,
-                        border: 'none',
-                        background: typeFilter === opt.id ? 'var(--text)' : 'var(--surface-2)',
-                        color: typeFilter === opt.id ? 'var(--bg)' : 'var(--text-2)',
-                        cursor: 'pointer', transition: 'background .15s, color .15s',
-                        fontFamily: 'inherit',
-                      }}
-                    >
-                      {opt.label}
-                    </button>
+                  {filters.type === 'savings' && usedVehicles.length > 0 && vehicleItems.map(v => (
+                    <button key={v.label} onClick={() => setFilters({ vehicle: v.id })} style={chipStyle(filters.vehicle === v.id, false)}>{v.icon}{v.label}</button>
                   ))}
+                  {tagItems.length > 0 && (
+                    <Popover open={pop === 'tag'} onClose={closePop} width={300} padding={12} anchor={
+                      <button onClick={() => togglePop('tag')} aria-expanded={pop === 'tag'} style={filterChipStyle(!!filters.tag)}>
+                        <ChipInner icon={<Hash size={14} />} label={filters.tag ? `#${filters.tag}` : 'Tag'} active={!!filters.tag} onClear={() => setFilters({ tag: null })} clearLabel="Remove tag" />
+                      </button>
+                    }>
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--t3)', padding: '0 2px 10px' }}>Your tags</div>
+                      <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+                        <TagChips tags={tagItems} selected={filters.tag} phone={false} onPick={t => { setFilters({ tag: filters.tag === t ? null : t }); setPop(null) }} />
+                      </div>
+                    </Popover>
+                  )}
+                  <Popover open={pop === 'date'} onClose={closePop} width={520} padding={14} anchor={
+                    <button onClick={() => togglePop('date')} aria-expanded={pop === 'date'} style={filterChipStyle(dateActive)}>
+                      <ChipInner icon={<CalendarRange size={14} />} label={dateLabel} active={dateActive} onClear={() => setFilters({ from: null, to: null, preset: null })} clearLabel="Remove date range" />
+                    </button>
+                  }>
+                    <DateRangePicker presets={presets} from={filters.from} to={filters.to} preset={filters.preset} onChange={setFilters} phone={false} homeMonth={homeMonth} today={today} />
+                  </Popover>
+                  <div style={{ flex: 1 }} />
+                  <Popover open={pop === 'export'} onClose={closePop} align="right" width={300} padding={6} radius={16} anchor={
+                    <button className="txn-hover" onClick={() => togglePop('export')} aria-expanded={pop === 'export'} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, height: 36, padding: '0 12px', border: '1px solid var(--border)', borderRadius: 10, background: 'transparent', fontSize: 13, fontWeight: 600, color: 'var(--t1)' }}>
+                      <Download size={14} />Export
+                      <span style={{ fontFamily: MONO, fontSize: 11, padding: '2px 6px', borderRadius: 6, background: 'var(--s2)', color: 'var(--t2)' }}>{count}</span>
+                    </button>
+                  }>
+                    {exportOption(<ListFilter size={16} />, 'Exactly what you see', exportViewText, exportView)}
+                    {exportOption(<Calendar size={16} />, `All of ${homeMonth}`, `${plural(monthTxs.length, 'row')} · ignores filters & search`, exportMonth)}
+                    <div style={{ padding: '8px 10px 6px', marginTop: 4, borderTop: '1px solid var(--border)', fontSize: 11, color: 'var(--t3)', lineHeight: 1.5 }}>CSV · date, title, category, type, amount, notes, tags, refund links</div>
+                  </Popover>
                 </div>
-                {hasAnyFilter && (
-                  <button onClick={clearAllFilters} className="btn btn-sm btn-ghost" style={{ gap: 5, flexShrink: 0 }}>
-                    <X size={13} /> Clear
-                  </button>
+                </div>
+
+                {!loading && (
+                  <StatusLine
+                    allTime={allTime} scopeLabel={scopeLabel} scopeText={scopeText} homeMonth={homeMonth} onBack={backToMonth}
+                    monthLabel={homeMonth} rangeText={rangeText} countLabel={plural(count, 'transaction')}
+                    hasRows={count > 0} collapseLabel={anyOpen ? 'Collapse all' : 'Expand all'} onToggleAll={toggleAll}
+                  />
                 )}
-                <button onClick={exportCSV} className="btn btn-sm btn-ghost" style={{ gap: 5, flexShrink: 0 }}>
-                  <Download size={13} /> Export
+                {showFS && <FilteredBy badges={fsBadges} count={count} spent={fsTotals.spent} income={fsTotals.income} />}
+                {filters.type === 'savings' && (
+                  <SavingsLine
+                    title={filters.vehicle ? `${filters.vehicle} · balance` : 'Total saved (all-time)'} total={savingsView.total}
+                    color={savMeta?.color ?? '#22c55e'} homeMonth={homeMonth} inAmt={savingsView.inAmt} outAmt={savingsView.outAmt}
+                    icon={savMeta ? <savMeta.Icon size={20} stroke={2} color={savMeta.color} /> : <PiggyBank size={20} color="#22c55e" />}
+                  />
+                )}
+                {desktopList}
+              </main>
+
+              <aside style={{ position: 'sticky', top: 'calc(var(--txn-head) + 24px)', marginTop: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <MonthCard s={monthSummary} homeMonth={homeMonth} reveal={reveal} onToggle={toggleReveal} loading={loading} />
+                {showInsights && !loading && (topCats.length > 0 || topTags.length > 0) && <TopCard cats={topCats} tags={topTags} reveal={reveal} />}
+              </aside>
+            </div>
+          </>
+        ) : (
+          // ── Phone ────────────────────────────────────────────────────────────
+          <>
+            {/* Keeps the sticky search bar clear of the status bar */}
+            <div aria-hidden style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 'env(safe-area-inset-top, 0px)', background: 'var(--bg)', zIndex: 6 }} />
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 'max(16px, calc(env(safe-area-inset-top, 0px) + 4px)) 16px 14px' }}>
+              <h1 style={{ flex: 1, minWidth: 0, margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: '-0.025em' }}>Transactions</h1>
+              <div style={{ display: 'flex', alignItems: 'center', height: 44, border: '1px solid var(--border)', borderRadius: 999, background: 'var(--surface)' }}>
+                <button onClick={() => goMonth(mi - 1)} disabled={mi <= 0} aria-label="Previous month" style={{ width: 40, height: 42, border: 0, background: 'transparent', display: 'grid', placeItems: 'center', color: 'var(--t1)', opacity: mi > 0 ? 1 : 0.35 }}><ChevronLeft size={16} /></button>
+                <span style={{ fontSize: 14, fontWeight: 700, minWidth: 66, textAlign: 'center' }}>{allTime ? 'All time' : homeMonth}</span>
+                <button onClick={() => goMonth(mi + 1)} disabled={mi >= months.length - 1} aria-label="Next month" style={{ width: 40, height: 42, border: 0, background: 'transparent', display: 'grid', placeItems: 'center', color: 'var(--t1)', opacity: mi < months.length - 1 ? 1 : 0.35 }}><ChevronRight size={16} /></button>
+              </div>
+            </div>
+
+            <SummaryPhone s={monthSummary} reveal={reveal} onToggle={toggleReveal} loading={loading} year={selectedMonth.slice(0, 4)} />
+
+            <div style={{ position: 'sticky', top: 'env(safe-area-inset-top, 0px)', zIndex: 5, background: 'var(--bg)', padding: '14px 0 8px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', gap: 8, padding: '0 16px' }}>
+                <label style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, height: 48, padding: '0 6px 0 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 14 }}>
+                  <Search size={18} color="var(--t3)" style={{ flex: 'none' }} />
+                  <input
+                    value={filters.q} onChange={e => setFilters({ q: e.target.value })} placeholder="Search name, category, amount…"
+                    style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', font: 'inherit', fontSize: 16, color: 'var(--t1)' }}
+                  />
+                  {filters.q && (
+                    <button onClick={() => setFilters({ q: '' })} aria-label="Clear search" style={{ width: 36, height: 36, border: 0, borderRadius: 999, background: 'var(--s2)', display: 'grid', placeItems: 'center', color: 'var(--t2)', flex: 'none' }}><X size={14} /></button>
+                  )}
+                </label>
+                <button onClick={() => setSheet(true)} aria-label="Filters" style={{ position: 'relative', width: 48, height: 48, flex: 'none', border: '1px solid var(--border)', borderRadius: 14, background: 'var(--surface)', display: 'grid', placeItems: 'center', color: 'var(--t1)' }}>
+                  <SlidersHorizontal size={18} />
+                  {nFilters > 0 && (
+                    <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 20, height: 20, padding: '0 5px', boxSizing: 'border-box', borderRadius: 999, background: 'var(--good)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'grid', placeItems: 'center', border: '2px solid var(--bg)' }}>{nFilters}</span>
+                  )}
                 </button>
               </div>
-
-              {/* Sub-filters row: category/vehicle select + compact date range */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                {(typeFilter !== 'transfer' && typeFilter !== 'savings') && (
-                  <select
-                    value={catFilter}
-                    onChange={e => setCatFilter(e.target.value)}
-                    style={{
-                      fontSize: 13, padding: '7px 10px',
-                      background: 'var(--surface-2)', border: '1px solid var(--border)',
-                      borderRadius: 10, color: 'var(--text-2)', outline: 'none', cursor: 'pointer',
-                      fontFamily: 'inherit',
-                    }}
-                  >
-                    <option value="all">All Categories</option>
-                    {allCats.map(c => (
-                      <option key={c} value={c}>{getCategoryDisplayName(c)}</option>
-                    ))}
-                  </select>
-                )}
-                {typeFilter === 'savings' && usedVehicles.length > 0 && (
-                  <select
-                    value={vehicleFilter}
-                    onChange={e => setVehicleFilter(e.target.value)}
-                    style={{
-                      fontSize: 13, padding: '7px 10px',
-                      background: 'var(--surface-2)', border: '1px solid var(--border)',
-                      borderRadius: 10, color: 'var(--text-2)', outline: 'none', cursor: 'pointer',
-                      fontFamily: 'inherit',
-                    }}
-                  >
-                    <option value="all">All Vehicles</option>
-                    {usedVehicles.map(v => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                )}
-                {allTags.length > 0 && (
-                  <select
-                    value={tagFilter}
-                    onChange={e => setTagFilter(e.target.value)}
-                    style={{
-                      fontSize: 13, padding: '7px 10px',
-                      background: tagFilter !== 'all' ? 'var(--brand-soft)' : 'var(--surface-2)',
-                      border: `1px solid ${tagFilter !== 'all' ? 'var(--brand)' : 'var(--border)'}`,
-                      borderRadius: 10, color: tagFilter !== 'all' ? 'var(--brand-ink)' : 'var(--text-2)',
-                      outline: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                    }}
-                  >
-                    <option value="all">All Tags</option>
-                    {allTags.map(tag => (
-                      <option key={tag} value={tag}>#{tag}</option>
-                    ))}
-                  </select>
-                )}
-
-                {/* Compact date range — right side */}
-                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <CalendarRange size={13} style={{ color: (dateFrom || dateTo) ? 'var(--brand-ink)' : 'var(--text-4)', flexShrink: 0 }} />
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    max={dateTo || undefined}
-                    onChange={e => setDateFrom(e.target.value)}
-                    style={{
-                      fontSize: 12, padding: '5px 7px',
-                      background: dateFrom ? 'var(--brand-soft)' : 'var(--surface-2)',
-                      border: `1px solid ${dateFrom ? 'var(--brand)' : 'var(--border)'}`,
-                      borderRadius: 8, color: dateFrom ? 'var(--brand-ink)' : 'var(--text-3)',
-                      outline: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                      colorScheme: 'dark', width: 130,
-                    }}
-                  />
-                  <span style={{ fontSize: 11, color: 'var(--text-4)' }}>–</span>
-                  <input
-                    type="date"
-                    value={dateTo}
-                    min={dateFrom || undefined}
-                    onChange={e => setDateTo(e.target.value)}
-                    style={{
-                      fontSize: 12, padding: '5px 7px',
-                      background: dateTo ? 'var(--brand-soft)' : 'var(--surface-2)',
-                      border: `1px solid ${dateTo ? 'var(--brand)' : 'var(--border)'}`,
-                      borderRadius: 8, color: dateTo ? 'var(--brand-ink)' : 'var(--text-3)',
-                      outline: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                      colorScheme: 'dark', width: 130,
-                    }}
-                  />
-                  {(dateFrom || dateTo) && (
-                    <button
-                      onClick={() => { setDateFrom(''); setDateTo('') }}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: 2, color: 'var(--text-3)', flexShrink: 0 }}
-                      title="Clear dates"
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
+              <div className="txn-noscroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 16px' }}>
+                {TYPE_OPTS.map(o => <button key={o.id} onClick={() => setType(o.id)} style={chipStyle(filters.type === o.id, true)}>{o.label}</button>)}
               </div>
             </div>
 
-            {/* Savings summary */}
-            {typeFilter === 'savings' && (
-              <div className="card-sm" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-                {(() => {
-                  const meta = vehicleFilter !== 'all' ? getSavingsVehicleMeta(vehicleFilter) : null
-                  return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 160 }}>
-                      <div style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: (meta?.color ?? 'var(--brand)') + '20' }}>
-                        {meta ? <meta.Icon size={18} color={meta.color} stroke={1.5} /> : <span style={{ color: 'var(--brand)' }}>₹</span>}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{vehicleFilter === 'all' ? 'Total saved (all-time)' : `${vehicleFilter} · balance`}</div>
-                        <div className="display-num" style={{ fontSize: 20 }}>{formatCurrencyFull(savingsView.balance)}</div>
-                      </div>
-                    </div>
-                  )
-                })()}
-                <div style={{ display: 'flex', gap: 18 }}>
-                  {[
-                    { label: 'In', value: `+${formatCurrencyFull(savingsView.contributed)}`, color: 'var(--good-ink)' },
-                    { label: 'Out', value: `−${formatCurrencyFull(savingsView.withdrawn)}`, color: 'var(--bad-ink)' },
-                    { label: 'Net', value: `${savingsView.net >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(savingsView.net))}`, color: savingsView.net >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' },
-                  ].map(s => (
-                    <div key={s.label}>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{s.label}</div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: s.color }}>{s.value}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {status}
+            {showFS && <div style={{ margin: '10px 16px 0' }}><FilterSummary phone badges={fsBadges} count={count} spent={fsTotals.spent} income={fsTotals.income} /></div>}
+            {savingsSummary && <div style={{ margin: '10px 16px 0' }}>{savingsSummary}</div>}
+            {listBody}
+          </>
+        )}
 
-            {/* Filtered-range summary — shows whenever a category, tag, or date filter narrows the list */}
-            {filterSummary && (
-              <div className="card-sm" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span className="h-eyebrow">Filtered</span>
-                  {filterSummary.badges.map(b => (
-                    <span
-                      key={b}
-                      style={{
-                        fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 20,
-                        background: 'var(--brand-soft)', color: 'var(--brand-ink)',
-                        border: '1px solid color-mix(in oklch, var(--brand) 25%, transparent)',
-                      }}
-                    >
-                      {b}
-                    </span>
-                  ))}
-                  <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 'auto' }}>
-                    {filterSummary.count} transaction{filterSummary.count !== 1 ? 's' : ''}
-                  </span>
-                  <button
-                    onClick={clearAllFilters}
-                    style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                  >
-                    <X size={11} /> Clear
-                  </button>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Spent</div>
-                    <div className="display-num" style={{ fontSize: 20, color: 'var(--bad-ink)' }}>{formatCurrencyFull(filterSummary.expense)}</div>
-                  </div>
-                  {filterSummary.income > 0 && (
-                    <div>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Income</div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--good-ink)' }}>+{formatCurrencyFull(filterSummary.income)}</div>
-                    </div>
-                  )}
-                  {filterSummary.income > 0 && (
-                    <div>
-                      <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Net</div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: filterSummary.net >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
-                        {filterSummary.net >= 0 ? '+' : '−'}{formatCurrencyFull(Math.abs(filterSummary.net))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Transaction list */}
-            <div className="card" style={{ padding: 0 }}>
-              <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
-                  {filtered.length} transaction{filtered.length !== 1 ? 's' : ''}
-                </span>
-                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Tap any row to edit</span>
-              </div>
-              <div style={{ padding: '8px 8px' }}>
-                <TransactionList
-                  transactions={filtered}
-                  limit={visibleCount}
-                  groupByDay
-                  defaultExpandAll={catFilter !== 'all' || tagFilter !== 'all' || vehicleFilter !== 'all' || filtered.length > VISIBLE_COUNT}
-                  showBorrowings={catFilter === 'all' && typeFilter === 'all' && tagFilter === 'all' && !searchQuery.trim() && !dateFrom && !dateTo}
-                />
-                {filtered.length > visibleCount && (
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '12px 0 4px' }}>
-                    <p style={{ fontSize: 12, color: 'var(--text-4)', margin: 0 }}>
-                      Showing {visibleCount} of {filtered.length}
-                    </p>
-                    <button
-                      onClick={() => setVisibleCount(c => c + VISIBLE_COUNT)}
-                      style={{
-                        fontSize: 13, fontWeight: 600, padding: '8px 24px',
-                        borderRadius: 999, border: '1px solid var(--border)',
-                        background: 'var(--surface-2)', color: 'var(--text-2)',
-                        cursor: 'pointer', fontFamily: 'inherit',
-                      }}
-                    >
-                      Show more
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ── Right: sticky summary sidebar (desktop only) ── */}
-          <div className="hidden lg:flex" style={{ flexDirection: 'column', gap: 'var(--row-gap)', position: 'sticky', top: 0, alignSelf: 'start' }}>
-            {/* KPI card */}
-            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <span className="h-eyebrow">This month</span>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <div style={{ width: 22, height: 22, borderRadius: 7, background: 'var(--good-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Plus size={13} style={{ color: 'var(--good-ink)', transform: 'rotate(0deg)' }} />
-                    </div>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)' }}>Money in</span>
-                    <button onClick={() => setShowIncome(v => !v)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', display: 'flex' }}>
-                      {showIncome ? <EyeOff size={12} /> : <Eye size={12} />}
-                    </button>
-                  </div>
-                  <div className="display-num" style={{ fontSize: 26, color: 'var(--good-ink)' }}>
-                    {showIncome ? formatCurrencyFull(summary.totalIncome + summary.totalBorrowed + summary.repaymentIn + carryForward) : '₹ •••'}
-                  </div>
-                  {showIncome && summary.totalBorrowed > 0 && (
-                    <div style={{ fontSize: 11, color: 'var(--info-ink)', marginTop: 3 }}>incl. {formatCurrencyFull(summary.totalBorrowed)} borrowed</div>
-                  )}
-                  {showIncome && summary.repaymentIn > 0 && (
-                    <div style={{
-                      marginTop: 6, marginRight: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
-                      fontSize: 11, fontWeight: 600, color: 'var(--good-ink)',
-                      background: 'var(--good-soft)',
-                      border: '1px solid color-mix(in oklch, var(--good) 20%, transparent)',
-                      borderRadius: 6, padding: '2px 8px',
-                    }}>
-                      ← {formatCurrencyFull(summary.repaymentIn)} repaid to you
-                    </div>
-                  )}
-                  {showIncome && carryForward > 0 && (
-                    <div style={{
-                      marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
-                      fontSize: 11, fontWeight: 600, color: 'var(--brand-ink)',
-                      background: 'var(--brand-soft)',
-                      border: '1px solid color-mix(in oklch, var(--brand) 20%, transparent)',
-                      borderRadius: 6, padding: '2px 8px',
-                    }}>
-                      ↩ {formatCurrencyFull(carryForward)} from {prevMonthLabel}
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ height: 1, background: 'var(--hair)' }} />
-
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <div style={{ width: 22, height: 22, borderRadius: 7, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Plus size={13} style={{ color: 'var(--text-3)', transform: 'rotate(45deg)' }} />
-                    </div>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)' }}>Money out</span>
-                    <button onClick={() => setShowExpenses(v => !v)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', display: 'flex' }}>
-                      {showExpenses ? <EyeOff size={12} /> : <Eye size={12} />}
-                    </button>
-                  </div>
-                  <div className="display-num" style={{ fontSize: 26, color: 'var(--text)' }}>
-                    {showExpenses ? formatCurrencyFull(moneyOutTotal) : '₹ •••'}
-                  </div>
-                  {showExpenses && summary.totalExpenses > 0 && (
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--bad-ink)', marginTop: 3 }}>
-                      {formatCurrencyFull(summary.totalExpenses)} spent
-                    </div>
-                  )}
-                  {showExpenses && summary.lentOut > 0 && (
-                    <div style={{
-                      marginTop: 6, marginRight: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
-                      fontSize: 11, fontWeight: 600, color: 'var(--info-ink)',
-                      background: 'var(--info-soft)',
-                      border: '1px solid color-mix(in oklch, var(--info) 20%, transparent)',
-                      borderRadius: 6, padding: '2px 8px',
-                    }}>
-                      {formatCurrencyFull(summary.lentOut)} lent out
-                    </div>
-                  )}
-                  {showExpenses && summary.repaymentPaid > 0 && (
-                    <div style={{
-                      marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4,
-                      fontSize: 11, fontWeight: 600, color: 'var(--good-ink)',
-                      background: 'var(--good-soft)',
-                      border: '1px solid color-mix(in oklch, var(--good) 20%, transparent)',
-                      borderRadius: 6, padding: '2px 8px',
-                    }}>
-                      {formatCurrencyFull(summary.repaymentPaid)} loan repaid
-                    </div>
-                  )}
-                  {showExpenses && summary.savingsContributed > 0 && (
-                    <div style={{
-                      marginTop: 6, display: 'inline-flex',
-                      alignItems: summary.savingsWithdrawn > 0 ? 'flex-start' : 'center', gap: 5,
-                      fontSize: 11, fontWeight: 600, color: 'var(--brand-ink)',
-                      background: 'var(--brand-soft)',
-                      border: '1px solid color-mix(in oklch, var(--brand) 20%, transparent)',
-                      borderRadius: 6, padding: '3px 8px', maxWidth: '100%',
-                    }}>
-                      <PiggyBank size={10} style={{ flexShrink: 0, marginTop: summary.savingsWithdrawn > 0 ? 2 : 0 }} />
-                      <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
-                        <span>{formatCurrencyFull(savingsNet)} → savings</span>
-                        {summary.savingsWithdrawn > 0 && (
-                          <span style={{ fontWeight: 500, color: 'color-mix(in oklch, var(--brand-ink) 60%, transparent)' }}>
-                            {formatCurrencyFull(summary.savingsContributed)} in − {formatCurrencyFull(summary.savingsWithdrawn)} out
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ height: 1, background: 'var(--hair)' }} />
-
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)' }}>Net cashflow</span>
-                    <button onClick={() => setShowNet(v => !v)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-4)', display: 'flex' }}>
-                      {showNet ? <EyeOff size={12} /> : <Eye size={12} />}
-                    </button>
-                  </div>
-                  <div className="display-num" style={{ fontSize: 26, color: (summary.cashNet + carryForward) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
-                    {showNet ? `${(summary.cashNet + carryForward) >= 0 ? '+' : '−'}${formatCurrencyFull(Math.abs(summary.cashNet + carryForward))}` : '₹ •••'}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Top categories */}
-            {topCats.length > 0 && typeFilter !== 'income' && typeFilter !== 'savings' && (
-              <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <span className="h-eyebrow">Top categories</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {topCats.map(([cat, amt]) => {
-                    const barPct = (amt / topCatsTotal) * 100
-                    const color = CATEGORY_COLORS[cat] ?? '#94a3b8'
-                    return (
-                      <div key={cat}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>{getCategoryDisplayName(cat)}</span>
-                          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{formatCurrencyFull(amt)}</span>
-                        </div>
-                        <div style={{ height: 4, background: 'var(--surface-2)', borderRadius: 999, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${barPct}%`, background: color, borderRadius: 999 }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Tags spent summary */}
-            {topTags.length > 0 && typeFilter !== 'income' && typeFilter !== 'savings' && (
-              <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <span className="h-eyebrow">Top tags</span>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {topTags.map(([tag, amt]) => {
-                    const barPct = (amt / topTagsTotal) * 100
-                    const color = colorForTag(tag)
-                    return (
-                      <div key={tag}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)' }}>#{tag}</span>
-                          <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)' }}>{formatCurrencyFull(amt)}</span>
-                        </div>
-                        <div style={{ height: 4, background: 'var(--surface-2)', borderRadius: 999, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${barPct}%`, background: color, borderRadius: 999 }} />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        {toastState && <PageToast text={toastState.text} onUndo={toastState.undo && (() => { const u = toastState.undo!; setToastState(null); u() })} desktop={desktop} />}
       </div>
 
+      {!desktop && (
+        <FilterSheet
+          open={sheet} onClose={() => setSheet(false)} filters={filters} setFilters={setFilters} clearAll={clearAll} resultCount={count}
+          exp={expCats} inc={incCats} tags={tagItems} presets={presets} vehicles={vehicleItems} homeMonth={homeMonth} today={today}
+          dateLabel={dateLabel} exportCount={count} onExport={() => { setSheet(false); exportView() }}
+        />
+      )}
+      <TransactionDetailModal tx={sel} onClose={() => setSel(null)} onNavigate={t => setSel(t)} notify={notify} />
+      <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />
       <BillScannerModal
-        open={!!pendingShareBlob}
+        open={scanOpen || !!pendingShareBlob}
         initialBlob={pendingShareBlob}
-        onClose={() => setPendingShareBlob(null)}
+        onClose={() => { setScanOpen(false); setPendingShareBlob(null) }}
       />
-
     </AppShell>
   )
 }

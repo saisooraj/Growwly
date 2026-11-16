@@ -1,33 +1,69 @@
 'use client'
 
-import { Fragment, useState } from 'react'
-import { Dialog, Transition } from '@headlessui/react'
-import { X, Edit2, Trash2, Calendar, FileText, Repeat, Folder, ArrowLeftRight, RotateCcw, ArrowRight } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Dialog } from '@headlessui/react'
+import {
+  X, Pencil, Trash2, Calendar, Undo2, Receipt, Handshake, Fuel, Gem, StickyNote, Tag, Folder, Repeat,
+  ScanLine, Smartphone, PencilLine, ChevronRight,
+} from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { deleteTransaction, deleteBorrowing, updateProject, updateSavingsGoal, updateBorrowing, getUserAssets, updateAsset } from '@/lib/firestore'
 import { useRefreshData } from '@/hooks/useData'
-import { formatCurrencyFull, CATEGORY_COLORS, getTransferDisplay, computeProjectPaid, isSavingsTransfer, EMERGENCY_FUND_VEHICLE } from '@/lib/utils'
-import { CategoryIcon, getCategoryDisplayName, getSavingsVehicleMeta } from '@/lib/categoryIcons'
+import { computeProjectPaid, isSavingsTransfer, EMERGENCY_FUND_VEHICLE } from '@/lib/utils'
+import { getCategoryDisplayName } from '@/lib/categoryIcons'
 import { applyLink, removeLink, findLinkedAsset, type LinkInput, type LinkMode } from '@/lib/holdingLinks'
+import { fuelFillFor, isFuelExpense } from '@/lib/fuel'
 import { useAppStore } from '@/store/appStore'
 import type { Transaction } from '@/types'
 import AddTransactionModal from './AddTransactionModal'
 import AddBorrowingModal from '@/components/borrowings/AddBorrowingModal'
-import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import { KIND, MONO, R, avatarStyle, initialStyle, kindOf, lookOf, pillStyle, titleOf, type ViewTx } from './txnView'
 import toast from 'react-hot-toast'
+
+/** Page-level toast: text plus an optional Undo */
+export type Notify = (text: string, undo?: () => void) => void
 
 interface Props {
   tx: Transaction | null
   onClose: () => void
   onNavigate?: (tx: Transaction) => void
+  notify?: Notify
 }
 
-export default function TransactionDetailModal({ tx, onClose, onNavigate }: Props) {
+export function useIsDesktop() {
+  const [desktop, setDesktop] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1024px)')
+    const on = () => setDesktop(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [])
+  return desktop
+}
+
+const fallbackNotify: Notify = (text, undo) => {
+  if (!undo) { toast(text); return }
+  toast(t => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <span style={{ fontSize: 13 }}>{text}</span>
+      <button onClick={() => { toast.dismiss(t.id); undo() }} style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand-ink)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Undo</button>
+    </div>
+  ), { duration: 5000 })
+}
+
+const num = (n: number) => n.toLocaleString('en-IN', { maximumFractionDigits: 2 })
+
+export default function TransactionDetailModal({ tx, onClose, onNavigate, notify = fallbackNotify }: Props) {
   const refresh = useRefreshData()
-  const { projects, savingsGoals, setSavingsGoals, borrowings, transactions, assets } = useAppStore()
+  const { projects, borrowings, transactions, assets, settings } = useAppStore()
+  const desktop = useIsDesktop()
   const [editOpen, setEditOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [confirm, setConfirm] = useState(false)
+
+  // A different transaction starts without the delete confirmation showing
+  useEffect(() => { setConfirm(false) }, [tx?.id])
 
   const open = !!tx
 
@@ -197,287 +233,201 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
     setDeleting(false)
     refresh().catch(() => {})
     if (unlinkWarning) toast(unlinkWarning, { duration: 7000 })
-    // Show undo toast — re-creates the transaction if tapped within 5s
+    if (isSyntheticBorrowing) { notify('Deleted'); return }
+    // Undo re-creates the transaction if tapped within 5s
     const snapshot = { ...tx }
     const relink = unlinked
-    toast(t => (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ fontSize: 13 }}>Deleted</span>
-        <button
-          onClick={async () => {
-            toast.dismiss(t.id)
-            try {
-              const { addTransaction: addTx } = await import('@/lib/firestore')
-              const { setTransactions: setTxs, transactions: currentTxs } = useAppStore.getState()
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-              const { id, userId, createdAt, ...payload } = snapshot
-              const newId = await addTx(userId, payload as never)
-              setTxs([{ ...snapshot, id: newId }, ...currentTxs])
-              if (relink) {
-                const asset = (await getUserAssets(userId)).find(a => a.id === relink.assetId)
-                // A gold sale's grams were never put back, so restoring it must not sell them again
-                const mode = asset?.kind === 'gold_grams' && relink.restore.direction === 'out' ? 'included' : relink.mode
-                const result = asset ? applyLink(asset, { ...relink.restore, transactionId: newId }, mode) : null
-                if (asset && result && 'patch' in result) await updateAsset(asset.id, result.patch)
-                await refresh()
-              }
-              toast.success('Restored')
-            } catch { toast.error('Could not restore') }
-          }}
-          style={{ fontSize: 12, fontWeight: 700, color: 'var(--brand-ink)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-        >
-          Undo
-        </button>
-      </div>
-    ), { duration: 5000, icon: '🗑️' })
+    notify('Deleted', async () => {
+      try {
+        const { addTransaction: addTx } = await import('@/lib/firestore')
+        const { setTransactions: setTxs, transactions: currentTxs } = useAppStore.getState()
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { id, userId, createdAt, ...payload } = snapshot
+        const newId = await addTx(userId, payload as never)
+        setTxs([{ ...snapshot, id: newId }, ...currentTxs])
+        if (relink) {
+          const asset = (await getUserAssets(userId)).find(a => a.id === relink.assetId)
+          // A gold sale's grams were never put back, so restoring it must not sell them again
+          const mode = asset?.kind === 'gold_grams' && relink.restore.direction === 'out' ? 'included' : relink.mode
+          const result = asset ? applyLink(asset, { ...relink.restore, transactionId: newId }, mode) : null
+          if (asset && result && 'patch' in result) await updateAsset(asset.id, result.patch)
+          await refresh()
+        }
+        notify('Restored')
+      } catch { toast.error('Could not restore') }
+    })
   }
 
-  function handleEdit() {
-    setEditOpen(true)
+  function onDeleteClick() {
+    if (linkedRefunds.length > 0 && !confirm) { setConfirm(true); return }
+    doDelete()
   }
 
-  if (!tx) return null
+  // ── What the sheet shows ──────────────────────────────────────────────────
 
-  const linkedHolding = findLinkedAsset(assets, tx.id)
-  const isTransfer = tx.type === 'transfer'
-  const isIncome   = tx.type === 'income'
-  const transferDisp = isTransfer ? getTransferDisplay(tx) : null
-  const color = isRefund
-    ? 'var(--good)'
-    : isTransfer
-    ? (transferDisp?.isSavings ? getSavingsVehicleMeta(tx.savingsVehicle || 'Other Savings').color : 'var(--info)')
-    : (CATEGORY_COLORS[tx.category] ?? '#94a3b8')
-  const project = tx.projectId ? projects.find(p => p.id === tx.projectId) : null
+  const view: ViewTx | null = tx
+    ? isSyntheticBorrowing && linkedBorrowing
+      ? { ...tx, _borrowDir: linkedBorrowing.type, _person: linkedBorrowing.person }
+      : tx
+    : null
+  const k = view ? kindOf(view) : 'exp'
+  const look = view ? lookOf(view, k) : null
+  const K = KIND[k]
 
-  const amountColor = isRefund
-    ? 'var(--good-ink)'
-    : isTransfer
-    ? (transferDisp?.dir === 'in' ? 'var(--good)' : 'var(--text-2)')
-    : isIncome ? 'var(--good-ink)' : 'var(--bad-ink)'
+  const rows: { icon: ReactNode; label: string; value: ReactNode; sub?: string; go?: Transaction; list?: { text: string; meta: string; go: Transaction }[] }[] = []
+  let sub: string | null = null
+  if (tx && look) {
+    const ic = (I: typeof Calendar) => <I size={16} color="var(--t2)" />
+    rows.push({ icon: ic(Calendar), label: 'Date', value: format(parseISO(tx.date), 'EEEE, d MMMM yyyy') })
+    if (isRefund) {
+      rows.push(linkedOriginal
+        ? { icon: ic(Undo2), label: 'Refund of', value: `${getCategoryDisplayName(linkedOriginal.category)} · ${R(linkedOriginal.amount)} on ${format(parseISO(linkedOriginal.date), 'dd MMM yyyy')} →`, go: linkedOriginal }
+        : { icon: ic(Undo2), label: 'Refund of', value: 'Original transaction not found' })
+    }
+    if (tx.type === 'expense' && totalRefunded > 0) {
+      rows.push({
+        icon: ic(Receipt), label: 'Refunds',
+        value: `Refunded ${R(totalRefunded)} · Net expense ${R(Math.max(0, tx.amount - totalRefunded))}`,
+        list: linkedRefunds.map(r => ({ text: `+${R(r.amount)}`, meta: format(parseISO(r.date), 'dd MMM yyyy') + (r.notes?.trim() ? ` · ${r.notes.trim()}` : ''), go: r })),
+      })
+    }
+    if (tx.settledPerson) {
+      rows.push({ icon: ic(Handshake), label: 'Settled via', value: tx.settledPerson, sub: `${R(tx.settledAmount ?? tx.amount)} taken off what ${tx.settledPerson} owes you` })
+    }
+    if (isFuelExpense(tx) && tx.fuelLitres) {
+      const vehicle = settings?.vehicles?.find(v => v.id === tx.vehicleId)?.name
+        ?? (settings?.vehicles?.length === 1 ? settings.vehicles[0].name : undefined)
+      const fill = fuelFillFor(transactions, settings, tx.id)
+      const value = [vehicle, `${tx.fuelLitres} L${tx.fuelPricePerLitre ? ` at ₹${num(tx.fuelPricePerLitre)}/L` : ''}`, tx.fuelDiscount ? `₹${num(tx.fuelDiscount)} off` : null].filter(Boolean).join(' · ')
+      const subParts = [
+        tx.odometerKm ? `Odometer ${num(tx.odometerKm)} km` : null,
+        fill?.km ? `${num(fill.km)} km since last fill` : null,
+        fill?.kmPerLitre ? `${fill.kmPerLitre.toFixed(1)} km/l` : null,
+      ].filter(Boolean)
+      rows.push({ icon: ic(Fuel), label: 'Fuel fill-up', value, sub: subParts.length ? subParts.join(' · ') : undefined })
+    }
+    if (tx.goldGrams) {
+      rows.push({ icon: ic(Gem), label: 'Gold', value: `${tx.goldGrams} g · ${tx.goldKarat ?? 22}K${tx.goldPricePerGram ? ` · ₹${num(tx.goldPricePerGram)}/g` : ''}` })
+    }
+    if (tx.notes?.trim()) rows.push({ icon: ic(StickyNote), label: 'Notes', value: tx.notes.trim() })
+    if (tx.tags?.length) rows.push({ icon: ic(Tag), label: 'Tags', value: tx.tags.map(t => `#${t}`).join('   ') })
+    const project = tx.projectId ? projects.find(p => p.id === tx.projectId) : null
+    if (project) rows.push({ icon: ic(Folder), label: 'Project', value: project.name })
+    if (tx.isRecurring) rows.push({ icon: ic(Repeat), label: 'Recurring', value: `Repeats monthly on day ${tx.recurringDay}` })
+    if (!isSyntheticBorrowing) {
+      const [SrcIcon, srcLabel] = tx.source === 'scan' || tx.source === 'share-target'
+        ? [ScanLine, 'Scanned bill'] : tx.source === 'ios-shortcut' ? [Smartphone, 'iPhone Shortcut'] : [PencilLine, 'Added manually']
+      rows.push({ icon: ic(SrcIcon), label: 'Source', value: srcLabel })
+    }
 
-  const prefix = isRefund
-    ? '+'
-    : isTransfer
-    ? (transferDisp?.dir === 'in' ? '+' : '−')
-    : (isIncome ? '+' : '−')
+    if (k === 'sav' || k === 'savout') {
+      const holding = findLinkedAsset(assets, tx.id)
+      sub = holding
+        ? `${look.name} → ${holding.name || 'Gold'}`
+        : look.name !== EMERGENCY_FUND_VEHICLE ? `${look.name} · not linked to a holding` : null
+    }
+  }
 
-  const typeLabel = isRefund
-    ? 'Refund'
-    : isTransfer
-    ? (transferDisp?.label ?? 'Transfer')
-    : isIncome ? 'Income' : 'Expense'
-
-  const typePillClass = isRefund ? 'good' : isTransfer ? 'info' : isIncome ? 'good' : 'bad'
+  const sheet = !desktop
+  const VAL = { fontSize: 14, lineHeight: '20px', color: 'var(--t1)', overflowWrap: 'anywhere' as const }
+  const refundWord = linkedRefunds.length === 1 ? 'refund' : 'refunds'
 
   return (
     <>
-      <Transition appear show={open} as={Fragment}>
-        <Dialog as="div" style={{ position: 'relative', zIndex: 50 }} onClose={onClose}>
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out-strong duration-200" enterFrom="opacity-0" enterTo="opacity-100"
-            leave="ease-out-strong duration-150" leaveFrom="opacity-100" leaveTo="opacity-0"
-          >
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
-          </Transition.Child>
-
-          <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 16 }}
-               className="sm:items-center">
-            <Transition.Child
-              as={Fragment}
-              enter="ease-out-strong duration-200" enterFrom="opacity-0 translate-y-4" enterTo="opacity-100 translate-y-0"
-              leave="ease-out-strong duration-150" leaveFrom="opacity-100 translate-y-0" leaveTo="opacity-0 translate-y-4"
+      <Dialog open={open && !editOpen} onClose={onClose} className="txn-scope" style={{ position: 'relative', zIndex: 50 }}>
+        <div className="txn-anim-fade" style={{ position: 'fixed', inset: 0, background: 'var(--scrim)' }} aria-hidden />
+        <div style={sheet
+          ? { position: 'fixed', left: 0, right: 0, bottom: 0, maxHeight: '90%', display: 'flex' }
+          : { position: 'fixed', inset: 0, display: 'grid', placeItems: 'center', padding: 40 }}>
+          {tx && look && (
+            <Dialog.Panel
+              className={sheet ? 'txn-anim-sheet' : 'txn-anim-pop'}
+              style={{
+                display: 'flex', flexDirection: 'column', width: '100%', maxWidth: sheet ? undefined : 420,
+                maxHeight: sheet ? '100%' : 'calc(100dvh - 80px)',
+                background: 'var(--surface)', color: 'var(--t1)', borderRadius: sheet ? '24px 24px 0 0' : 24,
+                boxShadow: 'var(--shadow-lg)', overflow: 'hidden', border: sheet ? 0 : '1px solid var(--border)',
+              }}
             >
-              <Dialog.Panel style={{
-                width: '100%', maxWidth: 420,
-                background: 'var(--surface)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-xl)',
-                boxShadow: 'var(--shadow-lg)',
-                overflow: 'hidden',
-              }}>
-                {/* Header */}
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '16px 20px',
-                  borderBottom: '1px solid var(--border)',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-                      background: color + '20',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      {isRefund
-                        ? <RotateCcw size={16} style={{ color }} />
-                        : isTransfer
-                        ? (transferDisp?.isSavings
-                            ? (() => { const m = getSavingsVehicleMeta(tx.savingsVehicle || 'Other Savings'); return <m.Icon size={16} color={m.color} stroke={1.5} /> })()
-                            : <ArrowLeftRight size={16} style={{ color }} />)
-                        : <CategoryIcon category={tx.category} size={16} color={color} />
-                      }
-                    </div>
-                    <div>
-                      <Dialog.Title style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', lineHeight: 1.2 }}>
-                        {isRefund ? `${getCategoryDisplayName(tx.category)} Refund` : isTransfer ? (transferDisp?.label ?? 'Transfer') : getCategoryDisplayName(tx.category)}
-                      </Dialog.Title>
-                      <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
-                        {format(parseISO(tx.date), 'dd MMM yyyy')}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={onClose}
-                    style={{ padding: 6, borderRadius: 8, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                  >
-                    <X size={16} />
-                  </button>
+              {sheet && <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 0', flex: 'none' }}><span style={{ width: 36, height: 5, borderRadius: 3, background: 'var(--s3)' }} /></div>}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px 0 20px', flex: 'none' }}>
+                <div style={avatarStyle(look.color, 40, 12)}>
+                  {look.initial ? <span style={initialStyle(look.color)}>{look.initial}</span> : look.icon?.(18)}
                 </div>
-
-                {/* Amount hero */}
-                <div style={{
-                  padding: '24px 20px 20px',
-                  borderBottom: '1px solid var(--border)',
-                  textAlign: 'center',
-                }}>
-                  <div className="display-num" style={{ fontSize: 38, color: amountColor, lineHeight: 1 }}>
-                    {prefix}{formatCurrencyFull(tx.amount)}
-                  </div>
-                  <div style={{ marginTop: 10 }}>
-                    <span className={`pill ${typePillClass}`}>
-                      <span className="pill-dot" />
-                      {typeLabel}
-                    </span>
-                  </div>
-                  {isTransfer && tx.savingsVehicle && (
-                    <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-3)' }}>
-                      {tx.savingsVehicle}
-                      {linkedHolding
-                        ? ` → ${linkedHolding.name || 'Gold'}`
-                        : isSavingsTransfer(tx) && tx.savingsVehicle !== EMERGENCY_FUND_VEHICLE ? ' · not linked to a holding' : ''}
-                    </div>
-                  )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Dialog.Title style={{ margin: 0, fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em', overflowWrap: 'anywhere' }}>{titleOf(k, look)}</Dialog.Title>
+                  <div style={{ fontSize: 13, color: 'var(--t2)' }}>{format(parseISO(tx.date), 'EEE, d MMM')}</div>
                 </div>
+                <button onClick={onClose} aria-label="Close" style={{ width: 44, height: 44, borderRadius: 999, border: 0, background: 'var(--s2)', display: 'grid', placeItems: 'center', color: 'var(--t1)', flex: 'none' }}>
+                  <X size={18} />
+                </button>
+              </div>
 
-                {/* Details */}
-                <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ padding: '22px 20px 18px', display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'flex-start', flex: 'none' }}>
+                <div style={{ fontFamily: MONO, fontSize: 40, fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1.05, color: K.col, overflowWrap: 'anywhere' }}>
+                  {K.sign}{R(tx.amount)}
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={pillStyle(K.pill[1], true)}>{K.pill[0]}</span>
+                  {sub && <span style={{ fontSize: 13, color: 'var(--t2)' }}>{sub}</span>}
+                </div>
+              </div>
 
-                  <Row icon={<Calendar size={14} />} label="Date">
-                    {format(parseISO(tx.date), 'EEEE, dd MMMM yyyy')}
-                  </Row>
-
-                  {isRefund && (
-                    <Row icon={<RotateCcw size={14} />} label="Refund of">
-                      {linkedOriginal ? (
-                        <button
-                          onClick={() => onNavigate?.(linkedOriginal)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 6,
-                            fontSize: 13, color: 'var(--brand-ink)', fontWeight: 600,
-                            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                          }}
-                        >
-                          {getCategoryDisplayName(linkedOriginal.category)} · {formatCurrencyFull(linkedOriginal.amount)} on {format(parseISO(linkedOriginal.date), 'dd MMM yyyy')}
-                          <ArrowRight size={12} />
-                        </button>
+              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px', display: 'flex', flexDirection: 'column' }}>
+                {rows.map(r => (
+                  <div key={r.label} style={{ display: 'grid', gridTemplateColumns: '32px minmax(0,1fr)', gap: 12, padding: '12px 0', borderTop: '1px solid var(--border)' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: 9, background: 'var(--s2)', display: 'grid', placeItems: 'center' }}>{r.icon}</div>
+                    <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--t3)' }}>{r.label}</div>
+                      {r.go ? (
+                        <button dir="auto" onClick={() => onNavigate?.(r.go!)} style={{ ...VAL, color: 'var(--good-ink)', fontWeight: 600, background: 'none', border: 0, padding: 0, textAlign: 'left' }}>{r.value}</button>
                       ) : (
-                        <span style={{ color: 'var(--text-3)' }}>Original transaction not found</span>
+                        <div dir="auto" style={VAL}>{r.value}</div>
                       )}
-                    </Row>
-                  )}
+                      {r.sub && <div style={{ fontSize: 12, color: 'var(--t2)', lineHeight: 1.45 }}>{r.sub}</div>}
+                      {r.list && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                          {r.list.map(it => (
+                            <button key={it.go.id} className="txn-hover" onClick={() => onNavigate?.(it.go)} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 44, padding: '0 12px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--t1)', textAlign: 'left' }}>
+                              <span style={{ fontFamily: MONO, fontSize: 13, color: 'var(--good-ink)', fontWeight: 600 }}>{it.text}</span>
+                              <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: 'var(--t2)' }}>{it.meta}</span>
+                              <ChevronRight size={14} color="var(--t3)" style={{ flex: 'none' }} />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-                  {tx.type === 'expense' && totalRefunded > 0 && (
-                    <Row icon={<RotateCcw size={14} />} label="Refunds">
-                      <span>
-                        Refunded {formatCurrencyFull(totalRefunded)} · Net expense{' '}
-                        <strong>{formatCurrencyFull(Math.max(0, tx.amount - totalRefunded))}</strong>
-                      </span>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
-                        {linkedRefunds.map(r => (
-                          <button
-                            key={r.id}
-                            onClick={() => onNavigate?.(r)}
-                            style={{
-                              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                              fontSize: 12, color: 'var(--good-ink)', background: 'var(--good-soft)',
-                              border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer',
-                            }}
-                          >
-                            <span>{format(parseISO(r.date), 'dd MMM yyyy')}</span>
-                            <span style={{ fontWeight: 600 }}>+{formatCurrencyFull(r.amount)}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </Row>
-                  )}
-
-                  {tx.notes && (
-                    <Row icon={<FileText size={14} />} label="Notes">
-                      {tx.notes}
-                    </Row>
-                  )}
-
-                  {tx.tags && tx.tags.length > 0 && (
-                    <Row icon={<span style={{ fontSize: 13, fontWeight: 700 }}>#</span>} label="Tags">
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                        {tx.tags.map(tag => (
-                          <span
-                            key={tag}
-                            style={{
-                              fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 20,
-                              border: '1px solid var(--border)', color: 'var(--text-2)', background: 'var(--surface-2)',
-                            }}
-                          >
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
-                    </Row>
-                  )}
-
-                  {project && (
-                    <Row icon={<Folder size={14} />} label="Project">
-                      {project.name}
-                    </Row>
-                  )}
-
-                  {tx.isRecurring && (
-                    <Row icon={<Repeat size={14} />} label="Recurring">
-                      Repeats monthly on day {tx.recurringDay}
-                    </Row>
-                  )}
-
+              {confirm && (
+                <div style={{ margin: '12px 20px 0', padding: '12px 14px', borderRadius: 12, background: 'var(--bad-soft)', color: 'var(--bad-ink)', fontSize: 13, lineHeight: 1.45, fontWeight: 500, flex: 'none' }}>
+                  This expense has {linkedRefunds.length} {refundWord} linked to it. Deleting removes the {refundWord} too.
                 </div>
+              )}
 
-                {/* Actions */}
-                <div style={{
-                  display: 'flex', gap: 8,
-                  padding: '12px 20px 20px',
+              <div style={{
+                display: 'flex', gap: 10, flex: 'none', borderTop: '1px solid var(--border)', marginTop: 4,
+                padding: sheet ? '14px 20px max(20px, calc(env(safe-area-inset-bottom, 0px) + 2px))' : '16px 20px 20px',
+              }}>
+                <button className="txn-hover" onClick={() => setEditOpen(true)} style={{ flex: 1, height: 48, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)', fontSize: 15, fontWeight: 600, color: 'var(--t1)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <Pencil size={16} />Edit
+                </button>
+                <button onClick={onDeleteClick} disabled={deleting} style={{
+                  flex: 1, height: 48, borderRadius: 12, border: confirm ? 0 : '1px solid var(--border)',
+                  background: confirm ? 'var(--bad)' : 'var(--surface)', color: confirm ? '#fff' : 'var(--bad-ink)',
+                  fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  opacity: deleting ? 0.6 : 1,
                 }}>
-                  <button
-                    onClick={handleEdit}
-                    className="btn-secondary"
-                    style={{ flex: 1, justifyContent: 'center', gap: 8 }}
-                  >
-                    <Edit2 size={14} /> Edit
-                  </button>
-                  <button
-                    onClick={() => (linkedRefunds.length > 0 ? setDeleteConfirm(true) : doDelete())}
-                    disabled={deleting}
-                    className="btn-danger"
-                    style={{ flex: 1, justifyContent: 'center', gap: 8 }}
-                  >
-                    <Trash2 size={14} />
-                    {deleting ? 'Deleting…' : 'Delete'}
-                  </button>
-                </div>
-              </Dialog.Panel>
-            </Transition.Child>
-          </div>
-        </Dialog>
-      </Transition>
+                  <Trash2 size={16} />{deleting ? 'Deleting…' : confirm ? 'Delete both' : 'Delete'}
+                </button>
+              </div>
+            </Dialog.Panel>
+          )}
+        </div>
+      </Dialog>
 
       {isSyntheticBorrowing ? (
         <AddBorrowingModal
@@ -491,46 +441,15 @@ export default function TransactionDetailModal({ tx, onClose, onNavigate }: Prop
           onClose={() => { setEditOpen(false); onClose() }}
           editTx={tx}
           onViewOriginal={t => {
-            // Close both nested dialogs fully before reopening for the original —
-            // swapping `tx` while the edit dialog is still mounted confuses Headless UI's
-            // outside-click detection across the two portaled Dialogs and force-closes everything.
+            // Close both dialogs fully before reopening for the original — swapping `tx`
+            // while the edit dialog is still mounted confuses Headless UI's outside-click
+            // detection across the two portaled Dialogs and force-closes everything.
             setEditOpen(false)
             onClose()
             setTimeout(() => onNavigate?.(t), 220)
           }}
         />
       )}
-
-      {deleteConfirm && (
-        <ConfirmDialog
-          open
-          message={`This expense has ${formatCurrencyFull(totalRefunded)} in linked refunds (${linkedRefunds.length}). Deleting it will also delete ${linkedRefunds.length === 1 ? 'that refund' : 'those refunds'} — this can't be undone.`}
-          onConfirm={() => { setDeleteConfirm(false); doDelete() }}
-          onClose={() => setDeleteConfirm(false)}
-        />
-      )}
     </>
-  )
-}
-
-function Row({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-      <div style={{
-        width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-        background: 'var(--surface-2)', color: 'var(--text-3)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        {icon}
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>
-          {label}
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.4 }}>
-          {children}
-        </div>
-      </div>
-    </div>
   )
 }

@@ -139,21 +139,24 @@ export function buildFuelLog(transactions: Transaction[], vehicleId: string | un
   }
 }
 
-// Mileage per fill-up for the transaction list — computed once per transactions snapshot.
-const mileageCache = new WeakMap<Transaction[], Map<string, number>>()
+// Each fill-up as the fuel log sees it — computed once per transactions snapshot.
+const fillCache = new WeakMap<Transaction[], Map<string, FuelFill>>()
 
-export function mileageFor(transactions: Transaction[], settings: UserSettings | null | undefined, txId: string): number | undefined {
-  let map = mileageCache.get(transactions)
+export function fuelFillFor(transactions: Transaction[], settings: UserSettings | null | undefined, txId: string): FuelFill | undefined {
+  let map = fillCache.get(transactions)
   if (!map) {
     map = new Map()
     const vehicles = settings?.vehicles ?? []
     const ids = vehicles.length ? vehicles.map(v => v.id) : [undefined]
     for (const id of ids) {
-      for (const f of buildFuelLog(transactions, id, vehicles).fills) {
-        if (f.kmPerLitre) map.set(f.tx.id, f.kmPerLitre)
-      }
+      for (const f of buildFuelLog(transactions, id, vehicles).fills) map.set(f.tx.id, f)
     }
-    mileageCache.set(transactions, map)
+    fillCache.set(transactions, map)
   }
   return map.get(txId)
+}
+
+// Mileage per fill-up for the transaction list
+export function mileageFor(transactions: Transaction[], settings: UserSettings | null | undefined, txId: string): number | undefined {
+  return fuelFillFor(transactions, settings, txId)?.kmPerLitre
 }
