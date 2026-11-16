@@ -10,7 +10,8 @@ import { Amt, Ring, inr, pct, useIsDesk, useMask, useOverviewActions } from './u
 import type { PulseHealthScore } from '@/types'
 
 const LABEL: Record<PulseHealthScore['label'], string> = { excellent: 'Excellent', good: 'Healthy', caution: 'Watch', critical: 'At risk' }
-const RING: Record<PulseHealthScore['label'], string> = { excellent: 'var(--ring-good)', good: 'var(--ring-good)', caution: 'var(--ring-warn)', critical: 'var(--ring-bad)' }
+// Read on the brand gradient: good is plain white, watch and at-risk are light tints
+const RING: Record<PulseHealthScore['label'], string> = { excellent: '#fff', good: '#fff', caution: 'var(--ring-warn)', critical: 'var(--ring-bad)' }
 
 const white = (a: number) => `rgba(255,255,255,${a})`
 
@@ -54,8 +55,9 @@ export default function MonthCard({ isNew }: { isNew: boolean }) {
       {cta}
     </div>
   )
+  // Same accent gradient as the Net Worth hero (the glow comes from .ov-hero)
   const shell: React.CSSProperties = {
-    background: 'var(--hero)', color: '#fff', borderRadius: 24, padding: 20, boxShadow: 'var(--shadow)',
+    background: 'var(--hero-grad)', color: '#fff', borderRadius: 24, padding: 20, boxShadow: '0 16px 40px -16px var(--brand)',
     display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, height: '100%', boxSizing: 'border-box',
   }
 
@@ -68,8 +70,8 @@ export default function MonthCard({ isNew }: { isNew: boolean }) {
     ]
     const next = steps.findIndex(s => !s.done)
     return (
-      <div style={shell}>
-        {header(<div style={{ fontSize: 12.5, fontWeight: 700, padding: '6px 12px', borderRadius: 999, background: white(0.1) }}>{steps.filter(s => s.done).length} of 3</div>)}
+      <div className="ov-hero" style={shell}>
+        {header(<div style={{ fontSize: 12.5, fontWeight: 700, padding: '6px 12px', borderRadius: 999, background: white(0.18) }}>{steps.filter(s => s.done).length} of 3</div>)}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div>
             <div className="ov-serif" style={{ fontSize: 34, lineHeight: 1.02 }}>Let&apos;s set up your month</div>
@@ -79,7 +81,7 @@ export default function MonthCard({ isNew }: { isNew: boolean }) {
             const primary = i === next
             const ctaStyle: React.CSSProperties = {
               fontSize: 12.5, fontWeight: 800, padding: '8px 12px', borderRadius: 999, whiteSpace: 'nowrap',
-              background: primary ? '#fff' : white(0.12), color: primary ? 'oklch(0.3 0.06 158)' : '#fff',
+              background: primary ? '#fff' : white(0.18), color: primary ? 'var(--brand-deep)' : '#fff',
             }
             return (
               <div key={s.t} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, borderRadius: 16, background: white(0.07), opacity: s.done ? 0.6 : 1 }}>
@@ -142,7 +144,7 @@ export default function MonthCard({ isNew }: { isNew: boolean }) {
   const cell = (label: React.ReactNode, value: number, opts: { sign?: boolean; strong?: boolean; color?: string } = {}) => (
     <button
       onClick={() => openDetails('cash')} className="ov-btn"
-      style={{ background: 'var(--hero)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, textAlign: 'left', color: '#fff' }}
+      style={{ background: white(0.12), padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, textAlign: 'left', color: '#fff' }}
     >
       <span style={{ fontSize: 11, color: white(0.6), fontWeight: 600 }}>{label}</span>
       <Amt
@@ -153,15 +155,15 @@ export default function MonthCard({ isNew }: { isNew: boolean }) {
   )
 
   return (
-    <div style={shell}>
+    <div className="ov-hero" style={shell}>
       {header(
-        <button onClick={() => openDetails()} className="ov-btn" style={{ fontSize: 12.5, fontWeight: 700, padding: '6px 12px', borderRadius: 999, background: white(0.1), color: '#fff' }}>
+        <button onClick={() => openDetails()} className="ov-btn" style={{ fontSize: 12.5, fontWeight: 700, padding: '6px 12px', borderRadius: 999, background: white(0.18), color: '#fff' }}>
           Details →
         </button>,
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          <Ring size={76} r={32} stroke={7} pct={health.score} color={ring} track={white(0.12)}>
+          <Ring size={76} r={32} stroke={7} pct={health.score} color={ring} track={white(0.22)}>
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <div className="ov-mono" style={{ fontSize: 22, fontWeight: 600, lineHeight: 1 }}>{health.score}</div>
               <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: ring, marginTop: 3 }}>{LABEL[health.label]}</div>
@@ -182,14 +184,14 @@ export default function MonthCard({ isNew }: { isNew: boolean }) {
             {cycle.phase !== 'future' && <span>Day {cycle.elapsed}/{cycle.days}</span>}
           </div>
           {base > 0 && (
-            <div style={{ position: 'relative', height: 8, borderRadius: 8, background: white(0.12) }}>
+            <div style={{ position: 'relative', height: 8, borderRadius: 8, background: white(0.22) }}>
               <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${spentPct}%`, borderRadius: 8, background: ring, transition: 'width 600ms var(--ease-out)' }} />
-              {live && <div style={{ position: 'absolute', top: -4, bottom: -4, left: `${dayPct}%`, width: 2, borderRadius: 2, background: '#fff' }} />}
+              {live && <div style={{ position: 'absolute', top: -4, bottom: -4, left: `${dayPct}%`, width: 2, borderRadius: 2, background: '#fff', boxShadow: '0 0 0 1.5px var(--brand-deep)' }} />}
             </div>
           )}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: stacked ? 'minmax(0,1fr)' : 'repeat(3,minmax(0,1fr))', gap: 1, background: white(0.1), borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: stacked ? 'minmax(0,1fr)' : 'repeat(3,minmax(0,1fr))', gap: 1, borderRadius: 16, overflow: 'hidden' }}>
           {cell('Money in', d.moneyIn)}
           {cell('Out', d.out)}
           {cell(<>Surplus · <span style={{ color: ring }}>{pct(d.rate, 1)}</span></>, d.surplus, { sign: true, strong: true, color: ring })}

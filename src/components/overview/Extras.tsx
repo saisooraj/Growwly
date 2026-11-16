@@ -46,7 +46,7 @@ export function OverviewSkeleton() {
   const card: React.CSSProperties = { borderRadius: 24, background: 'var(--surface)', padding: 20, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 14 }
   return (
     <div className="ov-grid ov-skel" aria-busy="true" aria-label="Loading your overview">
-      <div data-span="8" data-tspan="8" style={{ height: 236, borderRadius: 24, background: 'var(--hero)', opacity: 0.55, padding: 20, boxSizing: 'border-box', display: 'flex', gap: 16 }}>
+      <div data-span="8" data-tspan="8" style={{ height: 236, borderRadius: 24, background: 'var(--hero-grad)', opacity: 0.55, padding: 20, boxSizing: 'border-box', display: 'flex', gap: 16 }}>
         <div style={{ width: 76, height: 76, borderRadius: '50%', border: '7px solid rgba(255,255,255,0.12)', boxSizing: 'border-box', flex: 'none' }} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 8 }}>
           <div style={{ height: 22, width: '70%', borderRadius: 8, background: 'rgba(255,255,255,0.14)' }} />
