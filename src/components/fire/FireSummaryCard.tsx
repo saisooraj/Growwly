@@ -1,11 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import MaskToggle from '@/components/networth/MaskToggle'
 import { DEFAULT_ASSUMPTIONS_PCT } from '@/lib/fireDefaults'
 import { fiTargetAt, reversePlan, yearAt, type ScenarioKey } from '@/lib/fire'
 import type { FirePlan } from '@/hooks/useFirePlan'
-import { fmtShort, KindTag, MONO, MoneyTag, pct, SCENARIO_META } from './shared'
+import { CARD, cpt } from '@/components/networth/nwUi'
+import { pct, SCENARIO_META } from './shared'
 
 interface Props {
   plan: FirePlan
@@ -13,28 +13,15 @@ interface Props {
   targetRetirementAge?: number
   targetYears?: number
   masked: boolean
-  onToggleMask: () => void
 }
 
-/** "Financially independent at 44 · 2043" — the one-line answer for the Net Worth hero. */
-export function fireStripText(plan: FirePlan, scenario: ScenarioKey): string {
-  const r = plan.results[scenario]
-  if (r.status === 'reached') {
-    return plan.input.age != null && r.retirementAge != null
-      ? `Financially independent at ${Math.floor(r.retirementAge)} · ${r.retirementYear}`
-      : `Financially independent by ${r.retirementYear}`
-  }
-  if (r.status === 'already') return 'You’re financially independent'
-  if (r.status === 'unreachable') return 'See what it would take to stop working'
-  return 'Find out when you can stop working'
-}
-
-/** Compact FIRE summary for the Net Worth page; the full planner lives at /networth/fire. */
-export default function FireSummaryCard({ plan, scenario, targetRetirementAge, targetYears, masked, onToggleMask }: Props) {
+/** Compact FIRE card for the Net Worth page; the full planner lives at /networth/fire. */
+export default function FireSummaryCard({ plan, scenario, targetRetirementAge, targetYears, masked }: Props) {
   const { results, input, assumptions: a } = plan
   const r = results[scenario]
   const hasAge = input.age != null
   const progress = Math.max(0, r.progressToday * 100)
+  const M = (s: string) => masked ? '' : s
 
   // "Retire by" check, using the same target date the planner uses
   const tAge = targetRetirementAge ?? (hasAge && input.age! >= DEFAULT_ASSUMPTIONS_PCT.targetRetirementAge ? Math.ceil(input.age!) + 5 : DEFAULT_ASSUMPTIONS_PCT.targetRetirementAge)
@@ -46,65 +33,69 @@ export default function FireSummaryCard({ plan, scenario, targetRetirementAge, t
     target: fiTargetAt(input.spend, a, a.withdrawalRates[scenario], months),
   })
   const good = rv.gap >= 0
+  const scen = SCENARIO_META[scenario].label.toUpperCase()
+  const wr = pct(a.withdrawalRates[scenario])
+  const have = Math.max(0, input.portfolio)
 
-  const shortTitle = r.status === 'already' ? 'You’re financially independent'
-    : r.status === 'unreachable' ? 'Not reachable with these numbers'
-    : 'Add spending to see your FI date'
+  const v = r.status === 'reached' ? {
+    rates: `${scen} · ${pct(a.returns[scenario])} RETURN · ${wr} WITHDRAWAL`,
+    head: hasAge && r.retirementAge != null ? `Independent at ${Math.floor(r.retirementAge)}` : `Independent by ${r.retirementYear}`,
+    sub: `In ${r.years!.toFixed(1)} years · ${r.retirementYear}`,
+    cta: 'Open FIRE planner',
+  } : r.status === 'already' ? {
+    rates: `${scen} · ${wr} WITHDRAWAL`,
+    head: 'You’re financially independent',
+    sub: `What you have covers your yearly spending at a ${wr} withdrawal rate.`,
+    cta: 'Open FIRE planner',
+  } : r.status === 'unreachable' ? {
+    rates: `${scen} · ${pct(a.returns[scenario])} RETURN · ${wr} WITHDRAWAL`,
+    head: hasAge ? `Not reachable by ${Math.floor(input.age! + input.horizonMonths / 12)} yet` : 'Not reachable with these numbers',
+    sub: 'See what it would take to stop working.',
+    cta: 'See what it would take',
+  } : {
+    rates: 'NEEDS SPENDING DATA',
+    head: 'When can you stop working?',
+    sub: 'Log a month of spending and we can work it out.',
+    cta: 'Find out when you can stop working',
+  }
+
+  const showProg = r.status !== 'no-expenses'
+  const progS = masked
+    ? `${progress.toFixed(1)}% of what you need${r.status === 'already' ? '' : ' today'}`
+    : `${cpt(have)} of ${cpt(r.targetToday)} needed${r.status === 'already' ? '' : ' today'} · ${progress.toFixed(1)}%`
+  const status = r.status === 'already'
+    ? { ok: true, text: masked ? 'Covered with room to spare' : `Covered — ${cpt(have - r.targetToday)} above target` }
+    : { ok: good, text: good ? `On track — ${M(`${cpt(rv.gap)} `)}surplus by ${byLabel}` : `Short — ${M(`${cpt(-rv.gap)} `)}shortfall by ${byLabel}` }
 
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0 }}>FIRE planner</h2>
-          <KindTag kind="projection" />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ font: `500 12px/1 ${MONO}`, color: 'var(--text-2)' }}>
-            {SCENARIO_META[scenario].label} · {pct(a.returns[scenario])} / {pct(a.withdrawalRates[scenario])}
-          </span>
-          <MaskToggle masked={masked} onToggle={onToggleMask} />
-        </div>
+    <div style={{ ...CARD, position: 'relative', overflow: 'hidden', padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <span className="nw-mono" style={{ fontSize: 10.5, letterSpacing: '.12em', color: 'var(--brand-ink)' }}>FIRE PLAN</span>
+        <span className="nw-mono" style={{ fontSize: 10, color: 'var(--text-3)', padding: '3px 8px', borderRadius: 999, background: 'var(--surface-2)', textAlign: 'right' }}>{v.rates}</span>
       </div>
-
-      {r.status === 'reached' ? (
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: 13, color: 'var(--text-2)' }}>Financial independence in</div>
-            <div className="display-num" style={{ fontSize: 38, fontWeight: 700, letterSpacing: '-0.025em', lineHeight: 1.1, color: 'var(--text)' }}>{r.years!.toFixed(1)} years</div>
-            <div style={{ fontSize: 14, color: 'var(--text-2)', marginTop: 2 }}>
-              {hasAge && r.retirementAge != null ? `at age ${Math.floor(r.retirementAge)} · in ${r.retirementYear}` : `in ${r.retirementYear}`}
-            </div>
+      <div>
+        <div className="nw-serif" style={{ fontSize: 34, lineHeight: 1.02, letterSpacing: '-.01em', textWrap: 'balance' } as React.CSSProperties}>{v.head}</div>
+        <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 6, lineHeight: 1.4 }}>{v.sub}</div>
+      </div>
+      {showProg && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <div style={{ height: 8, borderRadius: 4, background: 'var(--surface-3)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${Math.max(1.5, Math.min(100, progress))}%`, borderRadius: 4, background: 'linear-gradient(90deg, var(--brand-deep), var(--brand-2))', transition: 'width .6s ease' }} />
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-            <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Projected corpus</div>
-            <div className="display-num" style={{ fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{fmtShort(r.projectedPortfolio, masked)}</div>
-            <MoneyTag future text={`In ${r.retirementYear} ₹`} />
-          </div>
+          <div className="nw-num" style={{ fontSize: 12, color: 'var(--text-3)' }}>{progS}</div>
         </div>
-      ) : (
-        <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text)' }}>{shortTitle}</div>
       )}
-
-      {r.status !== 'no-expenses' && (
-        <>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ height: 8, borderRadius: 999, background: 'var(--surface-3)', overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${Math.max(1.5, Math.min(100, progress))}%`, background: 'var(--brand)', borderRadius: 999, transition: 'width .6s ease' }} />
-            </div>
-            <div style={{ fontSize: 12.5, color: 'var(--text-2)' }}>
-              {fmtShort(Math.max(0, input.portfolio), masked)} of {fmtShort(r.targetToday, masked)} needed today · {progress.toFixed(1)}%
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 12, background: good ? 'var(--good-soft)' : 'var(--warn-soft)', color: good ? 'var(--good-ink)' : 'var(--warn-ink)', fontSize: 13.5, fontWeight: 600 }}>
-            <span style={{ fontWeight: 800 }}>{good ? '✓' : '!'}</span>
-            {good ? `On track — ${fmtShort(rv.gap, masked)} surplus by ${byLabel}` : `Short — ${fmtShort(-rv.gap, masked)} shortfall by ${byLabel}`}
-          </div>
-        </>
+      {showProg && (
+        <div style={{ padding: '10px 12px', borderRadius: 12, background: status.ok ? 'var(--good-soft)' : 'var(--bad-soft)', color: status.ok ? 'var(--good-ink)' : 'var(--bad-ink)', fontSize: 13, fontWeight: 700, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span aria-hidden style={{ width: 20, height: 20, borderRadius: '50%', flex: 'none', background: 'currentColor', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12 }}>
+            <span style={{ color: 'var(--surface)' }}>{status.ok ? '✓' : '!'}</span>
+          </span>
+          {status.text}
+        </div>
       )}
-
-      <Link href="/networth/fire" className="pressable"
-        style={{ minHeight: 48, borderRadius: 14, background: 'var(--brand)', color: '#fff', fontSize: 14.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, textDecoration: 'none' }}>
-        Open FIRE planner →
+      <Link href="/networth/fire"
+        style={{ height: 42, borderRadius: 999, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)', fontSize: 13.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}>
+        {v.cta} →
       </Link>
     </div>
   )

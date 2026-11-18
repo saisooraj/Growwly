@@ -245,8 +245,9 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
   function prev() { if (canPrev) setSelectedMonth(months[currentIdx - 1]) }
   function next() { if (canNext) setSelectedMonth(months[currentIdx + 1]) }
 
-  // Transactions draws its own header: the month switcher there also reads "All time" while searching
-  if (pathname === '/transactions') return null
+  // Transactions draws its own header: the month switcher there also reads "All time" while searching.
+  // Net Worth draws its own too: the Wealth title, price refresh and privacy switch.
+  if (pathname === '/transactions' || pathname === '/networth') return null
 
   return (
     <header

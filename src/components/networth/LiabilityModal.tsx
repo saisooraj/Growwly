@@ -1,16 +1,14 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { X } from 'lucide-react'
+import { useState, useMemo } from 'react'
 import type { Liability, LiabilityKind } from '@/types'
-import { formatCurrencyFull } from '@/lib/utils'
-import CenteredModal from '@/components/ui/CenteredModal'
+import { Chip, Field, Sheet, SheetActions, SheetTitle, rs } from './nwUi'
 
 const KINDS: { value: LiabilityKind; label: string }[] = [
   { value: 'home_loan',     label: 'Home Loan' },
   { value: 'car_loan',      label: 'Car Loan' },
   { value: 'personal_loan', label: 'Personal Loan' },
-  { value: 'credit_card',   label: 'Credit Card Balance' },
+  { value: 'credit_card',   label: 'Credit Card' },
   { value: 'other',         label: 'Other' },
 ]
 
@@ -36,28 +34,14 @@ export default function LiabilityModal({ item, onSave, onClose }: Props) {
   const [saving, setSaving] = useState(false)
 
   const isCreditCard = kind === 'credit_card'
-
-  useEffect(() => {
-    if (item) {
-      setName(item.name); setKind(item.kind)
-      setPrincipal(String(item.principal)); setRate(String(item.interestRate))
-      setTenure(String(item.tenureMonths)); setStartDate(item.startDate)
-    }
-  }, [item])
+  const months = parseInt(tenure) || 0
 
   const emi = useMemo(() => {
     const p = parseFloat(principal) || 0
     const r = parseFloat(rate) || 0
-    const n = parseInt(tenure) || 0
-    if (p > 0 && n > 0) return calcEMI(p, r, n)
+    if (p > 0 && months > 0) return calcEMI(p, r, months)
     return 0
-  }, [principal, rate, tenure])
-
-  const totalInterest = useMemo(() => {
-    const p = parseFloat(principal) || 0
-    const n = parseInt(tenure) || 0
-    return Math.max(0, emi * n - p)
-  }, [emi, principal, tenure])
+  }, [principal, rate, months])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -68,7 +52,7 @@ export default function LiabilityModal({ item, onSave, onClose }: Props) {
         name: name.trim(), kind,
         principal: parseFloat(principal),
         interestRate: parseFloat(rate) || 0,
-        tenureMonths: isCreditCard ? 0 : (parseInt(tenure) || 0),
+        tenureMonths: isCreditCard ? 0 : months,
         startDate,
         emiAmount: emi > 0 ? Math.round(emi) : undefined,
       }, item?.id)
@@ -78,64 +62,45 @@ export default function LiabilityModal({ item, onSave, onClose }: Props) {
   }
 
   return (
-    <CenteredModal onClose={onClose}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{item ? 'Edit Liability' : 'Add Liability / Loan'}</h2>
-          <button onClick={onClose} style={{ padding: 6, borderRadius: 8, border: 'none', background: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text-2)', display: 'flex' }}><X size={16} /></button>
+    <Sheet onClose={onClose} label={item ? 'Edit liability' : 'Add a liability'}>
+      <SheetTitle title={item ? 'Edit liability' : 'Add a liability'} onClose={onClose} />
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span className="nw-label">Type</span>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {KINDS.map(k => <Chip key={k.value} on={kind === k.value} label={k.label} onClick={() => setKind(k.value)} />)}
+          </div>
         </div>
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <label className="label">Type</label>
-            <select className="input" value={kind} onChange={e => setKind(e.target.value as LiabilityKind)}>
-              {KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
-            </select>
+        <Field label="Name / Lender">
+          <input className="nw-input" value={name} onChange={e => setName(e.target.value)} placeholder={isCreditCard ? 'e.g. HDFC Credit Card' : 'e.g. SBI Home Loan'} required />
+        </Field>
+        <Field label={isCreditCard ? 'Outstanding balance' : 'Loan amount'}>
+          <input className="nw-input" type="number" inputMode="decimal" min="0" value={principal} onChange={e => setPrincipal(e.target.value)} placeholder="₹0" required autoFocus={!item} />
+        </Field>
+        {!isCreditCard && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+            <Field label="Rate % p.a.">
+              <input className="nw-input" type="number" inputMode="decimal" min="0" step="0.01" value={rate} onChange={e => setRate(e.target.value)} placeholder="8.5" />
+            </Field>
+            <Field label="Months">
+              <input className="nw-input" type="number" inputMode="numeric" min="1" value={tenure} onChange={e => setTenure(e.target.value)} placeholder="240" />
+            </Field>
+            <Field label="Started">
+              <input className="nw-input" type="month" value={startDate.slice(0, 7)} style={{ padding: '0 8px' }}
+                // Keeps the saved day when the month is unchanged
+                onChange={e => e.target.value && setStartDate(e.target.value === startDate.slice(0, 7) ? startDate : `${e.target.value}-01`)} />
+            </Field>
           </div>
-          <div>
-            <label className="label">Name / Lender</label>
-            <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. SBI Home Loan" required />
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', borderRadius: 14, background: 'var(--surface-2)' }}>
+          <div style={{ fontSize: 12.5, color: 'var(--text-2)', lineHeight: 1.4 }}>
+            {isCreditCard ? 'Cards are tracked as a balance. Update it after you pay the bill.'
+              : months > 0 ? `Estimated EMI for ${months} months` : 'Add the rate and months to see the EMI'}
           </div>
-          <div>
-            <label className="label">{isCreditCard ? 'Outstanding Balance (₹)' : 'Loan Amount (₹)'}</label>
-            <input className="input" type="number" inputMode="decimal" min="0" value={principal} onChange={e => setPrincipal(e.target.value)} placeholder="e.g. 2500000" required />
-          </div>
-          {!isCreditCard && (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <label className="label">Interest Rate (% p.a.)</label>
-                  <input className="input" type="number" inputMode="decimal" min="0" step="0.01" value={rate} onChange={e => setRate(e.target.value)} placeholder="e.g. 8.5" />
-                </div>
-                <div>
-                  <label className="label">Tenure (months)</label>
-                  <input className="input" type="number" inputMode="decimal" min="1" value={tenure} onChange={e => setTenure(e.target.value)} placeholder="e.g. 240" />
-                </div>
-              </div>
-              <div>
-                <label className="label">Loan Start Date</label>
-                <input type="date" className="input" value={startDate} onChange={e => setStartDate(e.target.value)} />
-              </div>
-              {emi > 0 && (
-                <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: '12px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                  <div>
-                    <p style={{ fontSize: 10, color: 'var(--text-4)', margin: '0 0 2px' }}>EMI / month</p>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{formatCurrencyFull(Math.round(emi))}</p>
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 10, color: 'var(--text-4)', margin: '0 0 2px' }}>Total interest</p>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--bad-ink)', margin: 0 }}>{formatCurrencyFull(Math.round(totalInterest))}</p>
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 10, color: 'var(--text-4)', margin: '0 0 2px' }}>Total outflow</p>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{formatCurrencyFull(Math.round(emi * (parseInt(tenure) || 0)))}</p>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-          <button type="submit" className="btn-primary btn" disabled={saving} style={{ marginTop: 4 }}>
-            {saving ? 'Saving…' : item ? 'Update' : 'Add Liability'}
-          </button>
-        </form>
-    </CenteredModal>
+          {!isCreditCard && emi > 0 && <div className="nw-num" style={{ fontSize: 18, fontWeight: 700, whiteSpace: 'nowrap' }}>{rs(emi)}/mo</div>}
+        </div>
+        <SheetActions onCancel={onClose} primary={saving ? 'Saving…' : item ? 'Save changes' : 'Add liability'} submit disabled={saving || !name.trim() || !principal} />
+      </form>
+    </Sheet>
   )
 }

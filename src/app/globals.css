@@ -582,6 +582,102 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 .txn-noscroll { scrollbar-width: none; }
 .txn-noscroll::-webkit-scrollbar { display: none; }
 
+/* ── Net worth redesign ─────────────────────────────────────────────────────
+   The design's own tokens, scoped to the Net Worth page and its sheets. Brand colours stay
+   the user's accent; surfaces, text and the good/bad/warn pairs follow the design. */
+.nw-scope {
+  --surface: #FFFFFF; --surface-2: #F2F1EB; --surface-3: #E8E6DE; --border: #E6E4DC;
+  --text: #17181B; --text-2: #45474D; --text-3: #707278; --text-4: #A3A4A8;
+  --good: oklch(0.58 0.14 150); --good-soft: oklch(0.94 0.05 150); --good-ink: oklch(0.42 0.11 150);
+  --bad:  oklch(0.58 0.18 27);  --bad-soft:  oklch(0.95 0.03 27);  --bad-ink:  oklch(0.48 0.16 27);
+  --warn: oklch(0.76 0.15 72);  --warn-soft: oklch(0.95 0.05 82);  --warn-ink: oklch(0.47 0.11 60);
+  --info-soft: oklch(0.95 0.03 250); --info-ink: oklch(0.45 0.12 250);
+  --elev: 0 1px 2px rgba(40,36,20,.05), 0 4px 14px rgba(40,36,20,.04);
+  --elev-lg: 0 -10px 50px rgba(30,28,20,.18);
+  --hero-shadow: 0 22px 44px -20px color-mix(in oklch, var(--brand-deep) 60%, transparent);
+  --scrim: rgba(24,24,18,.38);
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 14px; line-height: 1.4; color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+.dark .nw-scope {
+  --surface: #16171B; --surface-2: #1E2025; --surface-3: #292B31; --border: #26282E;
+  --text: #F1F1EC; --text-2: #C4C5C7; --text-3: #8F9196; --text-4: #5F6167;
+  --good: oklch(0.70 0.15 150); --good-soft: oklch(0.27 0.05 150); --good-ink: oklch(0.83 0.13 150);
+  --bad:  oklch(0.62 0.17 27);  --bad-soft:  oklch(0.28 0.05 27);  --bad-ink:  oklch(0.80 0.12 27);
+  --warn: oklch(0.78 0.14 75);  --warn-soft: oklch(0.28 0.05 75);  --warn-ink: oklch(0.86 0.12 80);
+  --info-soft: oklch(0.28 0.05 250); --info-ink: oklch(0.82 0.09 250);
+  --elev: 0 1px 0 rgba(255,255,255,.03) inset, 0 4px 16px rgba(0,0,0,.25);
+  --elev-lg: 0 -10px 60px rgba(0,0,0,.6);
+  --hero-shadow: 0 22px 44px -22px color-mix(in oklch, var(--brand) 50%, transparent);
+  --scrim: rgba(0,0,0,.6);
+}
+.nw-scope button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+.nw-scope [role="button"] { -webkit-tap-highlight-color: transparent; }
+.nw-scope button:focus-visible, .nw-scope [role="button"]:focus-visible, .nw-scope a:focus-visible {
+  outline: 2px solid var(--brand); outline-offset: 2px;
+}
+.nw-mono { font-family: 'Geist Mono', ui-monospace, monospace; }
+.nw-serif { font-family: 'Instrument Serif', Georgia, serif; }
+.nw-num { font-variant-numeric: tabular-nums; }
+
+/* Form fields in the sheets */
+.nw-label { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: .1em; color: var(--text-3); text-transform: uppercase; }
+.nw-input {
+  width: 100%; box-sizing: border-box; height: 48px; padding: 0 12px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2);
+  font: inherit; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text);
+  outline: none; transition: border-color .15s, box-shadow .15s, background-color .15s;
+}
+.nw-input::placeholder { color: var(--text-4); font-weight: 500; }
+.nw-input:focus { border: 1.5px solid var(--brand); padding: 0 11.5px; background: var(--surface); box-shadow: 0 0 0 4px var(--brand-soft); }
+select.nw-input { appearance: none; -webkit-appearance: none; cursor: pointer; }
+/* Under 16px, iOS zooms the page on focus */
+@media (max-width: 1023px) { .nw-input { font-size: 16px; } }
+.nw-range { width: 100%; margin: 0; accent-color: var(--brand); }
+
+/* One column on phones; two from 1024 (left: own + heading, right: safety net, owe, independence) */
+.nw-page { display: flex; flex-direction: column; gap: 18px; padding-top: env(safe-area-inset-top, 0px); }
+.nw-title { font-size: 26px; }
+.nw-seg { width: 100%; }
+.nw-hero { padding: 20px; }
+.nw-hero-num { font-size: 42px; }
+.nw-main { display: flex; flex-direction: column; gap: 18px; }
+.nw-col { display: contents; }
+.nw-desk { display: none !important; }
+@media (min-width: 1024px) {
+  .nw-page { max-width: 1060px; width: 100%; margin: 0 auto; padding: 6px 12px 16px; box-sizing: border-box; }
+  .nw-title { font-size: 30px; }
+  .nw-seg { width: 300px; }
+  .nw-hero { padding: 28px 30px; }
+  .nw-hero-num { font-size: 56px; }
+  .nw-main { flex-direction: row; align-items: flex-start; }
+  .nw-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .nw-col-l { flex: 1.4 1 0px; }
+  .nw-col-r { flex: 1 1 0px; }
+  .nw-desk { display: flex !important; }
+  .nw-phone { display: none !important; }
+}
+
+@keyframes nw-drop   { 0% { transform: translateY(-7px) rotate(-45deg); opacity: .55 } 50% { transform: translateY(2px) rotate(-45deg); opacity: 1 } 100% { transform: translateY(-7px) rotate(-45deg); opacity: .55 } }
+@keyframes nw-ripple { 0% { transform: scale(.4); opacity: .7 } 100% { transform: scale(1.6); opacity: 0 } }
+@keyframes nw-shim   { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
+@keyframes nw-up     { from { transform: translateY(100%) } to { transform: none } }
+@keyframes nw-pop    { from { opacity: 0; transform: translateY(8px) scale(.98) } to { opacity: 1; transform: none } }
+@keyframes nw-fade   { from { opacity: 0 } to { opacity: 1 } }
+@keyframes nw-draw   { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
+.nw-sheet-up { animation: nw-up .32s cubic-bezier(.32,.72,0,1); }
+.nw-sheet-pop { animation: nw-pop .32s cubic-bezier(.32,.72,0,1); }
+.nw-fade { animation: nw-fade .2s ease; }
+.nw-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: nw-draw .6s ease forwards; }
+.nw-skel { background: linear-gradient(90deg, var(--surface-2) 20%, var(--surface-3) 50%, var(--surface-2) 80%); background-size: 200% 100%; animation: nw-shim 1.5s linear infinite; border-radius: 10px; }
+@media (prefers-reduced-motion: reduce) {
+  .nw-sheet-up, .nw-sheet-pop { animation: nw-fade .2s ease; }
+  .nw-draw { animation: none; stroke-dashoffset: 0; }
+  .nw-skel { animation: none; }
+  .nw-scope * { transition-duration: 0s !important; }
+}
+
 /* Spending breakdown page: donut | checklist */
 .spend-grid {
   display: grid;

@@ -1,293 +1,212 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Minus } from 'lucide-react'
-import { formatCurrencyFull } from '@/lib/utils'
+import { useMemo, useState } from 'react'
 import { legacyGoldPurchases } from '@/lib/gold'
 import type { AssetWithValue } from '@/lib/assetValuation'
-import type { Asset, AssetKind } from '@/types'
-import MaskToggle from './MaskToggle'
+import type { AssetKind } from '@/types'
+import { BRAND_BTN, CARD, Chevron, EYEBROW, KIND_LABEL, KIND_ORDER, PILL_BTN, Tap, kindColor, kindTint, maskWith, monogram, pc, rs } from './nwUi'
 
-// ── Kind metadata ─────────────────────────────────────────────────────────────
-
-const KIND_META: Record<AssetKind, { label: string; color: string }> = {
-  mutual_fund:  { label: 'Mutual Funds',      color: '#6366f1' },
-  stocks:       { label: 'Stocks & ETFs',     color: '#8b5cf6' },
-  gold_grams:   { label: 'Gold',              color: '#f59e0b' },
-  epf:          { label: 'EPF',               color: '#0ea5e9' },
-  ppf:          { label: 'PPF',               color: '#0284c7' },
-  nps:          { label: 'NPS',               color: '#0891b2' },
-  epf_ppf:      { label: 'EPF / PPF (legacy)', color: '#0ea5e9' },
-  fd_rd:        { label: 'FD / RD',           color: '#10b981' },
-  post_office:  { label: 'Post Office',       color: '#dc2626' },
-  cash:         { label: 'Cash & Savings',    color: '#22c55e' },
-  real_estate:  { label: 'Real Estate',       color: '#f97316' },
-  vehicle:      { label: 'Vehicle',           color: '#94a3b8' },
-  other:        { label: 'Other',             color: '#94a3b8' },
-}
-
-const KIND_ORDER: AssetKind[] = ['mutual_fund','stocks','gold_grams','epf','ppf','nps','epf_ppf','fd_rd','post_office','cash','real_estate','vehicle','other']
-
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
-function GainBadge({ gain, gainPct }: { gain: number; gainPct: number | null }) {
-  if (gainPct === null) return null
-  const up = gain >= 0
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontWeight: 600, color: up ? 'var(--good-ink)' : 'var(--bad-ink)' }}>
-      {up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-      {up ? '+' : ''}{gainPct.toFixed(1)}%
-    </span>
-  )
-}
+// ── Per-holding helpers (also used by the holding sheet) ──────────────────────
 
 // What a holding cost: the basis its gain is measured against, or the invested amount on file.
-function investedOf(a: AssetWithValue): number | null {
+export function investedOf(a: AssetWithValue): number | null {
   if (a.gainPct !== null) return a.currentValue - a.gain
   return a.investedAmount && a.investedAmount > 0 ? a.investedAmount : null
 }
 
-// Totals for a set of holdings. `invested` is only given when every holding has one, so it
-// always describes the same money as `value`.
-function summarize(items: AssetWithValue[]) {
-  const value = items.reduce((s, a) => s + a.currentValue, 0)
-  const tracked = items.filter(a => a.gainPct !== null)
-  const gain = tracked.reduce((s, a) => s + a.gain, 0)
-  const basis = tracked.reduce((s, a) => s + (a.currentValue - a.gain), 0)
-  const costs = items.map(investedOf)
-  const invested = items.length > 0 && costs.every(c => c !== null) ? costs.reduce((s: number, c) => s + (c ?? 0), 0) : null
-  return { value, gain, gainPct: basis > 0 ? (gain / basis) * 100 : null, invested }
+function goldKarat(a: AssetWithValue): string {
+  const karats = Array.from(new Set(legacyGoldPurchases(a).map(p => p.karat)))
+  return karats.length === 1 ? `${karats[0]}K` : karats.length > 1 ? 'Au' : `${a.karat ?? 22}K`
 }
 
-function GainLine({ gain, gainPct, masked }: { gain: number; gainPct: number | null; masked: boolean }) {
-  if (gainPct === null) return null
-  const up = gain >= 0
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontWeight: 600, color: up ? 'var(--good-ink)' : 'var(--bad-ink)', whiteSpace: 'nowrap' }}>
-      {up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-      {masked
-        ? `${up ? '+' : '−'}${Math.abs(gainPct).toFixed(1)}%`
-        : `${up ? '+' : '−'}${formatCurrencyFull(Math.abs(gain))} (${Math.abs(gainPct).toFixed(1)}%)`}
-    </span>
-  )
+export const holdingMono = (a: AssetWithValue) => a.kind === 'gold_grams' ? goldKarat(a) : monogram(a.name || KIND_LABEL[a.kind])
+export const holdingName = (a: AssetWithValue) => a.name || (a.kind === 'gold_grams' ? `${goldKarat(a)} Gold` : a.ticker ?? a.schemeCode ?? KIND_LABEL[a.kind])
+
+/** "8,412.306 units · invested ₹5,20,000" */
+export function holdingDetail(a: AssetWithValue): string {
+  const deposits = a.ppfDeposits?.filter(d => !d.interest).length ?? 0
+  const lots = a.kind === 'gold_grams' ? legacyGoldPurchases(a).length : 0
+  const main =
+    a.kind === 'mutual_fund' && a.units ? `${a.units.toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} units` :
+    a.kind === 'stocks' && a.quantity ? `${a.quantity} shares · avg ₹${(a.avgBuyPrice ?? 0).toLocaleString('en-IN')}` :
+    a.kind === 'gold_grams' ? `${a.value.toFixed(2)}g · ${lots} purchase${lots === 1 ? '' : 's'}` :
+    a.kind === 'epf' ? `est. from ${a.balanceAsOf ?? 'snapshot'}${a.monthlyContribution ? ` · +₹${a.monthlyContribution.toLocaleString('en-IN')}/mo` : ''}` :
+    a.kind === 'ppf' ? `${deposits} deposit${deposits === 1 ? '' : 's'} · ${a.annualRate ?? 7.1}%` :
+    a.kind === 'nps' ? (a.npsHoldings?.length ? `${a.npsHoldings.length} scheme${a.npsHoldings.length === 1 ? '' : 's'} · live NAV` : 'manual corpus') :
+    a.kind === 'post_office' ? a.postOfficeScheme ?? '' : ''
+  const invested = a.investedAmount && ['mutual_fund', 'fd_rd', 'post_office', 'epf_ppf'].includes(a.kind) ? `invested ₹${a.investedAmount.toLocaleString('en-IN')}` : ''
+  return [main, invested].filter(Boolean).join(' · ') || KIND_LABEL[a.kind]
 }
 
-interface CategoryCardProps {
-  kind: AssetKind
-  assets: AssetWithValue[]
-  totalValue: number
-  totalGain: number
-  totalGainPct: number | null
-  invested: number | null
-  allTotal: number
-  masked: boolean
-  onEdit: (a: Asset) => void
-  onDelete: (id: string) => void
-  onAddUnits: (transactionId: string) => void
-}
+const gainColor = (g: number | null) => g == null || g === 0 ? 'var(--text-3)' : g > 0 ? 'var(--good-ink)' : 'var(--bad-ink)'
 
-function CategoryCard({ kind, assets, totalValue, totalGain, totalGainPct, invested, allTotal, masked, onEdit, onDelete, onAddUnits }: CategoryCardProps) {
-  const [open, setOpen] = useState(false)
-  const meta = KIND_META[kind]
-  const alloc = allTotal > 0 ? (totalValue / allTotal) * 100 : 0
-  const fmt = (v: number) => masked ? '₹ •••' : formatCurrencyFull(v)
-
-  return (
-    <div style={{ borderRadius: 12, background: 'var(--surface-2)', overflow: 'hidden' }}>
-      {/* Category header row */}
-      <button
-        type="button" onClick={() => setOpen(v => !v)}
-        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left' }}
-      >
-        <div style={{ width: 8, height: 8, borderRadius: '50%', background: meta.color, flexShrink: 0 }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)' }}>{meta.label}</span>
-            <span style={{ fontSize: 11, color: 'var(--text-4)', background: 'var(--surface-3)', borderRadius: 999, padding: '1px 7px' }}>{alloc.toFixed(1)}%</span>
-          </div>
-          {invested !== null && (
-            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2, whiteSpace: 'nowrap' }}>Invested {fmt(invested)}</div>
-          )}
-        </div>
-        <div style={{ textAlign: 'right', flexShrink: 0, marginRight: 6 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{fmt(totalValue)}</div>
-          <GainLine gain={totalGain} gainPct={totalGainPct} masked={masked} />
-        </div>
-        {open ? <ChevronDown size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} /> : <ChevronRight size={14} style={{ color: 'var(--text-4)', flexShrink: 0 }} />}
-      </button>
-
-      {/* Holdings list */}
-      {open && (
-        <div style={{ borderTop: '1px solid var(--border)' }}>
-          {assets.map(a => {
-            const goldLots = a.kind === 'gold_grams' ? legacyGoldPurchases(a) : []
-            const goldKarats = Array.from(new Set(goldLots.map(p => p.karat)))
-            const goldKaratLabel = goldKarats.length === 1 ? `${goldKarats[0]}K` : goldKarats.length > 1 ? 'Au' : `${a.karat ?? 22}K`
-            return (
-            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid var(--border)' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0, background: meta.color + '18', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: meta.color }}>
-                  {a.kind === 'gold_grams' ? goldKaratLabel : a.name.slice(0, 2).toUpperCase()}
-                </span>
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {a.name || (a.kind === 'gold_grams' ? `${goldKaratLabel} Gold` : a.ticker ?? a.schemeCode)}
-                </p>
-                <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, marginTop: 1 }}>
-                  {a.kind === 'mutual_fund' && a.units ? `${a.units.toFixed(3)} units` :
-                   a.kind === 'stocks' && a.quantity ? `${a.quantity} shares · avg ₹${(a.avgBuyPrice ?? 0).toLocaleString('en-IN')}` :
-                   a.kind === 'gold_grams' ? `${a.value.toFixed(2)}g · ${goldLots.length} purchase${goldLots.length === 1 ? '' : 's'}` :
-                   a.kind === 'epf' ? `est. from ${a.balanceAsOf ?? 'snapshot'}${a.monthlyContribution ? ` · +₹${a.monthlyContribution.toLocaleString('en-IN')}/mo` : ''}` :
-                   a.kind === 'ppf' ? `${a.ppfDeposits?.filter(d => !d.interest).length ?? 0} deposit${(a.ppfDeposits?.filter(d => !d.interest).length ?? 0) === 1 ? '' : 's'} · ${a.annualRate ?? 7.1}%` :
-                   a.kind === 'nps' ? (a.npsHoldings?.length ? `${a.npsHoldings.length} scheme${a.npsHoldings.length === 1 ? '' : 's'} · live NAV` : 'manual corpus') :
-                   a.kind === 'post_office' ? a.postOfficeScheme ?? '' : ''}
-                  {a.investedAmount ? ` · invested ${masked ? '•••' : `₹${a.investedAmount.toLocaleString('en-IN')}`}` : ''}
-                </p>
-                {a.pendingTransactionIds.length > 0 && (
-                  <button
-                    type="button" onClick={() => onAddUnits(a.pendingTransactionIds[0])}
-                    title="Counted at cost until the allotted units are added. Click to add them."
-                    style={{ marginTop: 4, padding: '2px 8px', borderRadius: 999, border: 'none', cursor: 'pointer', fontSize: 10.5, fontWeight: 600, background: 'var(--warn-soft)', color: 'var(--warn-ink)' }}
-                  >
-                    {masked ? '•••' : formatCurrencyFull(Math.abs(a.pendingAmount))} awaiting units · Add units
-                  </button>
-                )}
-              </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <p style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text)', margin: 0 }}>{fmt(a.currentValue)}</p>
-                <GainBadge gain={a.gain} gainPct={a.gainPct} />
-              </div>
-              <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
-                <button onClick={() => onEdit(a)} style={{ padding: 5, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)' }}><Pencil size={12} /></button>
-                <button onClick={() => onDelete(a.id)} style={{ padding: 5, borderRadius: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-4)' }}><Trash2 size={12} /></button>
-              </div>
-            </div>
-          )})}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Main component ─────────────────────────────────────────────────────────────
+// ── Card ──────────────────────────────────────────────────────────────────────
 
 interface Props {
   assets: AssetWithValue[]   // already valued by the page, so this list and the net worth total agree
   masked: boolean
-  onToggleMask: () => void
+  lifetime: { invested: number; returns: number; pct: number | null }
+  updating: boolean          // prices are being fetched again
+  openKind: AssetKind | null
+  onOpenKind: (k: AssetKind | null) => void
   onAdd: () => void
   onLog: () => void          // log a savings transaction
-  onEdit: (a: Asset) => void
-  onDelete: (id: string) => void
-  onAddUnits: (transactionId: string) => void  // open a transaction still waiting on its units
+  onOpen: (a: AssetWithValue) => void
+  onAddUnits: (a: AssetWithValue) => void  // a holding still waiting on its units
 }
 
-export default function MyAssetsSection({ assets, masked, onToggleMask, onAdd, onLog, onEdit, onDelete, onAddUnits }: Props) {
-  const enriched = assets
+export default function MyAssetsSection({ assets, masked, lifetime, updating, openKind, onOpenKind, onAdd, onLog, onOpen, onAddUnits }: Props) {
+  const M = maskWith(masked)
+  const [activeSeg, setActiveSeg] = useState<AssetKind | null>(null)
 
-  // Group by kind, sorted by KIND_ORDER
-  const groups = useMemo(() => {
-    const map = new Map<AssetKind, AssetWithValue[]>()
-    for (const a of enriched) {
-      if (!map.has(a.kind)) map.set(a.kind, [])
-      map.get(a.kind)!.push(a)
-    }
-    return KIND_ORDER.filter(k => map.has(k)).map(k => ({ kind: k, items: map.get(k)! }))
-  }, [enriched])
+  const classes = useMemo(() => KIND_ORDER.flatMap(k => {
+    const items = assets.filter(a => a.kind === k)
+    if (!items.length) return []
+    const value = items.reduce((s, a) => s + a.currentValue, 0)
+    const withCost = items.map(a => ({ a, inv: investedOf(a) })).filter(x => x.inv != null) as { a: AssetWithValue; inv: number }[]
+    const inv = withCost.length ? withCost.reduce((s, x) => s + x.inv, 0) : null
+    const iv = withCost.reduce((s, x) => s + x.a.currentValue, 0)
+    return [{ k, items, value, inv, gain: inv != null ? iv - inv : null, gp: inv ? ((iv - inv) / inv) * 100 : null }]
+  }), [assets])
 
-  const total = useMemo(() => summarize(enriched), [enriched])
-  const totalValue = total.value
-
-  const fmt = (v: number) => masked ? '₹ •••' : formatCurrencyFull(v)
+  const total = classes.reduce((s, c) => s + c.value, 0)
+  const largest = classes.slice().sort((a, b) => b.value - a.value)[0]
+  const act = classes.find(c => c.k === activeSeg) ?? largest
+  const hasLife = lifetime.invested > 0
 
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Section header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Savings &amp; Investments</h2>
-          {total.gainPct !== null && (
-            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0 6px', marginTop: 3 }}>
-              <span style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{fmt(totalValue)}</span>
-              <GainLine gain={total.gain} gainPct={total.gainPct} masked={masked} />
+    <div style={{ ...CARD, padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={EYEBROW}>SAVINGS &amp; INVESTMENTS</div>
+          <div className="nw-num" style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-.03em', marginTop: 6 }}>{M(rs(total), false)}</div>
+          {hasLife && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 10px', marginTop: 8 }}>
+              <span className="nw-num" style={{ padding: '3px 9px', borderRadius: 999, background: lifetime.returns >= 0 ? 'var(--good-soft)' : 'var(--bad-soft)', color: lifetime.returns >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)', fontSize: 12, fontWeight: 700 }}>
+                {lifetime.pct == null ? M(rs(lifetime.returns, true))
+                  : masked ? pc(lifetime.pct) : `${rs(lifetime.returns, true)} · ${pc(lifetime.pct, false)}`}
+              </span>
+              <span style={{ fontSize: 12.5, color: 'var(--text-3)' }}>Invested {M(rs(lifetime.invested))}</span>
+              {updating && <span style={{ fontSize: 12, color: 'var(--text-4)' }}>updating…</span>}
             </div>
           )}
-          {total.invested !== null && (
-            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 1 }}>Invested {fmt(total.invested)}</div>
-          )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <MaskToggle masked={masked} onToggle={onToggleMask} />
-          <button
-            onClick={onLog} title="Log a savings transaction"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
-          >
-            <Plus size={13} /> Log
-          </button>
-          <button
-            onClick={onAdd} title="Add a holding"
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
-          >
-            <Plus size={13} /> Add
-          </button>
+        <div style={{ display: 'flex', gap: 6, flex: 'none' }}>
+          <button onClick={onLog} title="Log a savings transaction" style={PILL_BTN}>Log</button>
+          <button onClick={onAdd} title="Add a holding" style={BRAND_BTN}>+ Add</button>
         </div>
       </div>
 
-      {/* Allocation bar */}
-      {groups.length > 0 && !masked && (
-        <div style={{ display: 'flex', height: 6, borderRadius: 999, overflow: 'hidden', gap: 1 }}>
-          {groups.map(g => {
-            const gTotal = g.items.reduce((s, a) => s + a.currentValue, 0)
-            const pct = totalValue > 0 ? (gTotal / totalValue) * 100 : 0
-            return (
-              <div key={g.kind} style={{ width: `${pct}%`, background: KIND_META[g.kind].color, minWidth: pct > 0 ? 2 : 0 }} title={`${KIND_META[g.kind].label}: ${pct.toFixed(1)}%`} />
-            )
-          })}
+      {classes.length > 0 ? (<>
+        {/* Allocation: hover a block to read it, tap to open its class */}
+        <div onMouseLeave={() => setActiveSeg(null)} style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, fontSize: 12.5 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+              <span style={{ width: 9, height: 9, borderRadius: 3, background: kindColor(act.k), flex: 'none' }} />
+              <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{KIND_LABEL[act.k]}</span>
+              {!activeSeg && <span style={{ color: 'var(--text-3)', whiteSpace: 'nowrap' }}>· largest</span>}
+            </span>
+            <span className="nw-num" style={{ color: 'var(--text-2)', whiteSpace: 'nowrap' }}>
+              {(total ? (act.value / total) * 100 : 0).toFixed(1)}% · {M(rs(act.value))}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 3, height: 46 }}>
+            {classes.map(c => {
+              const pct = total ? (c.value / total) * 100 : 0
+              return (
+                <button
+                  key={c.k} type="button" aria-label={`${KIND_LABEL[c.k]}: ${pct.toFixed(1)}%`}
+                  onMouseEnter={() => setActiveSeg(c.k)}
+                  onClick={() => { setActiveSeg(c.k); onOpenKind(c.k) }}
+                  className="nw-mono"
+                  style={{
+                    flex: `${Math.max(c.value, 0)} 1 0px`, minWidth: 7, background: kindColor(c.k), border: 'none', borderRadius: 9,
+                    opacity: activeSeg && activeSeg !== c.k ? 0.32 : 1, transform: `scaleY(${activeSeg === c.k ? 1 : 0.92})`,
+                    transition: 'opacity .2s, transform .2s', display: 'flex', alignItems: 'flex-end', padding: '0 0 6px 7px',
+                    boxSizing: 'border-box', fontSize: 10, fontWeight: 600, color: '#16171a', overflow: 'hidden', cursor: 'pointer',
+                  }}
+                >
+                  {pct >= 9 ? `${Math.round(pct)}%` : ''}
+                </button>
+              )
+            })}
+          </div>
         </div>
-      )}
 
-      {/* Category cards */}
-      {groups.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--text-4)', textAlign: 'center', padding: '24px 0' }}>No holdings yet. Add your first one.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {groups.map(g => {
-            const sum = summarize(g.items)
+        <div style={{ display: 'flex', flexDirection: 'column', marginBottom: -6 }}>
+          {classes.map(c => {
+            const open = openKind === c.k
+            const pct = total ? (c.value / total) * 100 : 0
             return (
-              <CategoryCard
-                key={g.kind}
-                kind={g.kind}
-                assets={g.items}
-                totalValue={sum.value}
-                totalGain={sum.gain}
-                totalGainPct={sum.gainPct}
-                invested={sum.invested}
-                allTotal={totalValue}
-                masked={masked}
-                onEdit={onEdit}
-                onDelete={onDelete}
-                onAddUnits={onAddUnits}
-              />
-            )
-          })}
-        </div>
-      )}
+              <div key={c.k} style={{ borderTop: '1px solid var(--border)' }}>
+                <button
+                  type="button" onClick={() => onOpenKind(open ? null : c.k)} aria-expanded={open}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '13px 2px', border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer' }}
+                >
+                  <span style={{ width: 10, height: 28, borderRadius: 4, background: kindColor(c.k), flex: 'none' }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={{ fontSize: 14.5, fontWeight: 600, whiteSpace: 'nowrap' }}>{KIND_LABEL[c.k]}</span>
+                      <span className="nw-mono" style={{ fontSize: 10.5, color: 'var(--text-3)', padding: '2px 6px', borderRadius: 6, background: 'var(--surface-2)' }}>{pct.toFixed(1)}%</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                      {c.inv != null ? `Invested ${M(rs(c.inv))}` : `${c.items.length} holding${c.items.length > 1 ? 's' : ''} · no cost price`}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flex: 'none' }}>
+                    <div className="nw-num" style={{ fontSize: 14.5, fontWeight: 600 }}>{M(rs(c.value))}</div>
+                    <div className="nw-num" style={{ fontSize: 12, fontWeight: 600, color: gainColor(c.gain) }}>
+                      {c.gain == null || c.gp == null ? '—' : masked ? pc(c.gp) : `${rs(c.gain, true)} · ${pc(c.gp)}`}
+                    </div>
+                  </div>
+                  <Chevron open={open} />
+                </button>
 
-      {/* Allocation legend */}
-      {groups.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px' }}>
-          {groups.map(g => {
-            const gTotal = g.items.reduce((s, a) => s + a.currentValue, 0)
-            const pct = totalValue > 0 ? (gTotal / totalValue) * 100 : 0
-            return (
-              <div key={g.kind} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: KIND_META[g.kind].color, flexShrink: 0 }} />
-                <span style={{ color: 'var(--text-3)' }}>{KIND_META[g.kind].label}</span>
-                <span style={{ color: 'var(--text-4)' }}>{pct.toFixed(0)}%</span>
+                {open && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '0 0 14px 22px' }}>
+                    {c.items.map(a => {
+                      const inv = investedOf(a)
+                      const g = inv != null ? a.currentValue - inv : null
+                      const detail = holdingDetail(a)
+                      return (
+                        <Tap key={a.id} onClick={() => onOpen(a)} label={holdingName(a)}
+                          style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '10px 12px 10px 10px', borderRadius: 14, background: 'var(--surface-2)' }}>
+                          <span className="nw-mono" style={{ width: 36, height: 36, flex: 'none', borderRadius: 11, background: kindTint(a.kind), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 700, color: 'var(--text)' }}>{holdingMono(a)}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.3, textWrap: 'pretty', overflowWrap: 'anywhere' } as React.CSSProperties}>{holdingName(a)}</div>
+                            <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>{masked ? detail.replace(/₹[\d,]+/g, '₹ ••••') : detail}</div>
+                            {a.pendingTransactionIds.length > 0 && (
+                              <button
+                                type="button" onClick={e => { e.stopPropagation(); onAddUnits(a) }}
+                                title="Counted at cost until the allotted units are added"
+                                style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px', borderRadius: 999, border: 'none', background: 'var(--warn-soft)', color: 'var(--warn-ink)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                              >
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--warn)' }} />
+                                {M(rs(Math.abs(a.pendingAmount)))} awaiting units · Add units
+                              </button>
+                            )}
+                          </div>
+                          <div style={{ textAlign: 'right', flex: 'none' }}>
+                            <div className="nw-num" style={{ fontSize: 13.5, fontWeight: 600 }}>{M(rs(a.currentValue))}</div>
+                            <div style={{ fontSize: 11.5, fontWeight: 600, color: gainColor(g) }}>{inv ? pc((g! / inv) * 100) : ''}</div>
+                          </div>
+                        </Tap>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             )
           })}
+        </div>
+      </>) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 18, borderRadius: 16, border: '1.5px dashed var(--border)', alignItems: 'flex-start' }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            {(['mutual_fund', 'gold_grams', 'epf'] as const).map(k => <span key={k} style={{ width: 22, height: 22, borderRadius: 6, background: kindColor(k) }} />)}
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>No holdings yet. Add your first one.</div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-3)', lineHeight: 1.45 }}>Mutual funds, stocks, gold, EPF, PPF, FDs, your savings account — anything you own.</div>
+          <button onClick={onAdd} style={{ ...BRAND_BTN, height: 38, padding: '0 16px', fontSize: 13 }}>Add a holding</button>
         </div>
       )}
     </div>

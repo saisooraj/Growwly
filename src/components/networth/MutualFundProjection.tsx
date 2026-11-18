@@ -1,11 +1,6 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import {
-  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts'
-import { TrendingUp, Info, Wallet, ChevronDown, ChevronRight } from 'lucide-react'
-import MaskToggle from './MaskToggle'
 import { pendingUnitContributions } from '@/lib/assetValuation'
 import type { Asset } from '@/types'
 import {
@@ -13,6 +8,7 @@ import {
   type MFScenario, type ProjectionFund,
 } from '@/lib/mfProjection'
 import { getCAGR, inferCategory, CATEGORY_LABELS } from '@/services/mfCAGR'
+import { CARD, Chevron, EYEBROW, Toggle, cpt, maskWith, rs } from './nwUi'
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -21,11 +17,7 @@ const DEFAULT_SIP = 5000
 const PREFS_KEY = 'mf_proj_prefs'
 const DEBOUNCE_MS = 150
 
-const SCENARIO_META: Record<MFScenario, { label: string; soft: string; ink: string; border: string }> = {
-  conservative: { label: 'Conservative', soft: 'var(--bad-soft)',  ink: 'var(--bad-ink)',  border: 'var(--bad)' },
-  base:         { label: 'Base case',    soft: 'var(--good-soft)', ink: 'var(--good-ink)', border: 'var(--good)' },
-  optimistic:   { label: 'Optimistic',   soft: 'var(--info-soft)', ink: 'var(--info-ink)', border: 'var(--info)' },
-}
+const SCENARIO_LABEL: Record<MFScenario, string> = { conservative: 'Conservative', base: 'Base case', optimistic: 'Optimistic' }
 
 interface FundPref { sip: number; active: boolean }
 interface Prefs {
@@ -38,18 +30,6 @@ interface Prefs {
 const DEFAULT_PREFS: Prefs = { scenario: 'base', horizon: 10, stepUp: 10, funds: {} }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function fmtBig(v: number, masked: boolean): string {
-  if (masked) return '₹ •••'
-  if (v >= 1e7) return `₹${(v / 1e7).toFixed(2)} Cr`
-  if (v >= 1e5) return `₹${(v / 1e5).toFixed(1)} L`
-  if (v >= 1e3) return `₹${(v / 1e3).toFixed(0)}K`
-  return `₹${Math.round(v)}`
-}
-
-function fmtSip(v: number): string {
-  return v >= 1000 ? `₹${Math.round(v / 1000)}k` : `₹${v}`
-}
 
 function useDebounced<T>(value: T, ms: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -82,11 +62,11 @@ function loadPrefs(): Prefs {
 interface Props {
   assets: Asset[]
   masked: boolean
-  onToggleMask: () => void
 }
 
-export default function MutualFundProjection({ assets, masked, onToggleMask }: Props) {
+export default function MutualFundProjection({ assets, masked }: Props) {
   const mfAssets = useMemo(() => assets.filter(a => a.kind === 'mutual_fund'), [assets])
+  const M = maskWith(masked)
 
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS)
   const [expanded, setExpanded] = useState(false)
@@ -174,11 +154,6 @@ export default function MutualFundProjection({ assets, masked, onToggleMask }: P
   if (mfAssets.length === 0) return null
 
   const { summary, yearByYear } = result
-  const chartData = yearByYear.map(p => ({
-    label: p.year === 0 ? 'Now' : `Yr ${p.year}`,
-    invested: p.invested,
-    corpus: p.corpus,
-  }))
 
   const setFundPref = (id: string, patch: Partial<FundPref>) => {
     setPrefs(p => {
@@ -187,274 +162,140 @@ export default function MutualFundProjection({ assets, masked, onToggleMask }: P
     })
   }
 
-  const sc = SCENARIO_META[prefs.scenario]
+  // Chart in a 600×200 box: projected corpus (area + line) over money put in (dashed)
+  const H = Math.max(1, yearByYear.length - 1)
+  const top = Math.max(...yearByYear.map(p => p.corpus), 1) * 1.06
+  const X = (i: number) => ((i / H) * 600).toFixed(1)
+  const Y = (v: number) => (200 - (v / top) * 190).toFixed(1)
+  const line = 'M' + yearByYear.map((p, i) => `${X(i)},${Y(p.corpus)}`).join(' L')
+  const invLine = 'M' + yearByYear.map((p, i) => `${X(i)},${Y(p.invested)}`).join(' L')
+
+  const kpis = [
+    { label: 'PROJECTED CORPUS', val: M(cpt(summary.totalCorpus)), sub: `in ${prefs.horizon} years`, color: 'var(--text)' },
+    { label: 'YOUR GAIN', val: M(cpt(summary.totalGain)), sub: `on ${M(cpt(summary.totalInvested))} invested`, color: 'var(--good-ink)' },
+    { label: 'POST-TAX (EST.)', val: M(cpt(summary.postTaxCorpus)), sub: 'after LTCG @ 12.5%', color: 'var(--text)' },
+  ]
 
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+    <div style={{ ...CARD, overflow: 'hidden' }}>
       <button
         type="button" onClick={() => setExpanded(v => !v)} aria-expanded={expanded}
-        style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, flex: 1, minWidth: 0, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}
+        style={{ width: '100%', padding: 18, display: 'flex', flexDirection: 'column', gap: 14, border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer' }}
       >
-        <div>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Wealth projection</h2>
-          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '2px 0 0' }}>
-            If you keep investing at these rates
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%' }}>
+          <div>
+            <div style={EYEBROW}>WEALTH PROJECTION</div>
+            <div style={{ fontSize: 14.5, fontWeight: 600, marginTop: 4 }}>Mutual funds · {SCENARIO_LABEL[prefs.scenario].toLowerCase()} · {prefs.horizon} yrs</div>
+          </div>
+          <Chevron open={expanded} />
         </div>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-4)', whiteSpace: 'nowrap' }}>
-          {expanded && <><Info size={12} /> AMFI 5-yr CAGR</>}
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </span>
-      </button>
-      <MaskToggle masked={masked} onToggle={onToggleMask} />
-      </div>
-
-      {expanded && <>
-      {/* Scenario selector */}
-      <div style={{ display: 'flex', gap: 6, background: 'var(--surface-2)', padding: 4, borderRadius: 12 }}>
-        {(Object.keys(SCENARIO_META) as MFScenario[]).map(key => {
-          const m = SCENARIO_META[key]
-          const active = prefs.scenario === key
-          return (
-            <button
-              key={key}
-              onClick={() => setPrefs(p => ({ ...p, scenario: key }))}
-              style={{
-                flex: 1, padding: '7px 0', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                borderRadius: 9, border: '1px solid',
-                borderColor: active ? m.border : 'transparent',
-                background: active ? m.soft : 'transparent',
-                color: active ? m.ink : 'var(--text-3)',
-                transition: 'background .15s ease, border-color .15s ease, color .15s ease',
-              }}
-            >
-              {m.label}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Horizon selector */}
-      <div style={{ display: 'flex', gap: 5 }}>
-        {HORIZONS.map(y => {
-          const active = prefs.horizon === y
-          return (
-            <button
-              key={y}
-              onClick={() => setPrefs(p => ({ ...p, horizon: y }))}
-              style={{
-                flex: 1, padding: '6px 0', fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
-                borderRadius: 8, border: '1px solid var(--border)',
-                background: active ? 'var(--text)' : 'var(--surface-2)',
-                color: active ? 'var(--bg)' : 'var(--text-3)',
-                transition: 'background .15s ease, color .15s ease',
-              }}
-            >
-              {y} yr
-            </button>
-          )
-        })}
-      </div>
-
-      </>}
-
-      {/* KPI cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-        <KPI
-          label="Projected corpus"
-          value={fmtBig(summary.totalCorpus, masked)}
-          sub={`at ${prefs.horizon} yr · ${sc.label.toLowerCase()}`}
-        />
-        <KPI
-          label="Your gain"
-          value={(masked ? '₹ •••' : `+${fmtBig(summary.totalGain, false)}`)}
-          valueColor="var(--good-ink)"
-          sub={masked ? 'on invested' : `on ${fmtBig(summary.totalInvested, false)} invested`}
-        />
-        <KPI
-          label="Post-tax (est.)"
-          value={fmtBig(summary.postTaxCorpus, masked)}
-          sub="after LTCG @ 12.5%"
-        />
-      </div>
-
-      {expanded && <>
-      {/* Chart */}
-      <ResponsiveContainer width="100%" height={200}>
-        <ComposedChart data={chartData} margin={{ top: 4, right: 4, left: -18, bottom: 0 }}>
-          <defs>
-            <linearGradient id="mfCorpusGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="var(--brand)" stopOpacity={0.24} />
-              <stop offset="95%" stopColor="var(--brand)" stopOpacity={0.02} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-          <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--text-3)' }} axisLine={false} tickLine={false} />
-          <YAxis
-            tick={{ fontSize: 10, fill: 'var(--text-3)' }} axisLine={false} tickLine={false}
-            tickFormatter={(v: number) => (masked ? '•••' : fmtBig(v, false))}
-            width={54}
-          />
-          <Tooltip content={<ChartTooltip masked={masked} />} cursor={{ stroke: 'var(--border)' }} />
-          <Area
-            type="monotone" dataKey="corpus" name="Projected"
-            stroke="var(--brand)" strokeWidth={2.5} fill="url(#mfCorpusGrad)"
-            dot={false} activeDot={{ r: 4 }}
-          />
-          <Line
-            type="monotone" dataKey="invested" name="Invested"
-            stroke="var(--text-4)" strokeWidth={1.5} strokeDasharray="4 4"
-            dot={false} activeDot={{ r: 3 }}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
-
-      <div style={{ display: 'flex', gap: 14, marginTop: -6 }}>
-        <LegendDot color="var(--brand)" label="Projected corpus" />
-        <LegendDot color="var(--text-4)" label="Total invested" dashed />
-      </div>
-
-      {/* Step-up */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 12 }}>
-        <TrendingUp size={15} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-        <span style={{ fontSize: 12, color: 'var(--text-2)', flex: 1 }}>Annual SIP step-up</span>
-        <input
-          type="range" min={0} max={20} step={1} value={prefs.stepUp}
-          onChange={e => setPrefs(p => ({ ...p, stepUp: Number(e.target.value) }))}
-          style={{ flex: 1, maxWidth: 120, accentColor: 'var(--brand)' }}
-        />
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', minWidth: 52, textAlign: 'right' }}>
-          {prefs.stepUp === 0 ? 'None' : `+${prefs.stepUp}%/yr`}
-        </span>
-      </div>
-
-      {/* Per-fund assumptions */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)' }}>Your funds &amp; assumptions</span>
-        {mfAssets.map(a => {
-          const pref = prefs.funds[a.id]
-          const active = pref?.active ?? true
-          const sip = pref?.sip ?? DEFAULT_SIP
-          const category = inferCategory(a.name)
-          const cagr = cagrByFund[a.id]
-          return (
-            <div
-              key={a.id}
-              style={{
-                background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 12,
-                padding: '12px 14px', opacity: active ? 1 : 0.6, transition: 'opacity .15s ease',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {a.name}
-                  </p>
-                  <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '2px 0 0' }}>
-                    {cagr != null ? `${(cagr * 100).toFixed(1)}% CAGR` : 'CAGR…'} · {CATEGORY_LABELS[category] ?? 'Equity'}
-                  </p>
-                </div>
-                <Toggle on={active} onClick={() => setFundPref(a.id, { active: !active })} />
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 11, color: 'var(--text-3)', minWidth: 46 }}>SIP / mo</span>
-                <input
-                  type="range" min={0} max={100000} step={500} value={sip}
-                  disabled={!active}
-                  onChange={e => setFundPref(a.id, { sip: Number(e.target.value) })}
-                  style={{ flex: 1, accentColor: 'var(--brand)' }}
-                />
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', minWidth: 40, textAlign: 'right' }}>
-                  {active ? fmtSip(sip) : '—'}
-                </span>
-              </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, width: '100%' }}>
+          {kpis.map(k => (
+            <div key={k.label} style={{ padding: '11px 12px', borderRadius: 14, background: 'var(--surface-2)', minWidth: 0 }}>
+              <div className="nw-mono" style={{ fontSize: 9, letterSpacing: '.1em', color: 'var(--text-3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{k.label}</div>
+              <div className="nw-num" style={{ fontSize: 17, fontWeight: 700, marginTop: 5, color: k.color }}>{k.val}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 2, lineHeight: 1.3 }}>{k.sub}</div>
             </div>
-          )
-        })}
-      </div>
+          ))}
+        </div>
+      </button>
 
-      {/* Footnote */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, color: 'var(--text-3)' }}>
-          <Wallet size={13} />
-          {masked ? '•••' : `${summary.wealthMultiplier.toFixed(1)}×`} your money
-        </span>
-        <span style={{ fontSize: 11, color: 'var(--text-4)' }}>
-          LTCG 12.5% above ₹1.25L gain
-        </span>
-      </div>
-      </>}
-    </div>
-  )
-}
+      {expanded && (
+        <div style={{ padding: '16px 18px 18px', display: 'flex', flexDirection: 'column', gap: 16, borderTop: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+            <div role="radiogroup" aria-label="Scenario" style={{ display: 'flex', padding: 3, borderRadius: 11, background: 'var(--surface-3)', gap: 2 }}>
+              {(Object.keys(SCENARIO_LABEL) as MFScenario[]).map(k => {
+                const on = prefs.scenario === k
+                return (
+                  <button key={k} type="button" role="radio" aria-checked={on} onClick={() => setPrefs(p => ({ ...p, scenario: k }))}
+                    style={{ height: 30, padding: '0 11px', borderRadius: 8, border: 'none', display: 'flex', alignItems: 'center', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', background: on ? 'var(--surface)' : 'transparent', boxShadow: on ? 'var(--elev)' : 'none', color: on ? 'var(--text)' : 'var(--text-3)' }}>
+                    {SCENARIO_LABEL[k]}
+                  </button>
+                )
+              })}
+            </div>
+            <div role="radiogroup" aria-label="Years" style={{ display: 'flex', gap: 4 }}>
+              {HORIZONS.map(y => {
+                const on = prefs.horizon === y
+                return (
+                  <button key={y} type="button" role="radio" aria-checked={on} onClick={() => setPrefs(p => ({ ...p, horizon: y }))} className="nw-mono"
+                    style={{ height: 30, padding: '0 10px', borderRadius: 999, border: 'none', display: 'flex', alignItems: 'center', fontSize: 11.5, fontWeight: 600, cursor: 'pointer', background: on ? 'var(--brand)' : 'var(--surface-2)', color: on ? '#fff' : 'var(--text-2)' }}>
+                    {y} YR
+                  </button>
+                )
+              })}
+            </div>
+          </div>
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="nw-mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-3)' }}>
+              <span>{M(cpt(top))}</span>
+              <span style={{ display: 'flex', gap: 12 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, height: 2.5, background: 'var(--brand)', borderRadius: 2 }} />Projected</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 12, borderTop: '1.5px dashed var(--text-3)' }} />Total invested</span>
+              </span>
+            </div>
+            <svg viewBox="0 0 600 200" preserveAspectRatio="none" role="img" aria-label="Projected corpus over the years" style={{ width: '100%', height: 170, display: 'block', overflow: 'visible' }}>
+              <defs>
+                <linearGradient id="nwProjGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" style={{ stopColor: 'var(--brand)', stopOpacity: 0.32 }} />
+                  <stop offset="1" style={{ stopColor: 'var(--brand)', stopOpacity: 0 }} />
+                </linearGradient>
+              </defs>
+              <path d={`${line} L600,200 L0,200 Z`} fill="url(#nwProjGrad)" />
+              <path d={invLine} style={{ fill: 'none', stroke: 'var(--text-3)', strokeWidth: 1.5, strokeDasharray: '5 5', vectorEffect: 'non-scaling-stroke' }} />
+              <path key={`${prefs.scenario}-${prefs.horizon}`} d={line} pathLength={1} className="nw-draw" style={{ fill: 'none', stroke: 'var(--brand)', strokeWidth: 2.5, vectorEffect: 'non-scaling-stroke' }} />
+            </svg>
+            <div className="nw-mono" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-3)' }}>
+              <span>TODAY</span><span>{new Date().getFullYear() + prefs.horizon}</span>
+            </div>
+          </div>
 
-function KPI({ label, value, sub, valueColor }: { label: string; value: string; sub: string; valueColor?: string }) {
-  return (
-    <div style={{ background: 'var(--surface-2)', borderRadius: 10, padding: '10px 12px' }}>
-      <p style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '.04em', margin: '0 0 3px' }}>{label}</p>
-      <p style={{ fontSize: 17, fontWeight: 700, color: valueColor ?? 'var(--text)', margin: 0, letterSpacing: '-0.01em' }}>{value}</p>
-      <p style={{ fontSize: 10.5, color: 'var(--text-4)', margin: '2px 0 0' }}>{sub}</p>
-    </div>
-  )
-}
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+              <span style={{ fontWeight: 600 }}>Annual SIP step-up</span>
+              <span className="nw-num" style={{ fontWeight: 700, color: 'var(--brand-ink)' }}>{prefs.stepUp}% / yr</span>
+            </span>
+            <input type="range" min={0} max={20} step={1} value={prefs.stepUp} className="nw-range"
+              onChange={e => setPrefs(p => ({ ...p, stepUp: Number(e.target.value) }))} />
+          </label>
 
-function LegendDot({ color, label, dashed }: { color: string; label: string; dashed?: boolean }) {
-  return (
-    <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text-3)' }}>
-      <span style={{
-        width: dashed ? 12 : 8, height: dashed ? 0 : 8,
-        borderRadius: dashed ? 0 : '50%',
-        borderTop: dashed ? `2px dashed ${color}` : undefined,
-        background: dashed ? undefined : color,
-        display: 'inline-block',
-      }} />
-      {label}
-    </span>
-  )
-}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {mfAssets.map(a => {
+              const pref = prefs.funds[a.id]
+              const active = pref?.active ?? true
+              const sip = pref?.sip ?? DEFAULT_SIP
+              const cagr = cagrByFund[a.id]
+              const op = active ? 1 : 0.45
+              return (
+                <div key={a.id} style={{ padding: '12px 14px', borderRadius: 15, background: 'var(--surface-2)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, minWidth: 0, opacity: op }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.3, textWrap: 'pretty' } as React.CSSProperties}>{a.name}</div>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 3 }}>
+                        {CATEGORY_LABELS[inferCategory(a.name)] ?? 'Equity'} · 5-yr CAGR {cagr != null ? `${(cagr * 100).toFixed(1)}%` : '…'} (AMFI)
+                      </div>
+                    </div>
+                    <Toggle on={active} onClick={() => setFundPref(a.id, { active: !active })} label={`Include ${a.name}`} />
+                  </div>
+                  <label style={{ opacity: op, display: 'block' }}>
+                    <span style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                      <span style={{ color: 'var(--text-3)' }}>SIP / month</span>
+                      <span className="nw-num" style={{ fontWeight: 700 }}>{M(rs(sip))}</span>
+                    </span>
+                    <input type="range" min={0} max={100000} step={500} value={sip} disabled={!active} className="nw-range" style={{ marginTop: 4 }}
+                      onChange={e => setFundPref(a.id, { sip: Number(e.target.value) })} />
+                  </label>
+                </div>
+              )
+            })}
+          </div>
 
-function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      aria-pressed={on}
-      style={{
-        position: 'relative', width: 32, height: 18, borderRadius: 999, border: 'none', cursor: 'pointer',
-        background: on ? 'var(--brand)' : 'var(--border-strong)', flexShrink: 0, transition: 'background .2s ease', padding: 0,
-      }}
-    >
-      <span style={{
-        position: 'absolute', top: 2, left: on ? 16 : 2, width: 14, height: 14, borderRadius: '50%',
-        background: '#fff', transition: 'left .2s ease',
-      }} />
-    </button>
-  )
-}
-
-interface TooltipPoint { label: string; invested: number; corpus: number }
-
-function ChartTooltip({ active, payload, masked }: { active?: boolean; payload?: { payload: TooltipPoint }[]; masked: boolean }) {
-  if (!active || !payload?.length) return null
-  const d = payload[0].payload
-  return (
-    <div style={{
-      background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12,
-      padding: '10px 12px', boxShadow: 'var(--elev)', fontSize: 12.5, minWidth: 150,
-    }}>
-      <div style={{ fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{d.label}</div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, color: 'var(--text-3)' }}>
-        <span>Corpus</span>
-        <span style={{ fontWeight: 700, color: 'var(--brand-ink)' }}>{fmtBig(d.corpus, masked)}</span>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, color: 'var(--text-3)', marginTop: 2 }}>
-        <span>Invested</span>
-        <span style={{ fontWeight: 600, color: 'var(--text)' }}>{fmtBig(d.invested, masked)}</span>
-      </div>
+          <div style={{ fontSize: 11.5, color: 'var(--text-3)', lineHeight: 1.45, textWrap: 'pretty' } as React.CSSProperties}>
+            Projection, not a promise. Each fund grows at its past 5-year CAGR, adjusted for the scenario; past returns are no guarantee.
+          </div>
+        </div>
+      )}
     </div>
   )
 }
