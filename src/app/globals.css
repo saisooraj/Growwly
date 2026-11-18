@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
-/* Material Symbols for the add-transaction sheet, subset to the glyphs it uses (keep icon_names sorted) */
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&icon_names=account_balance,add,apartment,apps,arrow_back,arrow_outward,autorenew,backspace,bolt,bookmark_add,calendar_month,call_split,candlestick_chart,card_giftcard,celebration,chair,check,close,construction,delete,diamond,directions_bus,directions_car,elderly,error,event_repeat,expand_less,expand_more,family_restroom,favorite,fitness_center,flight,folder,handshake,health_and_safety,home_repair_service,icecream,info,key,laptop_mac,link,link_off,local_gas_station,local_post_office,lock,medical_services,more_horiz,movie,north_east,north_west,notes,payments,person_search,redeem,restaurant,savings,school,search,sell,shield,shopping_bag,shopping_basket,south_east,south_west,spa,storefront,trending_up,two_wheeler,undo,volunteer_activism,work&display=block');
+/* Material Symbols for the add-transaction sheet and Settings, subset to the glyphs it uses (keep icon_names sorted) */
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..600,0..1,0&icon_names=account_balance,account_balance_wallet,add,apartment,apps,arrow_back,arrow_forward,arrow_outward,auto_awesome,autorenew,backspace,bolt,bookmark_add,bug_report,calculate,calendar_month,call_split,candlestick_chart,card_giftcard,celebration,chair,chat_bubble,check,check_circle,checklist,chevron_left,chevron_right,close,construction,content_copy,contrast,dark_mode,delete,diamond,directions_bus,directions_car,donut_large,download,drag_indicator,eco,edit,edit_calendar,elderly,error,event_repeat,expand_less,expand_more,family_restroom,favorite,fitness_center,flight,folder,handshake,health_and_safety,help,home_repair_service,icecream,info,key,keyboard_arrow_down,keyboard_arrow_up,laptop_mac,light_mode,lightbulb,link,link_off,local_fire_department,local_gas_station,local_post_office,lock,logout,mail,medical_services,military_tech,more_horiz,movie,north_east,north_west,notes,notifications,notifications_off,palette,payments,person,person_search,phone_iphone,redeem,restart_alt,restaurant,savings,school,search,sell,send,shield,shield_lock,shopping_bag,shopping_basket,south_east,south_west,spa,storefront,trending_up,two_wheeler,undo,upload,visibility,visibility_off,volunteer_activism,warning,work&display=block');
 
 @tailwind base;
 @tailwind components;
@@ -581,6 +581,56 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 @media (prefers-reduced-motion: reduce) { .txn-anim-pop, .txn-anim-pop-sm { animation: none; } }
 .txn-noscroll { scrollbar-width: none; }
 .txn-noscroll::-webkit-scrollbar { display: none; }
+
+/* ── Settings redesign ──────────────────────────────────────────────────────
+   The design's own tokens, scoped to the Settings page and its dialogs. The accent
+   mixes from --brand, so every swatch carries through. */
+.set {
+  --sf: #FFFFFF; --sf2: #F8F7F3; --ink: #14151A; --mut: #64656B;
+  --line: rgba(20,21,26,.08); --line2: rgba(20,21,26,.15);
+  --good: oklch(0.47 0.12 155); --good-bg: oklch(0.95 0.04 155);
+  --bad:  oklch(0.52 0.18 25);  --bad-bg:  oklch(0.96 0.03 25);
+  --warn: oklch(0.5 0.12 65);   --warn-bg: oklch(0.96 0.05 85);
+  --info: oklch(0.48 0.13 250); --info-bg: oklch(0.95 0.03 250);
+  --shadow: 0 1px 2px rgba(20,21,26,.04), 0 10px 30px -12px rgba(20,21,26,.08);
+  --acc: var(--brand); --on-acc: #fff;
+  --acc-txt: color-mix(in oklch, var(--acc) 78%, black);
+  --acc-soft: color-mix(in oklch, var(--acc) 11%, transparent);
+  --acc-line: color-mix(in oklch, var(--acc) 35%, transparent);
+  font-family: 'Geist', system-ui, sans-serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+.dark .set {
+  --sf: #16181D; --sf2: #1C1F25; --ink: #F5F4EE; --mut: #9C9DA3;
+  --line: rgba(245,244,238,.08); --line2: rgba(245,244,238,.16);
+  --good: oklch(0.8 0.13 155);  --good-bg: oklch(0.3 0.06 155);
+  --bad:  oklch(0.76 0.14 25);  --bad-bg:  oklch(0.3 0.07 25);
+  --warn: oklch(0.84 0.12 80);  --warn-bg: oklch(0.31 0.06 70);
+  --info: oklch(0.8 0.1 250);   --info-bg: oklch(0.3 0.06 250);
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px -12px rgba(0,0,0,.5);
+  --acc-txt: color-mix(in oklch, var(--acc) 62%, white);
+}
+[data-accent="black"] .set { --acc: #14151A; }
+.dark[data-accent="black"] .set { --acc: #F5F4EE; --on-acc: #14151A; --acc-txt: #F5F4EE; }
+.set button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+.set button:disabled { cursor: default; }
+.set input, .set textarea { font-family: inherit; }
+.set input::placeholder, .set textarea::placeholder { color: var(--mut); opacity: .8; }
+.set a { color: var(--acc-txt); }
+/* Text field: hairline at rest, accent ring on focus */
+.set-field { border: 1px solid var(--line2); transition: border-color .15s, box-shadow .15s; }
+.set-field:focus-within, .set-field:focus { border-color: var(--acc); box-shadow: 0 0 0 .5px var(--acc), 0 0 0 4px var(--acc-soft); outline: 0; }
+@media (hover: hover) {
+  .set-hover:hover { background: color-mix(in oklch, var(--ink) 4%, transparent) !important; }
+}
+.set-press:active { transform: scale(0.985); }
+
+/* The page runs edge to edge and sets its own gutters and header */
+.set-page { margin: -24px -28px -40px; background: var(--bg); }
+@media (max-width: 1024px) {
+  .set-page { margin: -16px -16px 0; }
+}
 
 /* ── Upcoming redesign ──────────────────────────────────────────────────────
    The design's own tokens, scoped to the Upcoming page and its sheets. Brand

@@ -1,69 +1,34 @@
 'use client'
 
-import { useState } from 'react'
-import { Mail, Check, Link2, Unlink, Eye, EyeOff, ArrowLeft } from 'lucide-react'
-import GoogleIcon from '@/components/ui/GoogleIcon'
+import { useState, type ReactNode } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import ConfirmDialog from '@/components/ui/ConfirmDialog'
+import { Sym, MONO, card, sub, rowTitle, btnOutline, btnPrimary, btnGhostBad, btnBad, field } from '@/components/settings/ui'
 import toast from 'react-hot-toast'
 
 type LinkView = null | 'link-google' | 'link-email' | 'change-password'
 
-function ProviderRow({
-  icon, label, sub, linked, onLink, onUnlink, canUnlink,
-}: {
-  icon: React.ReactNode
-  label: string
-  sub: string
-  linked: boolean
-  onLink: () => void
-  onUnlink: () => void
-  canUnlink: boolean
-}) {
+const linkedPill = (
+  <span style={{ display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 10px', borderRadius: 999, background: 'var(--good-bg)', color: 'var(--good)', fontSize: 12, fontWeight: 500, flex: 'none' }}>Linked</span>
+)
+
+function ProviderRow({ tile, label, detail, top, children }: { tile: ReactNode; label: string; detail: string; top?: boolean; children: ReactNode }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-        background: linked ? 'var(--brand-soft)' : 'var(--surface-2)',
-        color: linked ? 'var(--brand-ink)' : 'var(--text-3)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        {icon}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 24px', flexWrap: 'wrap', borderTop: top ? '1px solid var(--line)' : undefined }}>
+      <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--sf2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', flex: 'none' }}>{tile}</div>
+      <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+        <div style={rowTitle}>{label}</div>
+        <div style={{ fontFamily: MONO, fontSize: 12.5, color: 'var(--mut)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{detail}</div>
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>{label}</p>
-        <p style={{ fontSize: 11.5, color: 'var(--text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</p>
-      </div>
-      {linked ? (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: 'var(--good-ink)', background: 'var(--good-soft)', padding: '2px 8px', borderRadius: 999 }}>
-            <Check size={11} /> Linked
-          </span>
-          {canUnlink && (
-            <button
-              onClick={onUnlink}
-              className="btn btn-sm"
-              style={{ padding: '4px 8px', fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 4, color: 'var(--bad-ink)' }}
-            >
-              <Unlink size={11} /> Remove
-            </button>
-          )}
-        </div>
-      ) : (
-        <button
-          onClick={onLink}
-          className="btn btn-sm"
-          style={{ padding: '4px 10px', fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}
-        >
-          <Link2 size={11} /> Link
-        </button>
-      )}
+      {children}
     </div>
   )
 }
 
+// Sign-in methods card on Settings: Google and email/password, linking, unlinking,
+// changing the password, and signing out of this device.
 export default function LinkedAccounts() {
-  const { user, linkGoogle, linkEmailPassword, unlinkProvider, changePassword } = useAuth()
+  const { user, logout, linkGoogle, linkEmailPassword, unlinkProvider, changePassword } = useAuth()
 
   const [view, setView]               = useState<LinkView>(null)
   const [confirmUnlink, setConfirmUnlink] = useState<string | null>(null)
@@ -158,101 +123,113 @@ export default function LinkedAccounts() {
     }
   }
 
-  const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '9px 12px', borderRadius: 10,
-    border: '1px solid var(--border-strong)', background: 'var(--surface)',
-    color: 'var(--text)', fontSize: 13, outline: 'none',
-  }
+  // ── Inline form panel ──────────────────────────────────────────────────────
 
-  // ── Inline form panels ──────────────────────────────────────────────────────
+  const input = (type: string, placeholder: string, value: string, onChange: (v: string) => void, eye = false) => (
+    <div className="set-field" style={{ ...field(44), display: 'flex', alignItems: 'center', gap: 6 }}>
+      <input
+        type={type} placeholder={placeholder} value={value} onChange={e => onChange(e.target.value)}
+        style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--ink)', fontSize: 14 }}
+      />
+      {eye && (
+        <button onClick={() => setShowPw(v => !v)} aria-label={showPw ? 'Hide password' : 'Show password'} style={{ border: 0, background: 'transparent', color: 'var(--mut)', display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0 }}>
+          <Sym name={showPw ? 'visibility_off' : 'visibility'} size={18} />
+        </button>
+      )}
+    </div>
+  )
 
   function renderInlineView() {
     if (!view) return null
+    const pw = showPw ? 'text' : 'password'
+    const close = () => { setView(null); setPwInput(''); setPwConfirm(''); setCurrentPw('') }
 
     return (
-      <div style={{ marginTop: 16, padding: '16px', background: 'var(--surface-2)', borderRadius: 12, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <button onClick={() => setView(null)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: 4 }}>
-          <ArrowLeft size={13} /> Back
-        </button>
-
+      <div style={{ padding: '16px 24px 20px', borderTop: '1px solid var(--line)', background: 'var(--sf2)', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {view === 'link-google' && (
-          <>
-            <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Link your Google account so you can sign in with Google. Your data stays the same.</p>
-            <button className="btn-primary" onClick={handleLinkGoogle} disabled={loading} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <GoogleIcon size={14} /> {loading ? 'Connecting…' : 'Connect Google Account'}
-            </button>
-          </>
+          <div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--mut)' }}>Link your Google account so you can sign in with Google. Your data stays the same.</div>
         )}
-
         {view === 'link-email' && (
           <>
-            <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Add an email and password so you can also sign in with your email.</p>
-            <input className="input" style={{ fontSize: 13 }} type="email" placeholder="Email address" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
-            <div style={{ position: 'relative' }}>
-              <input className="input" style={{ fontSize: 13, paddingRight: 40 }} type={showPw ? 'text' : 'password'} placeholder="New password (min 6 chars)" value={pwInput} onChange={e => setPwInput(e.target.value)} />
-              <button onClick={() => setShowPw(v => !v)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}>
-                {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-            </div>
-            <input className="input" style={{ fontSize: 13 }} type={showPw ? 'text' : 'password'} placeholder="Confirm password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} />
-            <button className="btn-primary" onClick={handleLinkEmail} disabled={!emailInput || !pwInput || loading}>
-              {loading ? 'Saving…' : 'Add Email & Password'}
-            </button>
+            <div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--mut)' }}>Add an email and password so you can also sign in with your email.</div>
+            {input('email', 'Email address', emailInput, setEmailInput)}
+            {input(pw, 'New password (min 6 chars)', pwInput, setPwInput, true)}
+            {input(pw, 'Confirm password', pwConfirm, setPwConfirm)}
           </>
         )}
-
         {view === 'change-password' && (
           <>
-            <p style={{ fontSize: 13, color: 'var(--text-2)' }}>Change your current password.</p>
-            <input className="input" style={{ fontSize: 13 }} type="password" placeholder="Current password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} />
-            <div style={{ position: 'relative' }}>
-              <input className="input" style={{ fontSize: 13, paddingRight: 40 }} type={showPw ? 'text' : 'password'} placeholder="New password" value={pwInput} onChange={e => setPwInput(e.target.value)} />
-              <button onClick={() => setShowPw(v => !v)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}>
-                {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
-            </div>
-            <input className="input" style={{ fontSize: 13 }} type={showPw ? 'text' : 'password'} placeholder="Confirm new password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)} />
-            <button className="btn-primary" onClick={handleChangePassword} disabled={!currentPw || !pwInput || loading}>
-              {loading ? 'Updating…' : 'Update Password'}
-            </button>
+            <div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--mut)' }}>Change your current password.</div>
+            {input('password', 'Current password', currentPw, setCurrentPw)}
+            {input(pw, 'New password', pwInput, setPwInput, true)}
+            {input(pw, 'Confirm new password', pwConfirm, setPwConfirm)}
           </>
         )}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button onClick={close} style={btnOutline(38, 12, 14)}>Cancel</button>
+          {view === 'link-google' && (
+            <button onClick={handleLinkGoogle} disabled={loading} style={{ ...btnPrimary(!loading) }}>{loading ? 'Connecting…' : 'Connect Google account'}</button>
+          )}
+          {view === 'link-email' && (
+            <button onClick={handleLinkEmail} disabled={!emailInput || !pwInput || loading} style={btnPrimary(!!emailInput && !!pwInput && !loading)}>{loading ? 'Saving…' : 'Add email & password'}</button>
+          )}
+          {view === 'change-password' && (
+            <button onClick={handleChangePassword} disabled={!currentPw || !pwInput || loading} style={btnPrimary(!!currentPw && !!pwInput && !loading)}>{loading ? 'Updating…' : 'Update password'}</button>
+          )}
+        </div>
       </div>
     )
   }
 
   return (
-    <div>
-      <ProviderRow
-        icon={<GoogleIcon size={15} />}
-        label="Google"
-        sub={hasGoogle ? (user.providerData.find(p => p.providerId === 'google.com')?.email ?? 'Linked') : 'Not linked'}
-        linked={hasGoogle}
-        canUnlink={providerCount > 1}
-        onLink={() => { setView('link-google'); handleLinkGoogle() }}
-        onUnlink={() => setConfirmUnlink('google.com')}
-      />
-      <ProviderRow
-        icon={<Mail size={15} />}
-        label="Email & Password"
-        sub={hasEmail ? (user.email ?? 'Linked') : 'Not linked — add a password to sign in with email'}
-        linked={hasEmail}
-        canUnlink={providerCount > 1}
-        onLink={() => { setEmailInput(user.email ?? ''); setView('link-email') }}
-        onUnlink={() => setConfirmUnlink('password')}
-      />
+    <div style={card}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px 16px', flexWrap: 'wrap', padding: '22px 24px 6px' }}>
+        <div style={{ fontSize: 16, fontWeight: 600, lineHeight: 1.3 }}>Sign-in methods</div>
+        <div style={{ ...sub, fontSize: 13.5, lineHeight: 1.5, marginTop: 0 }}>Your data stays the same regardless of which method you use.</div>
+      </div>
 
-      {hasEmail && !view && (
-        <button
-          onClick={() => setView('change-password')}
-          className="btn btn-sm"
-          style={{ marginTop: 10, fontSize: 12 }}
-        >
-          Change password
-        </button>
-      )}
+      <ProviderRow
+        tile={<span style={{ fontSize: 17, fontWeight: 600 }}>G</span>}
+        label="Google"
+        detail={hasGoogle ? (user.providerData.find(p => p.providerId === 'google.com')?.email ?? 'Linked') : 'Not linked'}
+      >
+        {hasGoogle ? (
+          <>
+            {linkedPill}
+            {providerCount > 1 && <button onClick={() => setConfirmUnlink('google.com')} style={btnGhostBad()}>Remove</button>}
+          </>
+        ) : (
+          <button onClick={() => { setView('link-google'); handleLinkGoogle() }} disabled={loading} style={btnOutline()}>
+            <Sym name="link" size={17} />Link
+          </button>
+        )}
+      </ProviderRow>
+
+      <ProviderRow
+        top
+        tile={<Sym name="mail" size={21} />}
+        label="Email & password"
+        detail={hasEmail ? (user.email ?? 'Linked') : 'Not linked — add a password to sign in with email'}
+      >
+        {hasEmail ? (
+          <>
+            {linkedPill}
+            <button onClick={() => setView('change-password')} style={btnOutline()}>Change password</button>
+            {providerCount > 1 && <button onClick={() => setConfirmUnlink('password')} style={btnGhostBad()}>Remove</button>}
+          </>
+        ) : (
+          <button onClick={() => { setEmailInput(user.email ?? ''); setView('link-email') }} style={btnOutline()}>
+            <Sym name="link" size={17} />Link
+          </button>
+        )}
+      </ProviderRow>
 
       {renderInlineView()}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 24px', flexWrap: 'wrap', borderTop: '1px solid var(--line)', background: 'var(--sf2)' }}>
+        <div style={{ flex: '1 1 200px', fontSize: 13.5, lineHeight: 1.5, color: 'var(--mut)' }}>Signs you out on this device only. Your data stays synced.</div>
+        <button onClick={logout} style={{ ...btnBad(), gap: 8 }}><Sym name="logout" size={18} />Sign out</button>
+      </div>
 
       <ConfirmDialog
         open={!!confirmUnlink}

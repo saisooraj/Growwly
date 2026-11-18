@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { Car, Check, Pencil, Plus, Trash2, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
@@ -9,6 +8,7 @@ import { setUserSettings } from '@/lib/firestore'
 import { defaultVehicle, isFuelExpense, vehicleOf } from '@/lib/fuel'
 import { addVehicle } from '@/components/transactions/FuelFields'
 import type { Vehicle } from '@/types'
+import { Sym, MONO, card, CardHead, hint, btnIcon, btnPrimary, useSavedFlash } from './ui'
 
 export default function VehiclesCard() {
   const { user } = useAuth()
@@ -18,28 +18,30 @@ export default function VehiclesCard() {
   const [editing, setEditing] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [newName, setNewName] = useState('')
+  const [blocked, setBlocked] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [saved, flash] = useSavedFlash()
 
   const fillCount = (id: string) =>
     transactions.filter(tx => isFuelExpense(tx) && vehicleOf(tx, vehicles) === id).length
 
   async function save(next: Partial<{ vehicles: Vehicle[]; defaultVehicleId: string }>) {
-    if (!user) return
+    if (!user) return false
     setBusy(true)
-    try { await setUserSettings(user.uid, next) }
-    catch { toast.error('Failed to save') }
+    try { await setUserSettings(user.uid, next); flash('vehicles'); return true }
+    catch { toast.error('Failed to save'); return false }
     finally { setBusy(false) }
   }
 
-  async function rename(id: string) {
-    if (!draft.trim()) return
-    await save({ vehicles: vehicles.map(v => v.id === id ? { ...v, name: draft.trim() } : v) })
-    setEditing(null)
+  async function rename(v: Vehicle) {
+    const name = draft.trim()
+    if (!name || name === v.name) { setEditing(null); return }
+    if (await save({ vehicles: vehicles.map(x => x.id === v.id ? { ...x, name } : x) })) setEditing(null)
   }
 
   async function remove(v: Vehicle) {
-    const n = fillCount(v.id)
-    if (n > 0) { toast.error(`${v.name} has ${n} fill-up${n === 1 ? '' : 's'} — rename it instead`); return }
+    if (fillCount(v.id) > 0) { setBlocked(v.id); return }
+    setBlocked(null)
     const rest = vehicles.filter(x => x.id !== v.id)
     await save({ vehicles: rest, ...(current?.id === v.id ? { defaultVehicleId: rest[0]?.id ?? '' } : {}) })
   }
@@ -47,56 +49,74 @@ export default function VehiclesCard() {
   async function add() {
     if (!user || !newName.trim()) return
     setBusy(true)
-    try { await addVehicle(user.uid, settings, newName); setNewName('') }
+    try { await addVehicle(user.uid, settings, newName); setNewName(''); flash('vehicles') }
     catch { toast.error('Could not add the vehicle') }
     finally { setBusy(false) }
   }
 
+  const canAdd = !!newName.trim() && !busy
+
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Car size={14} style={{ color: 'var(--brand)' }} />
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Vehicles</h2>
-        </div>
-        <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '4px 0 0' }}>
-          Picked on Fuel expenses for mileage. The one you used last is preselected.
-        </p>
-      </div>
+    <div style={card}>
+      <CardHead title="Vehicles" saved={saved === 'vehicles'} pad="22px 24px 12px" right={<span style={hint}>For fuel fill-ups and mileage</span>} />
 
-      {vehicles.map(v => (
-        <div key={v.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {editing === v.id ? (
-            <>
-              <input className="input" value={draft} autoFocus onChange={e => setDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') rename(v.id); if (e.key === 'Escape') setEditing(null) }}
-                style={{ flex: 1 }} />
-              <button className="btn-ghost" onClick={() => rename(v.id)} disabled={busy} aria-label="Save name"><Check size={14} /></button>
-              <button className="btn-ghost" onClick={() => setEditing(null)} aria-label="Cancel"><X size={14} /></button>
-            </>
-          ) : (
-            <>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 500, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {v.name}
-                  {current?.id === v.id && vehicles.length > 1 && <span className="pill good" style={{ fontSize: 10, padding: '1px 7px', marginLeft: 8 }}>default</span>}
-                </div>
-                <div style={{ fontSize: 11.5, color: 'var(--text-4)' }}>{fillCount(v.id)} fill-ups</div>
+      {vehicles.map(v => {
+        const n = fillCount(v.id)
+        const renaming = editing === v.id
+        return (
+          <div key={v.id} style={{ borderTop: '1px solid var(--line)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 24px' }}>
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--acc-soft)', color: 'var(--acc-txt)', display: 'grid', placeItems: 'center', flex: 'none' }}>
+                <Sym name="local_gas_station" size={22} />
               </div>
-              <button className="btn-ghost" onClick={() => { setEditing(v.id); setDraft(v.name) }} aria-label={`Rename ${v.name}`}><Pencil size={13} /></button>
-              <button className="btn-ghost" onClick={() => remove(v)} disabled={busy} aria-label={`Remove ${v.name}`}><Trash2 size={13} /></button>
-            </>
-          )}
-        </div>
-      ))}
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {renaming ? (
+                  <>
+                    <input
+                      className="set-field" value={draft} autoFocus aria-label={`New name for ${v.name}`}
+                      onChange={e => setDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') rename(v); if (e.key === 'Escape') setEditing(null) }}
+                      style={{ height: 36, width: 160, maxWidth: '100%', padding: '0 10px', borderRadius: 10, background: 'var(--sf)', color: 'var(--ink)', fontSize: 15, fontWeight: 500, boxSizing: 'border-box' }}
+                    />
+                    <span style={{ fontFamily: MONO, fontSize: 11.5, color: 'var(--mut)' }}>Enter to save · Esc to cancel</span>
+                  </>
+                ) : (
+                  <span style={{ fontSize: 15, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{v.name}</span>
+                )}
+                {current?.id === v.id && vehicles.length > 1 && (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', height: 22, padding: '0 9px', borderRadius: 999, background: 'var(--acc-soft)', color: 'var(--acc-txt)', fontSize: 11.5, fontWeight: 500 }}>default</span>
+                )}
+              </div>
+              <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 500, color: 'var(--mut)', whiteSpace: 'nowrap' }}>{n} fill-up{n === 1 ? '' : 's'}</span>
+              <button onClick={() => { if (renaming) { rename(v); return } setEditing(v.id); setDraft(v.name); setBlocked(null) }} aria-label={renaming ? 'Save name' : `Rename ${v.name}`} style={btnIcon()}><Sym name={renaming ? 'check' : 'edit'} size={18} /></button>
+              <button onClick={() => remove(v)} disabled={busy} aria-label={`Delete ${v.name}`} style={btnIcon()}><Sym name="delete" size={18} /></button>
+            </div>
+            {blocked === v.id && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', margin: '0 24px 14px 78px', padding: '10px 12px', borderRadius: 12, background: 'var(--warn-bg)', color: 'var(--warn)', fontSize: 13, lineHeight: 1.45 }}>
+                <Sym name="info" size={17} />{v.name} has {n} fill-up{n === 1 ? '' : 's'}, so it can&apos;t be deleted — rename it instead.
+              </div>
+            )}
+          </div>
+        )
+      })}
 
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input className="input" placeholder={vehicles.length ? 'Add another vehicle' : 'e.g. Swift, Activa'} value={newName}
-          onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add() }} style={{ flex: 1 }} />
-        <button className="btn-secondary" onClick={add} disabled={!newName.trim() || busy}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <Plus size={13} /> Add
-        </button>
+      {vehicles.length === 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 8, padding: '28px 24px', borderTop: '1px solid var(--line)' }}>
+          <div style={{ width: 48, height: 48, borderRadius: 16, background: 'var(--sf2)', border: '1px dashed var(--line2)', display: 'grid', placeItems: 'center', color: 'var(--mut)' }}>
+            <Sym name="local_gas_station" size={24} />
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 500 }}>No vehicles yet</div>
+          <div style={{ fontSize: 13.5, lineHeight: 1.5, color: 'var(--mut)', maxWidth: 300 }}>Add a bike or car to log fuel fill-ups and see your mileage.</div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, padding: '14px 24px', borderTop: '1px solid var(--line)', background: 'var(--sf2)' }}>
+        <input
+          className="set-field" value={newName} placeholder="e.g. Swift, Activa" aria-label="Vehicle name"
+          onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add() }}
+          style={{ flex: 1, minWidth: 0, height: 40, padding: '0 12px', borderRadius: 12, background: 'var(--sf)', color: 'var(--ink)', fontSize: 14, boxSizing: 'border-box' }}
+        />
+        <button onClick={add} disabled={!canAdd} style={{ ...btnPrimary(canAdd, 40), gap: 6 }}><Sym name="add" size={18} />Add</button>
       </div>
     </div>
   )

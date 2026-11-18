@@ -248,7 +248,8 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
   // Transactions draws its own header: the month switcher there also reads "All time" while searching.
   // Net Worth draws its own too: the Wealth title, price refresh and privacy switch.
   // Upcoming draws its own sticky header with tabs, search and the category filter.
-  if (pathname === '/transactions' || pathname === '/networth' || pathname === '/upcoming') return null
+  // Settings draws its own: a sticky header on desktop and a large title on phones.
+  if (pathname === '/transactions' || pathname === '/networth' || pathname === '/upcoming' || pathname === '/settings') return null
 
   return (
     <header

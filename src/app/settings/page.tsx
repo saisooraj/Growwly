@@ -2,1573 +2,374 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useRef, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import Link from 'next/link'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useTheme } from 'next-themes'
 import AppShell from '@/components/layout/AppShell'
-import { DEFAULT_CARD_ORDER, CARD_LABELS, HIDEABLE_EXTRAS, resolveCardOrder } from '@/lib/dashboardConstants'
 import { useAuth } from '@/context/AuthContext'
 import { useAppStore } from '@/store/appStore'
-import { setUserSettings, exportAllUserData, importAllUserData, deleteAllUserData } from '@/lib/firestore'
-import { useRefreshData } from '@/hooks/useData'
+import { usePrivacy } from '@/store/privacyStore'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
-import { downloadJSON, getLast6Months, computeLongestMoneyStreak, EXPENSE_CATEGORIES } from '@/lib/utils'
-import { getCycleRange, getLastWorkingDay, formatCycleRange } from '@/lib/cycle'
-import { Download, Upload, Flame, Shield, Wallet, LogOut, Bell, BellOff, BellRing, Link2, CalendarClock, Pencil, X, Clock, LayoutGrid, Activity, CheckSquare, Palette, Check, ChevronUp, ChevronDown, Eye, EyeOff, Trash2, AlertTriangle, Leaf, Bug, Lightbulb, MessageCircle, Send, Smartphone, Copy, KeyRound } from 'lucide-react'
-import { buildQuickAddShortcut } from '@/lib/iosShortcutPlist'
-import { BADGES, getBadgeEarnedDate, type BadgeDef } from '@/lib/badges'
-import { IconLeaf, IconFlame } from '@tabler/icons-react'
-import LinkedAccounts from '@/components/auth/LinkedAccounts'
-import VehiclesCard from '@/components/settings/VehiclesCard'
-import ConfirmDialog from '@/components/ui/ConfirmDialog'
-import toast from 'react-hot-toast'
-import { format, parseISO } from 'date-fns'
-import type { FinancialMode, FeedbackType } from '@/types'
-import { submitFeedback } from '@/lib/feedback'
+import { computeLongestMoneyStreak } from '@/lib/utils'
+import { Sym, MONO, SERIF, SectionHead, useIsDesktop, inr, LOCAL_AI } from '@/components/settings/ui'
+import ProfileSection, { IdentityRow, displayName } from '@/components/settings/ProfileSection'
+import MoneySection from '@/components/settings/MoneySection'
+import NotificationsSection, { REMINDER_TIMES } from '@/components/settings/NotificationsSection'
+import AppearanceSection, { ACCENTS } from '@/components/settings/AppearanceSection'
+import ShortcutsSection from '@/components/settings/ShortcutsSection'
+import AchievementsSection from '@/components/settings/AchievementsSection'
+import DataSection from '@/components/settings/DataSection'
+import HelpSection, { APP_VERSION } from '@/components/settings/HelpSection'
 
-type SalaryCycleRule = 'none' | 'last-working-day' | 'fixed-day'
+type SectionKey = 'profile' | 'money' | 'notif' | 'appear' | 'short' | 'ach' | 'data' | 'help'
+
+// Desktop heading description, and the phone sub-page description where it differs
+const SECTIONS: { key: SectionKey; label: string; icon: string; desc: string; phoneDesc?: string }[] = [
+  { key: 'profile', label: 'Profile & account',        icon: 'person',                 desc: 'Who you are and how you sign in' },
+  { key: 'money',   label: 'Money setup',              icon: 'account_balance_wallet', desc: 'What Growwly believes about your money', phoneDesc: 'Mode, targets, salary cycle and vehicles' },
+  { key: 'notif',   label: 'Notifications',            icon: 'notifications',          desc: 'A daily nudge, nothing more' },
+  { key: 'appear',  label: 'Appearance & layout',      icon: 'palette',                desc: 'Make Growwly look and read your way', phoneDesc: 'Theme, accent, tabs and your Overview' },
+  { key: 'short',   label: 'Shortcuts & integrations', icon: 'bolt',                   desc: 'Log faster, from anywhere' },
+  { key: 'ach',     label: 'Achievements',             icon: 'military_tech',          desc: 'Streak badges for logging every day' },
+  { key: 'data',    label: 'Data & privacy',           icon: 'shield_lock',            desc: 'Your data, your copy' },
+  { key: 'help',    label: 'Help & about',             icon: 'help',                   desc: 'Tell us what to fix next' },
+]
+const SECTION = Object.fromEntries(SECTIONS.map(s => [s.key, s])) as Record<SectionKey, (typeof SECTIONS)[number]>
+const isSection = (k: string | null): k is SectionKey => !!k && k in SECTION
+
+// What the settings search matches: label, section, extra keywords
+const INDEX: [string, SectionKey, string][] = [
+  ['Sign-in methods', 'profile', 'google email password link'],
+  ['Sign out', 'profile', 'logout'],
+  ['Financial mode', 'money', 'normal high expense'],
+  ['Budget targets', 'money', 'income weekly emergency fund'],
+  ['Salary cycle', 'money', 'payday working day'],
+  ['Vehicles', 'money', 'fuel mileage bike car'],
+  ['Daily reminders', 'notif', 'push notification time'],
+  ['Theme', 'appear', 'dark light system'],
+  ['Accent colour', 'appear', 'color forest violet ember rose ocean mono'],
+  ['Navigation tabs', 'appear', 'health tasks'],
+  ['Overview layout', 'appear', 'dashboard order blocks reorder hide'],
+  ['iPhone Quick Add', 'short', 'shortcut back tap token ios'],
+  ...(LOCAL_AI ? [['AI hub', 'short', 'claude chatbot'] as [string, SectionKey, string]] : []),
+  ['Streak badges', 'ach', 'streak achievements'],
+  ['Export backup', 'data', 'json download'],
+  ['Restore from backup', 'data', 'import json'],
+  ['Delete account', 'data', 'remove leave close'],
+  ['Send feedback', 'help', 'bug feature'],
+  ['About Growwly', 'help', 'version privacy'],
+]
+
+function search(q: string) {
+  const ql = q.trim().toLowerCase()
+  if (!ql) return []
+  return INDEX.filter(([l, s, kw]) => `${l} ${kw} ${SECTION[s].label}`.toLowerCase().includes(ql)).map(([l, s]) => ({ label: l, key: s }))
+}
+
+const NO_MATCH = 'No settings match. Try “salary” or “backup”.'
+
+// ⌘K belongs to the AI command bar when it's on (laptop dev only); "/" always works
+const CMD_K = !LOCAL_AI
 
 export default function SettingsPage() {
-  const { user, logout } = useAuth()
-  const router = useRouter()
-  const { settings, transactions } = useAppStore()
+  const desktop = useIsDesktop()
+  const push = usePushNotifications()
 
-  // Admin easter egg — tap the account card 5× to open the admin console
-  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL
-  const isAdmin = !!adminEmail && user?.email === adminEmail
-  const adminTapCount = useRef(0)
-  const adminTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function handleAccountCardTap() {
-    if (!isAdmin) return
-    adminTapCount.current += 1
-    if (adminTapTimer.current) clearTimeout(adminTapTimer.current)
-    if (adminTapCount.current >= 5) {
-      adminTapCount.current = 0
-      toast.success('Opening admin console…')
-      router.push('/admin')
-      return
-    }
-    adminTapTimer.current = setTimeout(() => { adminTapCount.current = 0 }, 1500)
-  }
-
-  useEffect(() => () => { if (adminTapTimer.current) clearTimeout(adminTapTimer.current) }, [])
-  const longestMoneyStreak = computeLongestMoneyStreak(transactions, settings?.noSpendDays ?? [])
-  const refresh = useRefreshData()
-  const fileRef = useRef<HTMLInputElement>(null)
-  const { state: pushState, subscribe, unsubscribe } = usePushNotifications()
-
-  const [reminderHour, setReminderHour] = useState(19)
-  const [mode, setMode] = useState<FinancialMode>('normal')
-  const [weeklyBudget, setWeeklyBudget] = useState('')
-  const [monthlyIncome, setMonthlyIncome] = useState('')
-  const [efTarget, setEfTarget] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [editingTargets, setEditingTargets] = useState(false)
-  const [exporting, setExporting] = useState(false)
-  const [importing, setImporting] = useState(false)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [pendingImport, setPendingImport] = useState<any | null>(null)
-
-  // Delete account
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
-  const [deleteConfirmText, setDeleteConfirmText] = useState('')
-  const [deleting, setDeleting] = useState(false)
-
-  // Account options (More menu) — step 'options' lists actions, 'danger' shows the Danger Zone
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
-  const [accountMenuStep, setAccountMenuStep] = useState<'options' | 'danger'>('options')
-
-  // Feedback
-  const [feedbackType, setFeedbackType] = useState<FeedbackType>('bug')
-  const [feedbackMessage, setFeedbackMessage] = useState('')
-  const [sendingFeedback, setSendingFeedback] = useState(false)
-
-  // Badge modal
-  const [selectedBadge, setSelectedBadge] = useState<BadgeDef | null>(null)
-  const txDates = transactions.map(t => t.date)
-  const noSpendDays = settings?.noSpendDays ?? []
-
-  // iPhone quick-add shortcut
-  const [iosToken, setIosToken] = useState<string | null>(null) // plaintext, shown once right after generating
-  const [iosBusy, setIosBusy] = useState(false)
-  const [iosCopied, setIosCopied] = useState(false)
-  const hasIosToken = !!settings?.iosShortcut
-
-  // Accent color
-  const [accentColor, setAccentColor] = useState<'green' | 'purple' | 'orange' | 'pink' | 'blue' | 'black'>('green')
-
-  // Navigation tab toggles
-  const [showHealthTab, setShowHealthTab] = useState(false)
-  const [showTasksTab, setShowTasksTab]   = useState(false)
-  const [savingTabs, setSavingTabs]       = useState(false)
-
-  // Dashboard card order
-  const [cardOrder, setCardOrder] = useState<string[]>(DEFAULT_CARD_ORDER)
-  const [hiddenCards, setHiddenCards] = useState<string[]>([])
-  const [orderDirty, setOrderDirty] = useState(false)
-  const [savingOrder, setSavingOrder] = useState(false)
-
-  // Salary cycle
-  const [cycleRule, setCycleRule]           = useState<SalaryCycleRule>('none')
-  const [cycleFixedDay, setCycleFixedDay]   = useState('28')
-  const [cycleOverrides, setCycleOverrides] = useState<Record<string, string>>({})
-  const [savingCycle, setSavingCycle]       = useState(false)
-  const [editingCycle, setEditingCycle]     = useState(false)
-  const [editingMonth, setEditingMonth]     = useState<string | null>(null)
-  const [editDate, setEditDate]             = useState('')
-
-  useEffect(() => {
-    if (settings) {
-      setReminderHour(settings.pushReminderHour ?? 19)
-      setMode(settings.financialMode ?? 'normal')
-      setWeeklyBudget(String(settings.weeklyBudget ?? ''))
-      setMonthlyIncome(String(settings.monthlyIncomeTarget ?? ''))
-      setEfTarget(String(settings.emergencyFundTarget ?? ''))
-      setCycleRule((settings.salaryCycleRule ?? 'none') as SalaryCycleRule)
-      setCycleFixedDay(String(settings.salaryCycleFixedDay ?? 28))
-      setCycleOverrides(settings.cycleOverrides ?? {})
-      setShowHealthTab(settings.showHealthTab ?? false)
-      setShowTasksTab(settings.showTasksTab ?? false)
-      setAccentColor((settings.accentColor as typeof accentColor) ?? 'green')
-      // Old block IDs map onto the new blocks, same as on the home screen
-      setCardOrder(resolveCardOrder(settings.dashboardCardOrder))
-      setHiddenCards(settings.dashboardHiddenCards ?? [])
-    }
-  }, [settings])
-
-  async function saveSettings() {
-    if (!user) return
-    setSaving(true)
-    try {
-      await setUserSettings(user.uid, {
-        financialMode: mode,
-        weeklyBudget: Number(weeklyBudget) || 0,
-        monthlyIncomeTarget: Number(monthlyIncome) || 0,
-        emergencyFundTarget: Number(efTarget) || 0,
-        pushReminderEnabled: pushState === 'subscribed',
-      })
-      await refresh()
-      toast.success('Saved')
-      setEditingTargets(false)
-    } catch {
-      toast.error('Failed to save settings')
-    } finally {
-      setSaving(false)
+  const body = (key: SectionKey, compact: boolean): ReactNode => {
+    switch (key) {
+      case 'profile': return <ProfileSection />
+      case 'money':   return <MoneySection />
+      case 'notif':   return <NotificationsSection push={push} />
+      case 'appear':  return <AppearanceSection compact={compact} />
+      case 'short':   return <ShortcutsSection />
+      case 'ach':     return <AchievementsSection />
+      case 'data':    return <DataSection />
+      case 'help':    return <HelpSection />
     }
   }
-
-  async function handleTogglePush() {
-    if (pushState === 'subscribed') {
-      await unsubscribe()
-      await setUserSettings(user!.uid, { pushReminderEnabled: false })
-      toast.success('Reminders turned off')
-    } else {
-      const ok = await subscribe()
-      if (ok) {
-        await setUserSettings(user!.uid, {
-          pushReminderEnabled: true,
-        })
-        toast.success('Reminders enabled!')
-      } else if (pushState === 'denied') {
-        toast.error('Notifications blocked — enable them in browser settings')
-      }
-    }
-  }
-
-  async function saveReminderHour(hour: number) {
-    setReminderHour(hour)
-    if (user) {
-      await setUserSettings(user.uid, { pushReminderHour: hour })
-      toast.success('Reminder time saved')
-    }
-  }
-
-  async function saveCycleSettings() {
-    if (!user) return
-    setSavingCycle(true)
-    try {
-      await setUserSettings(user.uid, {
-        salaryCycleRule: cycleRule,
-        salaryCycleFixedDay: Number(cycleFixedDay) || 28,
-        cycleOverrides,
-      })
-      await refresh()
-      toast.success('Salary cycle saved')
-      setEditingCycle(false)
-    } catch {
-      toast.error('Failed to save cycle')
-    } finally {
-      setSavingCycle(false)
-    }
-  }
-
-  async function saveAccent(color: typeof accentColor) {
-    if (!user) return
-    setAccentColor(color)
-    // Apply immediately via data-accent attribute (AppShell watches settings,
-    // but we also set it here for instant feedback before refresh)
-    if (color === 'green') document.documentElement.removeAttribute('data-accent')
-    else document.documentElement.setAttribute('data-accent', color)
-    try {
-      await setUserSettings(user.uid, { accentColor: color })
-      await refresh()
-    } catch { toast.error('Failed to save accent') }
-  }
-
-  async function saveMode(next: FinancialMode) {
-    if (!user) return
-    setMode(next)
-    try {
-      await setUserSettings(user.uid, { financialMode: next })
-      await refresh()
-    } catch { toast.error('Failed to save mode') }
-  }
-
-  async function saveTabSettings(field: 'showHealthTab' | 'showTasksTab', value: boolean) {
-    if (!user) return
-    setSavingTabs(true)
-    try {
-      await setUserSettings(user.uid, { [field]: value })
-      await refresh()
-    } catch {
-      toast.error('Failed to save')
-    } finally {
-      setSavingTabs(false)
-    }
-  }
-
-  async function saveOverride(budgetMonth: string, date: string) {
-    if (!user || !date) return
-    const updated = { ...cycleOverrides, [budgetMonth]: date }
-    setCycleOverrides(updated)
-    setEditingMonth(null)
-    await setUserSettings(user.uid, { cycleOverrides: updated })
-    toast.success('Override saved')
-  }
-
-  async function clearOverride(budgetMonth: string) {
-    if (!user) return
-    const { [budgetMonth]: _, ...rest } = cycleOverrides
-    setCycleOverrides(rest)
-    await setUserSettings(user.uid, { cycleOverrides: rest })
-  }
-
-  async function handleExport() {
-    if (!user) return
-    setExporting(true)
-    try {
-      const data = await exportAllUserData(user.uid)
-      downloadJSON(data, `growwly-backup-${new Date().toISOString().split('T')[0]}.json`)
-      toast.success('Data exported successfully')
-    } catch {
-      toast.error('Export failed')
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  async function handleSendFeedback() {
-    if (!user || !feedbackMessage.trim()) return
-    setSendingFeedback(true)
-    try {
-      const idToken = await user.getIdToken()
-      await submitFeedback(idToken, { type: feedbackType, message: feedbackMessage.trim(), context: 'settings' })
-      setFeedbackMessage('')
-      toast.success("Thanks — we'll take a look")
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Failed to send feedback')
-    } finally {
-      setSendingFeedback(false)
-    }
-  }
-
-  async function generateIosToken(rotate = false) {
-    if (!user) return
-    setIosBusy(true)
-    try {
-      const idToken = await user.getIdToken()
-      const res = await fetch('/api/ios-shortcut/token', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Failed')
-      setIosToken(data.token as string)
-      await refresh()
-      toast.success(rotate ? 'New token generated — old one revoked' : 'Token generated')
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Failed to generate token')
-    } finally {
-      setIosBusy(false)
-    }
-  }
-
-  async function revokeIosToken() {
-    if (!user) return
-    setIosBusy(true)
-    try {
-      const idToken = await user.getIdToken()
-      const res = await fetch('/api/ios-shortcut/token', {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${idToken}` },
-      })
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}))
-        throw new Error(d.error || 'Failed')
-      }
-      setIosToken(null)
-      await refresh()
-      toast.success('Shortcut access revoked')
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Failed to revoke')
-    } finally {
-      setIosBusy(false)
-    }
-  }
-
-  function downloadIosShortcut() {
-    if (!iosToken) return
-    const categories = Array.from(
-      new Set([...EXPENSE_CATEGORIES, ...(settings?.customCategories ?? [])]),
-    )
-    const xml = buildQuickAddShortcut({
-      origin: window.location.origin,
-      token: iosToken,
-      categories,
-    })
-    const blob = new Blob([xml], { type: 'application/octet-stream' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'Growwly Quick Add.shortcut'
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
-  }
-
-  async function copyIosToken() {
-    if (!iosToken) return
-    try {
-      await navigator.clipboard.writeText(iosToken)
-      setIosCopied(true)
-      setTimeout(() => setIosCopied(false), 1500)
-    } catch {
-      toast.error('Copy failed — select and copy manually')
-    }
-  }
-
-  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!user || !e.target.files?.[0]) return
-    const file = e.target.files[0]
-    try {
-      const text = await file.text()
-      const data = JSON.parse(text)
-      if (!data.transactions || !data.userId) { toast.error('Invalid backup file'); return }
-      setPendingImport(data)
-    } catch {
-      toast.error('Import failed — invalid file')
-    } finally {
-      if (fileRef.current) fileRef.current.value = ''
-    }
-  }
-
-  async function doImport() {
-    if (!user || !pendingImport) return
-    setImporting(true)
-    try {
-      await importAllUserData(user.uid, pendingImport)
-      await refresh()
-      toast.success('Data imported successfully')
-    } catch {
-      toast.error('Import failed')
-    } finally {
-      setImporting(false)
-      setPendingImport(null)
-    }
-  }
-
-  async function doDeleteAccount() {
-    if (!user || deleteConfirmText.toLowerCase() !== 'delete') return
-    setDeleting(true)
-    try {
-      await deleteAllUserData(user.uid, user)
-      // Auth account is now deleted — sign out cleans up local state
-      await logout()
-    } catch (err: unknown) {
-      const code = (err as { code?: string }).code
-      if (code === 'auth/requires-recent-login') {
-        toast.error('Please sign out and sign back in, then try again.')
-      } else {
-        toast.error('Failed to delete account. Please try again.')
-      }
-    } finally {
-      setDeleting(false)
-      setDeleteModalOpen(false)
-      setDeleteConfirmText('')
-    }
-  }
-
-  const pushUnavailable = pushState === 'unsupported' || pushState === 'denied'
-  const pushLoading     = pushState === 'loading'
-  const isSubscribed    = pushState === 'subscribed'
 
   return (
     <AppShell title="Settings">
-      <div className="anim-page" style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', gap: 'var(--row-gap)' }}>
+      <div className="set set-page anim-page">
+        {desktop ? <Desktop body={body} /> : <Phone body={body} pushOn={push.state === 'subscribed'} />}
+      </div>
+    </AppShell>
+  )
+}
 
-        {/* About Growwly */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 38, height: 38, borderRadius: 13, flexShrink: 0,
-              background: 'linear-gradient(150deg, var(--brand-2) 0%, var(--brand) 100%)',
-              color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 6px 16px -5px var(--brand), inset 0 1px 0 rgba(255,255,255,.25)',
-            }}>
-              <Leaf size={20} strokeWidth={2} />
-            </div>
-            <div>
-              <h2 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: 0, letterSpacing: '-0.01em' }}>Growwly</h2>
-              <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0, letterSpacing: '.06em', textTransform: 'uppercase' }}>Your personal Money OS</p>
-            </div>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--text-2)', margin: 0, lineHeight: 1.65 }}>
-            Growwly is more than a finance tracker — it&apos;s your complete money operating system. Track spending, manage savings goals, monitor net worth, stay on top of upcoming bills, and plan for financial independence, all in one place.
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {[
-              { label: 'Smart budgeting', desc: 'Weekly & monthly spend control' },
-              { label: 'Net worth tracking', desc: 'Assets, loans & savings in one view' },
-              { label: 'Emergency fund', desc: 'Know your financial safety net' },
-              { label: 'FI calculator', desc: 'Track your path to freedom' },
-            ].map(({ label, desc }) => (
-              <div key={label} style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)' }}>
-                <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', margin: '0 0 2px' }}>{label}</p>
-                <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>{desc}</p>
-              </div>
-            ))}
-          </div>
+// ── Desktop: sticky header, section nav + search, every section on one page ──
+
+const HEAD_OFFSET = 110 // the nav's sticky top, clear of the header
+
+function Desktop({ body }: { body: (k: SectionKey, compact: boolean) => ReactNode }) {
+  const { user } = useAuth()
+  const params = useSearchParams()
+  const { resolvedTheme, setTheme } = useTheme()
+  const masked = usePrivacy(s => s.masked)
+  const togglePrivacy = usePrivacy(s => s.toggle)
+  const hydratePrivacy = usePrivacy(s => s.hydrate)
+  const [active, setActive] = useState<SectionKey>('profile')
+  const [q, setQ] = useState('')
+  const [mounted, setMounted] = useState(false)
+  const refs = useRef<Partial<Record<SectionKey, HTMLElement | null>>>({})
+  const lockUntil = useRef(0)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const results = useMemo(() => search(q), [q])
+
+  useEffect(() => { setMounted(true); hydratePrivacy() }, [hydratePrivacy])
+
+  const go = useCallback((k: SectionKey, smooth = true) => {
+    const el = refs.current[k]
+    if (!el) return
+    setActive(k)
+    lockUntil.current = Date.now() + 700
+    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - HEAD_OFFSET + 8, behavior: smooth ? 'smooth' : 'auto' })
+  }, [])
+
+  // Arriving with ?s=money (from a phone sub-page or a link) lands on that section
+  useEffect(() => {
+    const s = params.get('s')
+    if (isSection(s)) requestAnimationFrame(() => go(s, false))
+  }, [params, go])
+
+  // Highlight the section being read: the last one whose top has passed under the header
+  useEffect(() => {
+    function onScroll() {
+      if (Date.now() < lockUntil.current) return
+      const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4
+      if (atEnd) { setActive('help'); return }
+      let cur: SectionKey = 'profile'
+      for (const s of SECTIONS) {
+        const el = refs.current[s.key]
+        if (el && el.getBoundingClientRect().top <= HEAD_OFFSET + 40) cur = s.key
+      }
+      setActive(cur)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const t = e.target as HTMLElement
+      const typing = t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable
+      if ((CMD_K && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') || (e.key === '/' && !typing)) {
+        e.preventDefault()
+        searchRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const pick = (k: SectionKey) => { setQ(''); searchRef.current?.blur(); go(k) }
+  const name = displayName(user)
+  const iconBtn = { width: 40, height: 40, borderRadius: 12, border: '1px solid var(--line)', background: 'var(--sf)', color: 'var(--ink)', display: 'grid', placeItems: 'center', cursor: 'pointer', flex: 'none' } as const
+
+  return (
+    <>
+      <header style={{ position: 'sticky', top: 0, zIndex: 5, display: 'flex', alignItems: 'center', gap: 12, padding: '18px 48px', background: 'var(--bg)', borderBottom: '1px solid var(--line)' }}>
+        <div style={{ minWidth: 0 }}>
+          <h1 style={{ margin: 0, fontSize: 24, fontWeight: 600, lineHeight: 1.2, letterSpacing: '-0.02em' }}>Settings</h1>
+          <div style={{ fontSize: 13, color: 'var(--mut)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Synced to your account · {user?.email}</div>
         </div>
-
-        {/* Account */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Account</h2>
-            <button
-              onClick={() => { setAccountMenuStep('options'); setAccountMenuOpen(true) }}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                fontSize: 12.5, fontWeight: 600, color: 'var(--text-3)',
-              }}
-            >
-              More, or wanna leave?
-            </button>
-          </div>
-          {user && (
-            <div
-              onClick={handleAccountCardTap}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12, background: 'var(--surface-2)', borderRadius: 12, userSelect: 'none' }}
-            >
-              {user.photoURL ? (
-                <img src={user.photoURL} alt={user.displayName ?? ''} style={{ width: 40, height: 40, borderRadius: '50%' }} />
-              ) : (
-                <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 600 }}>
-                  {user.displayName?.[0] ?? 'U'}
-                </div>
-              )}
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--text)', margin: 0 }}>{user.displayName}</p>
-                <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>{user.email}</p>
-              </div>
-            </div>
-          )}
-          <button onClick={logout} className="btn-danger" style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <LogOut size={15} /> Sign Out
-          </button>
+        <div style={{ flex: 1 }} />
+        <button onClick={togglePrivacy} aria-pressed={masked} aria-label={masked ? 'Show ₹ figures' : 'Hide ₹ figures'} title={masked ? 'Show ₹ figures' : 'Hide ₹ figures'} className="set-hover" style={iconBtn}>
+          <Sym name={masked ? 'visibility_off' : 'visibility'} />
+        </button>
+        <button onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')} aria-label="Toggle theme" title="Toggle theme" className="set-hover" style={iconBtn}>
+          {mounted && <Sym name={resolvedTheme === 'dark' ? 'light_mode' : 'dark_mode'} />}
+        </button>
+        <div aria-hidden style={{ width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', background: 'var(--acc)', color: 'var(--on-acc)', display: 'grid', placeItems: 'center', fontFamily: SERIF, fontSize: 22, flex: 'none' }}>
+          {user?.photoURL
+            // eslint-disable-next-line @next/next/no-img-element
+            ? <img src={user.photoURL} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : name[0]?.toUpperCase()}
         </div>
+      </header>
 
-        {/* Push Notifications */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: isSubscribed ? 'var(--brand-soft)' : 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: isSubscribed ? 'var(--brand)' : 'var(--text-3)' }}>
-              <BellRing size={14} />
-            </div>
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Daily Reminders</h2>
-          </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '232px minmax(0, 1fr)', gap: 48, padding: '32px 48px 96px', alignItems: 'start' }}>
+        <nav aria-label="Settings sections" style={{ position: 'sticky', top: HEAD_OFFSET, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 42, padding: '0 12px', borderRadius: 12, background: 'var(--sf)', border: '1px solid var(--line2)', cursor: 'text' }}>
+            <Sym name="search" size={19} style={{ color: 'var(--mut)' }} />
+            <input
+              ref={searchRef} value={q} onChange={e => setQ(e.target.value)} placeholder="Search settings" aria-label="Search settings"
+              onKeyDown={e => { if (e.key === 'Enter' && results[0]) pick(results[0].key); if (e.key === 'Escape') { setQ(''); e.currentTarget.blur() } }}
+              style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--ink)', fontSize: 14 }}
+            />
+            <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 500, color: 'var(--mut)', padding: '2px 6px', border: '1px solid var(--line2)', borderRadius: 6 }}>{CMD_K ? '⌘K' : '/'}</span>
+          </label>
 
-          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
-            Get a push notification each day to remind you to log your transactions.
-          </p>
-
-          {pushState === 'unsupported' && (
-            <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)', fontSize: 12, color: 'var(--text-3)' }}>
-              Push notifications are not supported in this browser.
-            </div>
-          )}
-
-          {pushState === 'denied' && (
-            <div style={{ padding: '10px 14px', borderRadius: 10, background: 'color-mix(in oklch, var(--bad) 12%, transparent)', fontSize: 12, color: 'var(--bad-ink)' }}>
-              Notifications are blocked. Allow them in your browser / OS settings, then reload.
-            </div>
-          )}
-
-          {/* Reminder time picker */}
-          {isSubscribed && (() => {
-            const TIMES = [
-              { hour: 8,  label: 'Morning — 8:30 AM' },
-              { hour: 19, label: 'Evening — 7:30 PM' },
-            ]
-            return (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)' }}>
-                <Clock size={18} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: 'var(--text)', marginBottom: 6 }}>Reminder time (IST)</p>
-                  <select
-                    value={reminderHour}
-                    onChange={e => saveReminderHour(Number(e.target.value))}
-                    style={{
-                      fontSize: 13, padding: '5px 10px',
-                      background: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 8, color: 'var(--text)',
-                      outline: 'none', cursor: 'pointer', width: '100%',
-                    }}
+          {!q.trim() ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {SECTIONS.map(s => {
+                const a = s.key === active
+                return (
+                  <button
+                    key={s.key} onClick={() => go(s.key)} aria-current={a ? 'true' : undefined} className={a ? undefined : 'set-hover'}
+                    style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, height: 38, padding: '0 12px', border: 0, borderRadius: 11, background: a ? 'var(--acc-soft)' : 'transparent', color: a ? 'var(--acc-txt)' : 'var(--mut)', fontSize: 14, fontWeight: a ? 600 : 500, cursor: 'pointer', textAlign: 'left' }}
                   >
-                    {TIMES.map(t => (
-                      <option key={t.hour} value={t.hour}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )
-          })()}
-
-          {!pushUnavailable && (
-            <button
-              onClick={handleTogglePush}
-              disabled={pushLoading}
-              className={isSubscribed ? 'btn' : 'btn-primary'}
-              style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8, opacity: pushLoading ? 0.6 : 1 }}
-            >
-              {isSubscribed ? <BellOff size={14} /> : <Bell size={14} />}
-              {pushLoading ? 'Working…' : isSubscribed ? 'Turn off reminders' : 'Enable reminders'}
-            </button>
-          )}
-        </div>
-
-        {/* Financial Mode */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Flame size={14} style={{ color: 'var(--warn-ink)' }} />
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Financial Mode</h2>
-          </div>
-          <div className="grid grid-cols-2" style={{ gap: 10 }}>
-            {([
-              { value: 'normal' as const,       label: 'Normal',       desc: 'Standard budget tracking',              Icon: IconLeaf,  color: 'var(--good-ink)' },
-              { value: 'high-expense' as const, label: 'High Expense', desc: 'Cash pressure alerts, borrow tracking', Icon: IconFlame, color: 'var(--warn-ink)' },
-            ]).map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => saveMode(opt.value)}
-                style={{
-                  textAlign: 'left', padding: 12, borderRadius: 12,
-                  border: `2px solid ${mode === opt.value ? 'var(--brand)' : 'var(--border)'}`,
-                  background: mode === opt.value ? 'var(--brand-soft)' : 'var(--surface)',
-                  cursor: 'pointer', transition: 'background .15s, border-color .15s',
-                }}
-              >
-                <opt.Icon size={22} style={{ color: opt.color, marginBottom: 4 }} />
-                <p style={{ fontSize: 13, fontWeight: 500, color: mode === opt.value ? 'var(--brand-ink)' : 'var(--text)', margin: 0 }}>{opt.label}</p>
-                <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, marginTop: 2 }}>{opt.desc}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <VehiclesCard />
-
-        {/* Budget Targets */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Wallet size={14} style={{ color: 'var(--brand)' }} />
-              <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Budget Targets</h2>
-            </div>
-            {!editingTargets && (
-              <button
-                onClick={() => setEditingTargets(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text-3)', fontSize: 12 }}
-              >
-                <Pencil size={12} /> Edit
-              </button>
-            )}
-          </div>
-
-          {!editingTargets ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {[
-                { label: 'Monthly Income Target', value: settings?.monthlyIncomeTarget },
-                { label: 'Weekly Spending Budget', value: settings?.weeklyBudget },
-                { label: 'Emergency Fund Target', value: settings?.emergencyFundTarget },
-              ].map(({ label, value }) => (
-                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text-2)' }}>{label}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: value ? 'var(--text)' : 'var(--text-4)' }}>
-                    {value ? `₹${Number(value).toLocaleString('en-IN')}` : 'Not set'}
-                  </span>
-                </div>
-              ))}
+                    <span style={{ position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: 3, background: 'var(--acc)', opacity: a ? 1 : 0, transition: 'opacity .15s' }} />
+                    <Sym name={s.icon} size={19} fill={a} />{s.label}
+                  </button>
+                )
+              })}
             </div>
           ) : (
-            <>
-              <div>
-                <label className="label">Monthly Income Target (₹)</label>
-                <input type="number" inputMode="decimal" className="input" placeholder="e.g. 80000" value={monthlyIncome} onChange={(e) => setMonthlyIncome(e.target.value)} autoFocus />
-              </div>
-              <div>
-                <label className="label">Weekly Spending Budget (₹)</label>
-                <input type="number" inputMode="decimal" className="input" placeholder="e.g. 3000" value={weeklyBudget} onChange={(e) => setWeeklyBudget(e.target.value)} />
-              </div>
-              <div>
-                <label className="label">Emergency Fund Target (₹)</label>
-                <input type="number" inputMode="decimal" className="input" placeholder="e.g. 200000" value={efTarget} onChange={(e) => setEfTarget(e.target.value)} />
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => { setEditingTargets(false); setMonthlyIncome(String(settings?.monthlyIncomeTarget ?? '')); setWeeklyBudget(String(settings?.weeklyBudget ?? '')); setEfTarget(String(settings?.emergencyFundTarget ?? '')) }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-2)', fontSize: 13 }}
-                >
-                  <X size={13} /> Cancel
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: 6, borderRadius: 18, background: 'var(--sf)', border: '1px solid var(--line)', boxShadow: 'var(--shadow)' }}>
+              {results.map(r => (
+                <button key={r.label} onClick={() => pick(r.key)} className="set-hover" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '9px 10px', border: 0, borderRadius: 10, background: 'transparent', color: 'var(--ink)', cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ fontSize: 14, fontWeight: 500 }}>{r.label}</span>
+                  <span style={{ fontSize: 12, color: 'var(--mut)' }}>{SECTION[r.key].label}</span>
                 </button>
-                <button onClick={saveSettings} disabled={saving} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: saving ? 0.6 : 1 }}>
-                  {saving ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Salary Cycle */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <CalendarClock size={14} style={{ color: 'var(--brand)' }} />
-              <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Salary Cycle</h2>
-            </div>
-            {!editingCycle && (
-              <button
-                onClick={() => setEditingCycle(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text-3)', fontSize: 12 }}
-              >
-                <Pencil size={12} /> Edit
-              </button>
-            )}
-          </div>
-
-          {/* Read-only summary */}
-          {!editingCycle && (
-            <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)', fontSize: 13, color: 'var(--text-2)' }}>
-              {cycleRule === 'none' && 'Off — using calendar month'}
-              {cycleRule === 'last-working-day' && 'Last working day of previous month (Mon–Fri)'}
-              {cycleRule === 'fixed-day' && `Day ${cycleFixedDay} of previous month`}
+              ))}
+              {results.length === 0 && <div style={{ padding: 10, fontSize: 13, color: 'var(--mut)' }}>{NO_MATCH}</div>}
             </div>
           )}
+        </nav>
 
-          {/* Edit form */}
-          {editingCycle && (
-            <>
-              <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
-                Salary credited on the last day of a month is budgeted for the next month. Set your cycle so cashflow matches reality.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <label className="label">Cycle starts on</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {([
-                    { value: 'none',             label: 'Off — use calendar month' },
-                    { value: 'last-working-day', label: 'Last working day of previous month (Mon–Fri)' },
-                    { value: 'fixed-day',        label: 'Fixed day of previous month' },
-                  ] as { value: SalaryCycleRule; label: string }[]).map(opt => (
-                    <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 13, color: 'var(--text-2)' }}>
-                      <input
-                        type="radio"
-                        name="cycleRule"
-                        value={opt.value}
-                        checked={cycleRule === opt.value}
-                        onChange={() => setCycleRule(opt.value)}
-                        style={{ accentColor: 'var(--brand)' }}
-                      />
-                      {opt.label}
-                    </label>
-                  ))}
-                </div>
-                {cycleRule === 'fixed-day' && (
-                  <div style={{ marginTop: 4 }}>
-                    <label className="label">Day of month (1–31)</label>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      className="input"
-                      min={1} max={31}
-                      value={cycleFixedDay}
-                      onChange={e => setCycleFixedDay(e.target.value)}
-                      style={{ maxWidth: 100 }}
-                    />
-                  </div>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => { setEditingCycle(false); setCycleRule((settings?.salaryCycleRule ?? 'none') as SalaryCycleRule); setCycleFixedDay(String(settings?.salaryCycleFixedDay ?? 28)) }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', cursor: 'pointer', color: 'var(--text-2)', fontSize: 13 }}
-                >
-                  <X size={13} /> Cancel
-                </button>
-                <button
-                  onClick={saveCycleSettings}
-                  disabled={savingCycle}
-                  className="btn-primary"
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: savingCycle ? 0.6 : 1 }}
-                >
-                  {savingCycle ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* Per-month override table — only in edit mode */}
-          {editingCycle && cycleRule !== 'none' && (
-            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14 }}>
-              <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 10 }}>
-                Cycle start dates <span style={{ fontWeight: 400, color: 'var(--text-3)' }}>— edit if salary came on a different day</span>
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {getLast6Months().reverse().map(bm => {
-                  const override  = cycleOverrides[bm]
-                  const autoStart = cycleRule === 'last-working-day'
-                    ? (() => { const [y, m] = bm.split('-').map(Number); const py = m === 1 ? y-1 : y; const pm = m === 1 ? 12 : m-1; return getLastWorkingDay(py, pm) })()
-                    : (() => { const [y, m] = bm.split('-').map(Number); const py = m === 1 ? y-1 : y; const pm = m === 1 ? 12 : m-1; const lastDay = new Date(py, pm, 0).getDate(); const day = Math.min(Number(cycleFixedDay)||28, lastDay); return format(new Date(py, pm-1, day), 'yyyy-MM-dd') })()
-                  const activeStart = override ?? autoStart
-                  const { end } = getCycleRange(bm, { ...settings, salaryCycleRule: cycleRule, salaryCycleFixedDay: Number(cycleFixedDay)||28, cycleOverrides } as Parameters<typeof getCycleRange>[1])
-                  const isEditing = editingMonth === bm
-
-                  return (
-                    <div key={bm} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 10, background: isEditing ? 'var(--surface-2)' : 'transparent' }}>
-                      <div style={{ minWidth: 80, fontSize: 13, fontWeight: 500, color: 'var(--text)' }}>
-                        {format(parseISO(`${bm}-01`), 'MMM yyyy')}
-                      </div>
-                      <div style={{ flex: 1, fontSize: 12, color: 'var(--text-2)' }}>
-                        {isEditing ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <input
-                              type="date"
-                              className="input"
-                              style={{ fontSize: 12, padding: '4px 8px', maxWidth: 160 }}
-                              value={editDate}
-                              onChange={e => setEditDate(e.target.value)}
-                            />
-                            <button className="btn btn-sm btn-primary" onClick={() => saveOverride(bm, editDate)} disabled={!editDate}>Save</button>
-                            <button className="btn btn-sm" onClick={() => setEditingMonth(null)}>Cancel</button>
-                          </div>
-                        ) : (
-                          <span>
-                            {format(parseISO(activeStart), 'MMM d, EEE')}
-                            {' '}
-                            <span style={{ fontSize: 11, color: 'var(--text-4)' }}>→ {format(parseISO(end), 'MMM d')}</span>
-                            {' '}
-                            {override
-                              ? <span style={{ fontSize: 10.5, background: 'var(--warn-soft)', color: 'var(--warn-ink)', padding: '1px 6px', borderRadius: 999 }}>custom</span>
-                              : <span style={{ fontSize: 10.5, color: 'var(--text-4)' }}>auto</span>
-                            }
-                          </span>
-                        )}
-                      </div>
-                      {!isEditing && (
-                        <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                          <button
-                            onClick={() => { setEditingMonth(bm); setEditDate(activeStart) }}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4, display: 'flex' }}
-                            title="Edit cycle start"
-                          >
-                            <Pencil size={12} />
-                          </button>
-                          {override && (
-                            <button
-                              onClick={() => clearOverride(bm)}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bad-ink)', padding: 4, display: 'flex' }}
-                              title="Reset to auto"
-                            >
-                              <X size={12} />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+        <div style={{ minWidth: 0, maxWidth: 840, display: 'flex', flexDirection: 'column', gap: 56 }}>
+          {SECTIONS.map(s => (
+            <section key={s.key} ref={el => { refs.current[s.key] = el }} data-sec={s.key} aria-label={s.label} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <SectionHead title={s.label} desc={s.desc} />
+              {body(s.key, false)}
+            </section>
+          ))}
         </div>
+      </div>
+    </>
+  )
+}
 
-        {/* Linked Accounts */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Link2 size={14} style={{ color: 'var(--brand-ink)' }} />
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Linked Accounts</h2>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
-            Link multiple sign-in methods. Your data stays the same regardless of which method you use.
-          </p>
-          <LinkedAccounts />
-        </div>
+// ── Phone: a grouped list that opens each section as its own page ────────────
 
-        {/* iPhone Quick Add */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: hasIosToken ? 'var(--brand-soft)' : 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: hasIosToken ? 'var(--brand)' : 'var(--text-3)' }}>
-              <Smartphone size={14} />
-            </div>
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>iPhone Quick Add</h2>
-          </div>
+function Phone({ body, pushOn }: { body: (k: SectionKey, compact: boolean) => ReactNode; pushOn: boolean }) {
+  const router = useRouter()
+  const params = useSearchParams()
+  const s = params.get('s')
+  const sub = isSection(s) ? s : null
+  // Opened from the list → Back pops history; arrived on a sub-page directly → Back replaces
+  const pushed = useRef(false)
 
-          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
-            Log an expense in three taps from anywhere — even the lock screen — using
-            iOS <strong>Back Tap</strong> + a Shortcut. Tap the back of your phone → enter
-            amount → description → pick a category. It lands in Growwly on the next
-            refresh.
-          </p>
+  const open = (k: SectionKey) => { pushed.current = true; router.push(`/settings?s=${k}`) }
+  const back = () => {
+    if (pushed.current) { pushed.current = false; router.back() }
+    else router.replace('/settings')
+  }
 
-          {!hasIosToken && (
-            <button
-              onClick={() => generateIosToken(false)}
-              disabled={iosBusy}
-              className="btn-primary"
-              style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 8, opacity: iosBusy ? 0.6 : 1 }}
-            >
-              <KeyRound size={14} />
-              {iosBusy ? 'Working…' : 'Generate access token'}
-            </button>
-          )}
+  useEffect(() => { window.scrollTo(0, 0) }, [sub])
 
-          {hasIosToken && (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-3)' }}>
-                <span style={{ width: 7, height: 7, borderRadius: 999, background: 'var(--brand)', flexShrink: 0 }} />
-                <span>
-                  Active — created {settings?.iosShortcut?.createdAt ? format(parseISO(settings.iosShortcut.createdAt), 'MMM d, yyyy') : '—'}
-                </span>
-              </div>
-
-              {iosToken ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14, borderRadius: 12, background: 'var(--brand-soft)', border: '1px solid color-mix(in oklch, var(--brand) 30%, transparent)' }}>
-                  <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: 'var(--brand-ink)' }}>
-                    Copy this token now — it won&apos;t be shown again.
-                  </p>
-                  <code style={{ fontSize: 12, wordBreak: 'break-all', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', color: 'var(--text)', background: 'var(--surface)', padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)' }}>
-                    {iosToken}
-                  </code>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    <button onClick={copyIosToken} className="btn" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {iosCopied ? <Check size={14} /> : <Copy size={14} />} {iosCopied ? 'Copied' : 'Copy token'}
-                    </button>
-                    <button onClick={downloadIosShortcut} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Download size={14} /> Download shortcut
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <p style={{ margin: 0, fontSize: 12, color: 'var(--text-3)', lineHeight: 1.5 }}>
-                  Your token is stored as a hash and can&apos;t be shown again. Generate a
-                  new one if you&apos;ve lost it — the previous token stops working immediately.
-                </p>
-              )}
-
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                <button
-                  onClick={() => generateIosToken(true)}
-                  disabled={iosBusy}
-                  className="btn"
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: iosBusy ? 0.6 : 1 }}
-                >
-                  <KeyRound size={14} /> {iosBusy ? 'Working…' : 'Generate new token'}
-                </button>
-                <button
-                  onClick={revokeIosToken}
-                  disabled={iosBusy}
-                  className="btn-danger"
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: iosBusy ? 0.6 : 1 }}
-                >
-                  <Trash2 size={14} /> Revoke
-                </button>
-              </div>
-
-              <details style={{ fontSize: 12, color: 'var(--text-3)' }}>
-                <summary style={{ cursor: 'pointer', fontWeight: 600, color: 'var(--text)' }}>Set-up steps</summary>
-                <ol style={{ margin: '10px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
-                  <li>On iPhone, open <strong>Settings → Shortcuts</strong> and turn on <strong>Allow Untrusted Shortcuts</strong> (run any shortcut once if the toggle is missing).</li>
-                  <li>Tap <strong>Download shortcut</strong> above, then open the file — it imports into the Shortcuts app with your token already baked in.</li>
-                  <li>Go to <strong>Settings → Accessibility → Touch → Back Tap</strong>, pick <strong>Double Tap</strong> or <strong>Triple Tap</strong>, and choose the <strong>Growwly Quick Add</strong> shortcut.</li>
-                  <li>Tap the back of your phone to test. From the lock screen, iOS asks for Face ID once before the prompts appear.</li>
-                </ol>
-                <p style={{ margin: '10px 0 0' }}>
-                  Prefer to build it by hand? POST JSON <code>{`{ token, amount, description, category }`}</code> to <code>{typeof window !== 'undefined' ? `${window.location.origin}/api/ios-shortcut/transaction` : '/api/ios-shortcut/transaction'}</code>.
-                </p>
-              </details>
-            </>
-          )}
-        </div>
-
-        {/* Accent Color */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Palette size={14} style={{ color: 'var(--brand)' }} />
-            <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Accent Color</h2>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
-            Changes the brand color across the entire app. Saved to your account and syncs across devices.
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-            {([
-              { id: 'green'  as const, label: 'Forest',  swatch: 'oklch(0.62 0.15 158)',   soft: 'oklch(0.95 0.05 162)',  gradient: undefined },
-              { id: 'purple' as const, label: 'Violet',  swatch: 'oklch(0.585 0.205 286)', soft: 'oklch(0.95 0.04 286)',  gradient: undefined },
-              { id: 'orange' as const, label: 'Ember',   swatch: 'oklch(0.66 0.19 42)',    soft: 'oklch(0.95 0.05 50)',   gradient: undefined },
-              { id: 'pink'   as const, label: 'Rose',    swatch: 'oklch(0.62 0.22 358)',   soft: 'oklch(0.95 0.05 360)',  gradient: undefined },
-              { id: 'blue'   as const, label: 'Ocean',   swatch: 'oklch(0.54 0.22 261)',   soft: 'oklch(0.95 0.04 261)',  gradient: undefined },
-              { id: 'black'  as const, label: 'Mono',    swatch: 'oklch(0.14 0 0)',         soft: 'oklch(0.96 0 0)',       gradient: 'conic-gradient(oklch(0.14 0 0) 0deg 180deg, oklch(0.97 0 0) 180deg 360deg)' },
-            ]).map(({ id, label, swatch, soft, gradient }) => {
-              const on = accentColor === id
-              const circleBg = gradient ?? `linear-gradient(140deg, oklch(from ${swatch} calc(l + 0.1) c h), ${swatch})`
-              const checkColor = id === 'black' ? (on ? 'var(--text)' : '#fff') : '#fff'
-              return (
-                <button
-                  key={id}
-                  onClick={() => saveAccent(id)}
-                  style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
-                    padding: '14px 8px', borderRadius: 16, border: `2px solid ${on ? swatch : 'var(--border)'}`,
-                    background: on ? soft : 'var(--surface)', cursor: 'pointer',
-                    transition: 'background .15s, border-color .15s', fontFamily: 'inherit',
-                  }}
-                >
-                  <div style={{
-                    width: 32, height: 32, borderRadius: '50%',
-                    background: circleBg,
-                    backgroundColor: swatch,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: on ? `0 4px 12px -3px ${swatch}` : 'none',
-                    border: id === 'black' ? '1.5px solid var(--border-strong)' : 'none',
-                    transition: 'box-shadow .15s',
-                  }}>
-                    {on && <Check size={15} color={checkColor} strokeWidth={2.8} />}
-                  </div>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: on ? swatch : 'var(--text-3)' }}>{label}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Navigation */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <LayoutGrid size={14} style={{ color: 'var(--brand)' }} />
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Navigation Tabs</h2>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0, lineHeight: 1.5 }}>
-            Choose which optional tabs appear in the navigation bar. Health and Task tracking are available when you need them.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {([
-              {
-                field: 'showHealthTab' as const,
-                label: 'Health',
-                desc: 'Log workouts, sleep, water intake and daily wellness metrics',
-                icon: Activity,
-                value: showHealthTab,
-                set: setShowHealthTab,
-              },
-              {
-                field: 'showTasksTab' as const,
-                label: 'Tasks',
-                desc: 'A simple to-do list to track personal action items',
-                icon: CheckSquare,
-                value: showTasksTab,
-                set: setShowTasksTab,
-              },
-            ]).map(({ field, label, desc, icon: Icon, value, set }) => (
-              <div
-                key={field}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '12px 14px', borderRadius: 12,
-                  background: value ? 'var(--brand-soft)' : 'var(--surface-2)',
-                  border: `1px solid ${value ? 'var(--brand)' : 'var(--border)'}`,
-                  transition: 'background .15s, border-color .15s',
-                }}
-              >
-                <div style={{
-                  width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-                  background: value ? 'var(--brand)' : 'var(--surface-3)',
-                  color: value ? '#fff' : 'var(--text-3)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'background .15s, color .15s',
-                }}>
-                  <Icon size={15} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: 13, fontWeight: 500, color: value ? 'var(--brand-ink)' : 'var(--text)', margin: 0 }}>{label}</p>
-                  <p style={{ fontSize: 11.5, color: 'var(--text-3)', margin: 0, marginTop: 1 }}>{desc}</p>
-                </div>
-                <button
-                  onClick={async () => {
-                    const next = !value
-                    set(next)
-                    await saveTabSettings(field, next)
-                  }}
-                  disabled={savingTabs}
-                  style={{
-                    padding: '6px 14px', borderRadius: 20, border: 'none',
-                    background: value ? 'var(--brand)' : 'var(--surface-3)',
-                    color: value ? '#fff' : 'var(--text-3)',
-                    fontSize: 12, fontWeight: 600, cursor: savingTabs ? 'default' : 'pointer',
-                    opacity: savingTabs ? 0.6 : 1, flexShrink: 0,
-                    transition: 'background .15s, color .15s, opacity .15s',
-                  }}
-                >
-                  {value ? 'On' : 'Off'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Dashboard card order */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <LayoutGrid size={14} style={{ color: 'var(--brand)' }} />
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Dashboard Order</h2>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
-            Reorder the sections on your home screen with the arrows, or hide the ones you don't need, then save.
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {[...cardOrder, ...HIDEABLE_EXTRAS].map((id, idx) => {
-              const hidden = hiddenCards.includes(id)
-              const fixed = HIDEABLE_EXTRAS.includes(id)
-              return (
-                <div key={id} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 12px', borderRadius: 10,
-                  background: 'var(--surface-2)', border: '1px solid var(--border)',
-                }}>
-                  <span style={{ flex: 1, fontSize: 13, color: hidden ? 'var(--text-4)' : 'var(--text-2)', fontWeight: 500, textDecoration: hidden ? 'line-through' : 'none' }}>{CARD_LABELS[id] ?? id}</span>
-                  <button
-                    onClick={() => {
-                      setHiddenCards(h => hidden ? h.filter(x => x !== id) : [...h, id])
-                      setOrderDirty(true)
-                    }}
-                    aria-label={hidden ? `Show ${CARD_LABELS[id]}` : `Hide ${CARD_LABELS[id]}`}
-                    aria-pressed={!hidden}
-                    style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', display: 'flex', color: hidden ? 'var(--text-4)' : 'var(--text-2)' }}
-                  >
-                    {hidden ? <EyeOff size={13} /> : <Eye size={13} />}
-                  </button>
-                  {!fixed && (
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      <button
-                        disabled={idx === 0}
-                        onClick={() => {
-                          const next = [...cardOrder]
-                          ;[next[idx - 1], next[idx]] = [next[idx], next[idx - 1]]
-                          setCardOrder(next)
-                          setOrderDirty(true)
-                        }}
-                        style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.3 : 1, display: 'flex' }}
-                      >
-                        <ChevronUp size={13} />
-                      </button>
-                      <button
-                        disabled={idx === cardOrder.length - 1}
-                        onClick={() => {
-                          const next = [...cardOrder]
-                          ;[next[idx], next[idx + 1]] = [next[idx + 1], next[idx]]
-                          setCardOrder(next)
-                          setOrderDirty(true)
-                        }}
-                        style={{ padding: 4, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', cursor: idx === cardOrder.length - 1 ? 'default' : 'pointer', opacity: idx === cardOrder.length - 1 ? 0.3 : 1, display: 'flex' }}
-                      >
-                        <ChevronDown size={13} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button
-              onClick={() => {
-                setCardOrder(DEFAULT_CARD_ORDER)
-                setHiddenCards([])
-                setOrderDirty(true)
-              }}
-              style={{ fontSize: 12, color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-            >
-              Reset to default
-            </button>
-            <button
-              onClick={async () => {
-                if (!user) return
-                setSavingOrder(true)
-                try {
-                  await setUserSettings(user.uid, { dashboardCardOrder: cardOrder, dashboardHiddenCards: hiddenCards })
-                  await refresh()
-                  setOrderDirty(false)
-                  toast.success('Home screen saved')
-                } catch {
-                  toast.error('Failed to save order')
-                } finally {
-                  setSavingOrder(false)
-                }
-              }}
-              disabled={!orderDirty || savingOrder}
-              className="btn-primary"
-              style={{
-                marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
-                padding: '7px 14px', fontSize: 13,
-                opacity: !orderDirty || savingOrder ? 0.5 : 1,
-                cursor: !orderDirty || savingOrder ? 'default' : 'pointer',
-              }}
-            >
-              {savingOrder ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        </div>
-
-        {/* Streak Badges */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Flame size={14} style={{ color: '#f97316' }} />
-            <h2 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Streak Badges</h2>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-3)' }}>
-            Tap any badge to learn more. Longest streak: <span style={{ fontWeight: 600, color: 'var(--text)' }}>{longestMoneyStreak} days</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {BADGES.map((badge) => {
-              const { name, Icon, threshold, iconColor } = badge
-              const earned   = longestMoneyStreak >= threshold
-              const daysAway = threshold - longestMoneyStreak
-              return (
-                <button
-                  key={name}
-                  onClick={() => setSelectedBadge(badge)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 11, padding: '12px 13px',
-                    borderRadius: 14, cursor: 'pointer', textAlign: 'left',
-                    fontFamily: 'inherit',
-                    background: earned ? 'var(--surface-2)' : 'transparent',
-                    border: earned ? `1px solid color-mix(in oklch, ${iconColor} 35%, var(--border))` : '1.5px dashed var(--border)',
-                    opacity: earned ? 1 : 0.6,
-                    transition: 'opacity .15s, transform .1s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'scale(1.02)' }}
-                  onMouseLeave={e => { e.currentTarget.style.opacity = earned ? '1' : '0.6'; e.currentTarget.style.transform = 'scale(1)' }}
-                >
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    background: earned ? `color-mix(in oklch, ${iconColor} 18%, var(--surface))` : 'var(--surface-3)',
-                  }}>
-                    <Icon size={18} style={{ color: earned ? iconColor : 'var(--text-4)' }} />
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
-                    <div style={{ fontSize: 11, fontWeight: 600, marginTop: 2, color: earned ? 'var(--good-ink)' : 'var(--text-4)' }}>
-                      {earned ? '✓ Earned' : daysAway === 1 ? '1 day away' : `${daysAway} days to go`}
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-
-        {/* Backup & Restore */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Shield size={14} style={{ color: 'var(--info-ink)' }} />
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Backup & Restore</h2>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>Export all your data as JSON. Re-import anytime to restore on any device.</p>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button onClick={handleExport} disabled={exporting} className="btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: exporting ? 0.6 : 1 }}>
-              <Download size={14} /> {exporting ? 'Exporting…' : 'Export Backup'}
-            </button>
-            <button onClick={() => fileRef.current?.click()} disabled={importing} className="btn" style={{ display: 'flex', alignItems: 'center', gap: 6, opacity: importing ? 0.6 : 1 }}>
-              <Upload size={14} /> {importing ? 'Importing…' : 'Import Backup'}
-            </button>
-          </div>
-          <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
-          <div style={{ padding: '10px 14px', borderRadius: 10, background: 'var(--surface-2)', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.7 }}>
-            <p style={{ margin: 0 }}>• Exports all transactions, budgets, projects, borrowings & emergency fund</p>
-            <p style={{ margin: 0 }}>• Import overwrites existing data — export first as a precaution</p>
-          </div>
-        </div>
-
-        {/* Feedback */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <MessageCircle size={14} style={{ color: 'var(--brand)' }} />
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Feedback</h2>
-          </div>
-          <p style={{ fontSize: 13, color: 'var(--text-3)', margin: 0 }}>
-            Found a bug or have an idea? Tell us — if we act on it, we&apos;ll let you know right here in the app.
-          </p>
-
-          <div style={{ display: 'flex', gap: 8 }}>
-            {([
-              { value: 'bug', label: 'Bug', icon: Bug },
-              { value: 'feature_request', label: 'Feature request', icon: Lightbulb },
-              { value: 'other', label: 'Other', icon: MessageCircle },
-            ] as const).map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                onClick={() => setFeedbackType(value)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10,
-                  border: `1px solid ${feedbackType === value ? 'var(--brand)' : 'var(--border)'}`,
-                  background: feedbackType === value ? 'var(--brand-soft)' : 'var(--surface-2)',
-                  color: feedbackType === value ? 'var(--brand-ink)' : 'var(--text-2)',
-                  fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-                }}
-              >
-                <Icon size={13} /> {label}
-              </button>
-            ))}
-          </div>
-
-          <textarea
-            value={feedbackMessage}
-            onChange={e => setFeedbackMessage(e.target.value)}
-            rows={3}
-            placeholder={feedbackType === 'bug' ? "What went wrong, and what were you doing when it happened?" : feedbackType === 'feature_request' ? "What should Growwly do that it doesn't today?" : "Anything on your mind…"}
-            className="input"
-            style={{ resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
-          />
-
-          <button
-            onClick={handleSendFeedback}
-            disabled={sendingFeedback || !feedbackMessage.trim()}
-            className="btn-primary"
-            style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6, opacity: (sendingFeedback || !feedbackMessage.trim()) ? 0.6 : 1 }}
-          >
-            <Send size={14} /> {sendingFeedback ? 'Sending…' : 'Send Feedback'}
+  if (sub) {
+    const meta = SECTION[sub]
+    return (
+      <div style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', height: 44, padding: '0 8px' }}>
+          <button onClick={back} style={{ display: 'flex', alignItems: 'center', border: 0, background: 'transparent', padding: 0, color: 'var(--acc-txt)', fontSize: 16, fontWeight: 500, cursor: 'pointer' }}>
+            <Sym name="chevron_left" size={28} />Settings
           </button>
         </div>
-
+        <div style={{ padding: '2px 20px 16px' }}>
+          <h1 style={{ margin: 0, fontSize: 30, fontWeight: 700, lineHeight: 1.1, letterSpacing: '-0.025em' }}>{meta.label}</h1>
+          <div style={{ fontSize: 14, lineHeight: 1.45, color: 'var(--mut)', marginTop: 4 }}>{meta.phoneDesc ?? meta.desc}</div>
+        </div>
+        <div style={{ padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {body(sub, true)}
+        </div>
       </div>
+    )
+  }
 
-      <ConfirmDialog
-        open={!!pendingImport}
-        message="This will overwrite your existing data with the backup file. Continue?"
-        confirmLabel="Import"
-        onConfirm={doImport}
-        onClose={() => setPendingImport(null)}
-      />
+  return <PhoneRoot open={open} pushOn={pushOn} />
+}
 
-      {/* Account options modal — "More, or wanna leave?" → options list → Danger Zone */}
-      {accountMenuOpen && createPortal((
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-          onClick={() => setAccountMenuOpen(false)}
-        >
-          <div
-            style={{
-              background: 'var(--surface)',
-              border: accountMenuStep === 'danger' ? '1px solid color-mix(in oklch, var(--bad) 35%, var(--border))' : '1px solid var(--border)',
-              borderRadius: 'var(--radius-xl)', padding: 24, maxWidth: 400, width: '100%',
-              boxShadow: 'var(--shadow-lg)',
-              display: 'flex', flexDirection: 'column', gap: 16,
-              position: 'relative',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Close */}
-            <button
-              onClick={() => setAccountMenuOpen(false)}
-              style={{ position: 'absolute', top: 16, right: 16, padding: 6, borderRadius: 8, background: 'var(--surface-2)', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}
-            >
-              <X size={14} />
+function PhoneRoot({ open, pushOn }: { open: (k: SectionKey) => void; pushOn: boolean }) {
+  const { logout } = useAuth()
+  const settings = useAppStore(s => s.settings)
+  const transactions = useAppStore(s => s.transactions)
+  const [q, setQ] = useState('')
+  const results = useMemo(() => search(q), [q])
+
+  const best = computeLongestMoneyStreak(transactions, settings?.noSpendDays ?? [])
+  const mode = settings?.financialMode === 'high-expense' ? 'High Expense' : 'Normal'
+  const income = settings?.monthlyIncomeTarget
+  const reminder = REMINDER_TIMES.find(t => t.hour === (settings?.pushReminderHour ?? 19))?.time
+  const accent = ACCENTS.find(a => a.id === (settings?.accentColor ?? 'green'))?.name ?? 'Forest'
+
+  const main: [SectionKey, string][] = [
+    ['money', income ? `${mode} · ${inr(income)}` : mode],
+    ['notif', pushOn ? reminder ?? 'On' : 'Off'],
+    ['appear', accent],
+    ['short', settings?.iosShortcut ? 'Quick Add on' : 'Off'],
+    ['ach', `Best ${best} day${best === 1 ? '' : 's'}`],
+  ]
+  const more: [SectionKey, string][] = [['data', 'Backup'], ['help', 'Feedback']]
+
+  const row = (icon: string, label: string, value: string, accentTile: boolean, first: boolean, trail = 'chevron_right') => (
+    <>
+      <div style={{
+        width: 32, height: 32, borderRadius: 10, display: 'grid', placeItems: 'center', flex: 'none',
+        ...(accentTile ? { background: 'var(--acc-soft)', color: 'var(--acc-txt)' } : { background: 'var(--sf2)', border: '1px solid var(--line)' }),
+      }}>
+        <Sym name={icon} size={19} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, height: 56, paddingRight: 12, borderTop: first ? 0 : '1px solid var(--line)' }}>
+        <span style={{ flex: 1, fontSize: 15.5, fontWeight: 500, color: 'var(--ink)' }}>{label}</span>
+        <span style={{ fontSize: 14, color: 'var(--mut)', whiteSpace: 'nowrap' }}>{value}</span>
+        <Sym name={trail} size={20} style={{ color: 'var(--mut)' }} />
+      </div>
+    </>
+  )
+  const rowBtn = { display: 'flex', alignItems: 'center', gap: 12, width: '100%', paddingLeft: 14, border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left', textDecoration: 'none' } as const
+  const group = { background: 'var(--sf)', border: '1px solid var(--line)', borderRadius: 24, overflow: 'hidden' } as const
+
+  return (
+    <div style={{ padding: 'calc(env(safe-area-inset-top, 0px) + 10px) 16px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <h1 style={{ margin: 0, fontSize: 34, fontWeight: 700, lineHeight: 1.1, letterSpacing: '-0.025em', padding: '0 4px' }}>Settings</h1>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 12px', borderRadius: 12, background: 'color-mix(in oklch, var(--ink) 6%, transparent)', color: 'var(--mut)' }}>
+        <Sym name="search" size={19} />
+        <input
+          value={q} onChange={e => setQ(e.target.value)} placeholder="Search settings" aria-label="Search settings" enterKeyHint="search"
+          style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--ink)', fontSize: 16 }}
+        />
+        {q && (
+          <button onClick={() => setQ('')} aria-label="Clear search" style={{ border: 0, background: 'transparent', color: 'var(--mut)', display: 'grid', placeItems: 'center', padding: 0 }}>
+            <Sym name="close" size={18} />
+          </button>
+        )}
+      </label>
+
+      {q.trim() ? (
+        <div style={group}>
+          {results.map((r, i) => (
+            <button key={r.label} onClick={() => open(r.key)} style={rowBtn}>
+              {row(SECTION[r.key].icon, r.label, SECTION[r.key].label, true, i === 0)}
             </button>
-
-            {accountMenuStep === 'options' ? (
-              <>
-                <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', margin: 0, letterSpacing: '-0.01em' }}>Account options</h2>
-                <div style={{ display: 'flex', flexDirection: 'column', borderRadius: 12, border: '1px solid var(--border)', overflow: 'hidden' }}>
-                  <button
-                    onClick={() => setAccountMenuStep('danger')}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 10, padding: '13px 14px',
-                      background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
-                    }}
-                  >
-                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--bad-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--bad-ink)', flexShrink: 0 }}>
-                      <Trash2 size={14} />
-                    </div>
-                    <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: 'var(--bad-ink)' }}>Delete Account</span>
-                    <ChevronDown size={14} style={{ color: 'var(--text-4)', transform: 'rotate(-90deg)' }} />
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button
-                    onClick={() => setAccountMenuStep('options')}
-                    style={{ padding: 4, borderRadius: 6, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}
-                  >
-                    <ChevronDown size={16} style={{ transform: 'rotate(90deg)' }} />
-                  </button>
-                  <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--bad-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--bad-ink)', flexShrink: 0 }}>
-                    <AlertTriangle size={14} />
-                  </div>
-                  <h2 style={{ fontSize: 14, fontWeight: 600, color: 'var(--bad-ink)', margin: 0 }}>Danger Zone</h2>
-                </div>
-
-                <div style={{ padding: '14px 16px', borderRadius: 12, background: 'var(--bad-soft)', border: '1px solid color-mix(in oklch, var(--bad) 25%, transparent)' }}>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--bad-ink)', margin: '0 0 6px' }}>Before you go…</p>
-                  <p style={{ fontSize: 12.5, color: 'var(--text-2)', margin: 0, lineHeight: 1.65 }}>
-                    Growwly holds your entire financial history — years of transactions, savings goals, net worth milestones, and spending patterns that help you make smarter decisions every day. Once deleted, this data cannot be recovered.
-                  </p>
-                  <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '8px 0 0', lineHeight: 1.5 }}>
-                    If you&apos;re taking a break, you can simply log out and return anytime. Consider <button onClick={handleExport} style={{ color: 'var(--brand)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12, fontWeight: 600, textDecoration: 'underline' }}>exporting a backup</button> first.
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => { setAccountMenuOpen(false); setDeleteConfirmText(''); setDeleteModalOpen(true) }}
-                  className="btn-danger"
-                  style={{ alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 6 }}
-                >
-                  <Trash2 size={14} /> Delete Account
-                </button>
-              </>
-            )}
-          </div>
+          ))}
+          {results.length === 0 && <div style={{ padding: 16, fontSize: 14, color: 'var(--mut)' }}>{NO_MATCH}</div>}
         </div>
-      ), document.body)}
-
-      {/* Delete account confirmation modal */}
-      {deleteModalOpen && createPortal((
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-          onClick={() => { if (!deleting) { setDeleteModalOpen(false); setDeleteConfirmText('') } }}
-        >
-          <div
-            style={{
-              background: 'var(--surface)', border: '1px solid color-mix(in oklch, var(--bad) 35%, var(--border))',
-              borderRadius: 'var(--radius-xl)', padding: 28, maxWidth: 400, width: '100%',
-              boxShadow: 'var(--shadow-lg)',
-              display: 'flex', flexDirection: 'column', gap: 20,
-              position: 'relative',
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Close */}
-            <button
-              onClick={() => { setDeleteModalOpen(false); setDeleteConfirmText('') }}
-              disabled={deleting}
-              style={{ position: 'absolute', top: 16, right: 16, padding: 6, borderRadius: 8, background: 'var(--surface-2)', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex', opacity: deleting ? 0.4 : 1 }}
-            >
-              <X size={14} />
-            </button>
-
-            {/* Header */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, paddingTop: 8 }}>
-              <div style={{
-                width: 56, height: 56, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'var(--bad-soft)', border: '2px solid color-mix(in oklch, var(--bad) 30%, transparent)',
-              }}>
-                <Trash2 size={24} style={{ color: 'var(--bad-ink)' }} />
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--bad-ink)', letterSpacing: '-0.02em' }}>Delete Account?</div>
-                <div style={{ fontSize: 12.5, color: 'var(--text-3)', marginTop: 4, lineHeight: 1.5 }}>
-                  This will permanently delete all your data and cannot be undone.
-                </div>
-              </div>
-            </div>
-
-            {/* What gets deleted */}
-            <div style={{ padding: '12px 16px', borderRadius: 12, background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.75 }}>
-              <p style={{ margin: '0 0 4px', fontWeight: 600, color: 'var(--text-2)', fontSize: 12.5 }}>Everything will be deleted:</p>
-              <p style={{ margin: 0 }}>• All transactions and income records</p>
-              <p style={{ margin: 0 }}>• Savings goals, projects & borrowings</p>
-              <p style={{ margin: 0 }}>• Net worth assets & liabilities</p>
-              <p style={{ margin: 0 }}>• Emergency fund, settings & badges</p>
-            </div>
-
-            {/* Type-to-confirm */}
-            <div>
-              <label style={{ fontSize: 13, color: 'var(--text-2)', fontWeight: 500, display: 'block', marginBottom: 8 }}>
-                Type <strong style={{ color: 'var(--bad-ink)' }}>delete</strong> to confirm
-              </label>
-              <input
-                type="text"
-                className="input"
-                placeholder='type "delete"'
-                value={deleteConfirmText}
-                onChange={e => setDeleteConfirmText(e.target.value)}
-                disabled={deleting}
-                autoCapitalize="none"
-                autoCorrect="off"
-                style={{
-                  borderColor: deleteConfirmText.toLowerCase() === 'delete' ? 'var(--bad)' : undefined,
-                }}
-              />
-            </div>
-
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => { setDeleteModalOpen(false); setDeleteConfirmText('') }}
-                disabled={deleting}
-                className="btn"
-                style={{ flex: 1, justifyContent: 'center', opacity: deleting ? 0.5 : 1 }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={doDeleteAccount}
-                disabled={deleting || deleteConfirmText.toLowerCase() !== 'delete'}
-                className="btn-danger"
-                style={{
-                  flex: 1, justifyContent: 'center', display: 'flex', alignItems: 'center', gap: 6,
-                  opacity: (deleting || deleteConfirmText.toLowerCase() !== 'delete') ? 0.45 : 1,
-                  cursor: (deleting || deleteConfirmText.toLowerCase() !== 'delete') ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {deleting ? 'Deleting…' : <><Trash2 size={13} /> Delete Forever</>}
-              </button>
-            </div>
+      ) : (
+        <>
+          <IdentityRow onOpen={() => open('profile')} />
+          <div style={group}>
+            {main.map(([k, v], i) => (
+              <button key={k} onClick={() => open(k)} style={rowBtn}>{row(SECTION[k].icon, SECTION[k].label, v, true, i === 0)}</button>
+            ))}
           </div>
-        </div>
-      ), document.body)}
-
-      {/* Badge detail modal — portalled to body so position:fixed escapes the pull-to-refresh transform */}
-      {selectedBadge && createPortal((() => {
-        const { name, Icon, iconColor, description, quote, threshold } = selectedBadge
-        const earned     = longestMoneyStreak >= threshold
-        const daysAway   = threshold - longestMoneyStreak
-        const earnedDate = earned ? getBadgeEarnedDate(txDates, noSpendDays, threshold) : null
-        return (
-          <div
-            style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
-            onClick={() => setSelectedBadge(null)}
-          >
-            <div
-              style={{
-                background: 'var(--surface)', border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-xl)', padding: 28, maxWidth: 360, width: '100%',
-                boxShadow: 'var(--shadow-lg)',
-                display: 'flex', flexDirection: 'column', gap: 20,
-                position: 'relative',
-              }}
-              onClick={e => e.stopPropagation()}
-            >
-              {/* Close */}
-              <button
-                onClick={() => setSelectedBadge(null)}
-                style={{ position: 'absolute', top: 16, right: 16, padding: 6, borderRadius: 8, background: 'var(--surface-2)', border: 'none', cursor: 'pointer', color: 'var(--text-3)', display: 'flex' }}
-              >
-                <X size={14} />
-              </button>
-
-              {/* Icon + name */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, paddingTop: 8 }}>
-                <div style={{
-                  width: 72, height: 72, borderRadius: 20,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: earned
-                    ? `color-mix(in oklch, ${iconColor} 20%, var(--surface-2))`
-                    : 'var(--surface-3)',
-                  border: earned ? `2px solid color-mix(in oklch, ${iconColor} 40%, transparent)` : '2px dashed var(--border)',
-                  boxShadow: earned ? `0 4px 20px color-mix(in oklch, ${iconColor} 25%, transparent)` : 'none',
-                }}>
-                  <Icon size={32} style={{ color: earned ? iconColor : 'var(--text-4)' }} />
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>{name}</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 3 }}>{threshold}-day streak badge</div>
-                </div>
-              </div>
-
-              {/* Description */}
-              <div style={{ fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.6, textAlign: 'center' }}>
-                {description}
-              </div>
-
-              {/* Earned / progress */}
-              {earned ? (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
-                  borderRadius: 12,
-                  background: `color-mix(in oklch, ${iconColor} 12%, var(--surface))`,
-                  border: `1px solid color-mix(in oklch, ${iconColor} 28%, transparent)`,
-                }}>
-                  <div style={{
-                    width: 32, height: 32, borderRadius: 10, flexShrink: 0,
-                    background: `color-mix(in oklch, ${iconColor} 22%, transparent)`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 16,
-                  }}>🏅</div>
-                  <div>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--good-ink)' }}>Badge Earned!</div>
-                    {earnedDate && (
-                      <div style={{ fontSize: 11.5, color: 'var(--text-3)', marginTop: 2 }}>
-                        Achieved on {format(parseISO(earnedDate), 'dd MMM yyyy')}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div style={{
-                  display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 16px',
-                  borderRadius: 12, background: 'var(--surface-2)', border: '1px solid var(--border)',
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-3)' }}>
-                    <span>Your best streak</span>
-                    <span style={{ fontWeight: 600, color: 'var(--text)' }}>{longestMoneyStreak} / {threshold} days</span>
-                  </div>
-                  <div style={{ height: 6, background: 'var(--surface-3)', borderRadius: 999, overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%', borderRadius: 999,
-                      width: `${Math.min(100, (longestMoneyStreak / threshold) * 100)}%`,
-                      background: iconColor, transition: 'width .4s ease',
-                    }} />
-                  </div>
-                  <div style={{ fontSize: 11.5, color: 'var(--text-3)', textAlign: 'center' }}>
-                    {daysAway === 1 ? '1 more day to unlock' : `${daysAway} more days to unlock`}
-                  </div>
-                </div>
-              )}
-
-              {/* Quote */}
-              <div style={{
-                padding: '14px 16px', borderRadius: 12,
-                background: 'var(--surface-2)', borderLeft: `3px solid ${iconColor}`,
-              }}>
-                <div style={{ fontSize: 12.5, color: 'var(--text-2)', fontStyle: 'italic', lineHeight: 1.6 }}>
-                  {quote}
-                </div>
-              </div>
-            </div>
+          <div style={group}>
+            {more.map(([k, v], i) => (
+              <button key={k} onClick={() => open(k)} style={rowBtn}>{row(SECTION[k].icon, SECTION[k].label, v, false, i === 0)}</button>
+            ))}
+            {LOCAL_AI && <Link href="/ai" style={rowBtn}>{row('auto_awesome', 'AI hub', '', false, false, 'arrow_outward')}</Link>}
           </div>
-        )
-      })(), document.body)}
-    </AppShell>
+          <button onClick={logout} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 52, borderRadius: 18, background: 'var(--sf)', border: '1px solid var(--line)', color: 'var(--bad)', fontSize: 15.5, fontWeight: 500, cursor: 'pointer' }}>
+            <Sym name="logout" size={19} />Sign out
+          </button>
+          <div style={{ textAlign: 'center', fontFamily: MONO, fontSize: 12, color: 'var(--mut)' }}>
+            Growwly {APP_VERSION} · <Link href="/privacy" style={{ color: 'var(--mut)' }}>Privacy policy</Link>
+          </div>
+        </>
+      )}
+    </div>
   )
 }
