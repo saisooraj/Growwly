@@ -270,6 +270,7 @@ export interface UpcomingPayment {
   date: string       // YYYY-MM-DD
   notes?: string
   linkedTransactionId?: string
+  efAmount?: number  // part of this payment taken from the Emergency Fund
   createdAt: string
 }
 
@@ -284,6 +285,7 @@ export interface UpcomingExpense {
   projectId?: string
   notes?: string
   isRecurring?: boolean
+  nextUpcomingId?: string  // next month's copy of a recurring item, once added
   createdAt: string
 }
 

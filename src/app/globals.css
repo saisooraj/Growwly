@@ -582,6 +582,71 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 .txn-noscroll { scrollbar-width: none; }
 .txn-noscroll::-webkit-scrollbar { display: none; }
 
+/* ── Upcoming redesign ──────────────────────────────────────────────────────
+   The design's own tokens, scoped to the Upcoming page and its sheets. Brand
+   pieces mix from --brand, so they follow the accent colour. */
+.up {
+  --surface: #FFFFFF; --surface-2: #EEEDE6; --border: #E3E1D8; --border-strong: #CFCCC1;
+  --text: #1A1B18; --text-2: #46473F; --text-3: #6B6C64; --text-4: #9E9E95;
+  --brand-soft: oklch(0.94 0.04 152); --brand-ink: oklch(0.4 0.1 152); --on-brand: #fff;
+  --good: oklch(0.62 0.14 150); --good-soft: oklch(0.95 0.04 150); --good-ink: oklch(0.42 0.11 150);
+  --bad:  oklch(0.6 0.19 27);   --bad-soft:  oklch(0.95 0.03 27);  --bad-ink:  oklch(0.5 0.17 27);
+  --warn: oklch(0.76 0.15 75);  --warn-soft: oklch(0.95 0.05 85);  --warn-ink: oklch(0.5 0.12 65);
+  --info: oklch(0.6 0.12 250);  --info-soft: oklch(0.95 0.03 250); --info-ink: oklch(0.46 0.12 255);
+  --hero-a: var(--brand); --hero-b: var(--brand-deep);
+  --scrim: rgba(20,22,18,.34);
+  --radius-xl: 20px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+.dark .up {
+  --surface: #15171B; --surface-2: #1D2025; --border: #262A31; --border-strong: #363B44;
+  --text: #ECECE6; --text-2: #BDBEB6; --text-3: #8E8F88; --text-4: #5F615D;
+  --brand-soft: oklch(0.3 0.05 152); --brand-ink: oklch(0.84 0.11 152);
+  --good: oklch(0.72 0.14 150); --good-soft: oklch(0.29 0.05 150); --good-ink: oklch(0.83 0.12 150);
+  --bad:  oklch(0.68 0.17 27);  --bad-soft:  oklch(0.3 0.06 27);   --bad-ink:  oklch(0.82 0.11 27);
+  --warn: oklch(0.8 0.14 80);   --warn-soft: oklch(0.31 0.05 75);  --warn-ink: oklch(0.86 0.11 82);
+  --info: oklch(0.7 0.11 250);  --info-soft: oklch(0.3 0.05 250);  --info-ink: oklch(0.83 0.08 250);
+  --scrim: rgba(0,0,0,.55);
+}
+@supports (color: oklch(from red l c h)) {
+  /* Scale chroma rather than set it, so a grey accent (black) stays grey instead of gaining a hue */
+  .up {
+    --brand-soft: oklch(from var(--brand) 0.94 calc(c * 0.3) h);
+    --brand-ink:  oklch(from var(--brand) 0.4 calc(c * 0.75) h);
+    --hero-a: oklch(from var(--brand) 0.52 calc(c * 0.9) h);
+    --hero-b: oklch(from var(--brand) 0.36 calc(c * 0.7) calc(h + 6));
+  }
+  .dark .up {
+    --brand-soft: oklch(from var(--brand) 0.3 calc(c * 0.38) h);
+    --brand-ink:  oklch(from var(--brand) 0.84 calc(c * 0.8) h);
+    --hero-a: oklch(from var(--brand) 0.42 calc(c * 0.7) h);
+    --hero-b: oklch(from var(--brand) 0.25 calc(c * 0.4) calc(h + 6));
+  }
+}
+.up button, .up input, .up textarea { font: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+.up input::placeholder, .up textarea::placeholder { color: var(--text-4); }
+.up a { color: var(--brand-ink); text-decoration: none; }
+.up a:hover { color: var(--brand); }
+.up-page { margin: -24px -28px -40px; }
+/* Same breakpoint as .main-content's phone padding */
+@media (max-width: 1024px) {
+  .up-page { margin: -16px -16px 0; }
+}
+@media (hover: hover) {
+  .up .up-hov:hover { background: var(--surface-2) !important; }
+  .up .up-hov-bad:hover { background: var(--bad-soft) !important; }
+}
+@keyframes up-in { from { transform: translateY(18px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes up-pulse { 0%, 100% { opacity: .5 } 50% { opacity: 1 } }
+.up-sheet { animation: up-in .22s ease-out; }
+.up-pop   { animation: up-in .16s ease-out; }
+.up-toast { animation: up-in .2s ease-out; }
+.up-pulse { animation: up-pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .up-sheet, .up-pop, .up-toast, .up-pulse { animation: none; } }
+
 /* ── Net worth redesign ─────────────────────────────────────────────────────
    The design's own tokens, scoped to the Net Worth page and its sheets. Brand colours stay
    the user's accent; surfaces, text and the good/bad/warn pairs follow the design. */
