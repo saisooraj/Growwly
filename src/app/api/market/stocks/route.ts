@@ -6,6 +6,13 @@ const HEADERS = {
   'Accept': 'application/json',
 }
 
+// The chart API has no marketState; the regular session's window tells us whether it is open now
+function isRegularSession(meta: { currentTradingPeriod?: { regular?: { start: number; end: number } } }) {
+  const r = meta.currentTradingPeriod?.regular
+  const now = Date.now() / 1000
+  return !!r && now >= r.start && now < r.end
+}
+
 export async function GET(req: NextRequest) {
   const symbols = req.nextUrl.searchParams.get('symbols') ?? 'HDFCBANK.NS'
   // Optional: also return each symbol's close just before this day (startPrice)
@@ -26,7 +33,9 @@ export async function GET(req: NextRequest) {
 
         const price = meta.regularMarketPrice ?? 0
         const startPrice = isIsoDay(since) ? await yahooCloseBefore(symbol, since).catch(() => null) : undefined
-        const prevClose = meta.chartPreviousClose ?? meta.previousClose ?? price
+        // The last daily close is today's (or the latest session's) price, so the one before it is
+        // the previous close. chartPreviousClose is the close before the 5-day window, not yesterday.
+        const prevClose = validCloses.length >= 2 ? validCloses[validCloses.length - 2] : meta.chartPreviousClose ?? meta.previousClose ?? price
         const change = price - prevClose
         const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0
 
@@ -39,7 +48,7 @@ export async function GET(req: NextRequest) {
           high52w: meta.fiftyTwoWeekHigh ?? null,
           low52w: meta.fiftyTwoWeekLow ?? null,
           currency: meta.currency ?? 'INR',
-          marketState: meta.marketState ?? 'CLOSED',
+          marketState: isRegularSession(meta) ? 'REGULAR' : 'CLOSED',
           sparkline: validCloses.map((c: number) => parseFloat(c.toFixed(2))),
           ...(startPrice !== undefined ? { startPrice } : {}),
         }

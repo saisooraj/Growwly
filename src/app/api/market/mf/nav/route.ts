@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { ddmmyyyyToIso, isIsoDay, valueBefore } from '@/lib/priceHistory'
 
 // ?codes=A,B → latest NAVs. Add &since=YYYY-MM-DD to also get each scheme's NAV just before
-// that day (startNav), used for this cycle's returns on the net worth page.
+// that day (startNav), used for this cycle's returns on the net worth page. Add &history=1 to also
+// get the last 90 NAVs, newest first (navs), for the market page's returns and chart. That page
+// can't ask mfapi itself: mfapi leaves out the CORS header for some schemes, so browsers block them.
 
 export async function GET(req: NextRequest) {
   const codes = req.nextUrl.searchParams.get('codes')
   if (!codes) return NextResponse.json({ nav: {} })
 
   const since = req.nextUrl.searchParams.get('since')
+  const history = req.nextUrl.searchParams.get('history') === '1'
   const schemeList = codes.split(',').map(s => s.trim()).filter(Boolean).slice(0, 20)
 
   try {
@@ -32,11 +35,12 @@ export async function GET(req: NextRequest) {
           ...(isIsoDay(since) ? {
             startNav: valueBefore<{ date: string; nav: string }>(json.data ?? [], d => ddmmyyyyToIso(d.date), d => parseFloat(d.nav), since),
           } : {}),
+          ...(history ? { navs: ((json.data ?? []) as { date: string; nav: string }[]).slice(0, 90) } : {}),
         }
       })
     )
 
-    const nav: Record<string, { schemeName: string; nav: number; change: number; changePct: number; date: string; startNav?: number | null }> = {}
+    const nav: Record<string, { schemeName: string; nav: number; change: number; changePct: number; date: string; startNav?: number | null; navs?: { date: string; nav: string }[] }> = {}
     results.forEach((r, i) => {
       if (r.status === 'fulfilled') nav[schemeList[i]] = r.value
     })

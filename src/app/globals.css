@@ -753,6 +753,124 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
 .up-pulse { animation: up-pulse 1.4s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .up-sheet, .up-pop, .up-toast, .up-pulse { animation: none; } }
 
+/* ── Market redesign ────────────────────────────────────────────────────────
+   The design's own tokens, scoped to the Market page. With the default green accent the brand
+   colours are the design's exactly; any other accent mixes them from --brand. Layout values are
+   variables per device, as in the design: phone up to 1024px, desktop above, and the right rail
+   (indices, gold, news) from 1280px. */
+.mkt {
+  --bg: #F6F5F0; --surface: #FFFFFF; --surface-2: #F2F0EA; --surface-3: #E4E1D7; --border: #E6E3DA;
+  --text: #191A17; --text-2: #45463F; --text-3: #6B6C63; --text-4: #A19F95;
+  --good: oklch(0.6 0.14 150);  --good-soft: oklch(0.95 0.045 150); --good-ink: oklch(0.45 0.12 150);
+  --bad:  oklch(0.6 0.19 27);   --bad-soft:  oklch(0.955 0.03 27);  --bad-ink:  oklch(0.5 0.18 27);
+  --warn: oklch(0.75 0.14 75);  --warn-soft: oklch(0.96 0.05 85);   --warn-ink: oklch(0.5 0.11 65);
+  --info: oklch(0.6 0.12 245);  --info-soft: oklch(0.95 0.03 245);  --info-ink: oklch(0.47 0.12 250);
+  --shadow: 0 1px 2px rgba(30,28,20,.04), 0 6px 20px -10px rgba(30,28,20,.12);
+  --brand-soft: color-mix(in oklch, var(--brand) 14%, white);
+  --brand-ink: color-mix(in oklch, var(--brand) 75%, black);
+  --hero-a: var(--brand); --hero-b: var(--brand-deep);
+  --hero-glow: color-mix(in oklch, var(--brand-2) 50%, transparent);
+  --hero-sh: 0 22px 44px -22px color-mix(in oklch, var(--brand-deep) 70%, transparent);
+  --hero-btn: var(--brand-deep);
+  --scrim: rgba(20,22,18,.42);
+
+  --deskF: none; --deskB: none; --deskI: none; --phoneF: flex; --phoneB: block; --phoneI: inline;
+  --cols: minmax(0,1fr); --gap: 14px; --h1: 26px;
+  --pad: max(18px, calc(env(safe-area-inset-top, 0px) + 6px)) 16px 0;
+  --heroPad: 20px 20px 18px; --heroNum: 36px; --statCols: repeat(2, minmax(0,1fr));
+  --rowCols: 36px minmax(0,1fr) auto 14px; --rowPad: 12px 16px; --detailPad: 4px 16px 16px; --hit: 40px;
+  --sheetPos: fixed; --sheetMaxH: 85dvh; --panelM: 0; --panelR: 24px 24px 0 0; --panelBg: var(--surface);
+  --panelPad: 10px 16px calc(26px + env(safe-area-inset-bottom, 0px)); --panelSh: 0 -16px 40px rgba(0,0,0,.22);
+  --chipOrder: 3; --chipBasis: 100%; --cx: 16px;
+  --idxCard: none; --chips: flex; --chipsM: 0 -16px; --chipsP: 2px 16px;
+
+  background: var(--bg); color: var(--text);
+  font-family: 'Geist', system-ui, sans-serif; font-size: 14px; line-height: 1.4;
+  font-feature-settings: 'tnum' 0; -webkit-font-smoothing: antialiased;
+}
+.dark .mkt {
+  --bg: #0D0E11; --surface: #15171B; --surface-2: #1C1F24; --surface-3: #2A2E35; --border: #24272D;
+  --text: #ECECE7; --text-2: #BDBEB7; --text-3: #8E9089; --text-4: #5F615C;
+  --good: oklch(0.72 0.15 150); --good-soft: oklch(0.27 0.055 150); --good-ink: oklch(0.8 0.13 150);
+  --bad:  oklch(0.68 0.17 25);  --bad-soft:  oklch(0.28 0.07 25);   --bad-ink:  oklch(0.79 0.13 25);
+  --warn: oklch(0.78 0.14 80);  --warn-soft: oklch(0.29 0.06 80);   --warn-ink: oklch(0.85 0.12 85);
+  --info: oklch(0.7 0.12 245);  --info-soft: oklch(0.28 0.05 245);  --info-ink: oklch(0.82 0.09 245);
+  --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 10px 28px -14px rgba(0,0,0,.7);
+  --brand-soft: color-mix(in oklch, var(--brand) 25%, var(--surface));
+  --brand-ink: color-mix(in oklch, var(--brand) 55%, white);
+  --hero-sh: 0 22px 50px -22px color-mix(in oklch, var(--brand-deep) 90%, transparent);
+  --scrim: rgba(0,0,0,.6);
+}
+@supports (color: oklch(from red l c h)) {
+  /* Scale chroma rather than set it, so a grey accent (black) stays grey instead of gaining a hue */
+  .mkt {
+    --brand-soft: oklch(from var(--brand) 0.94 calc(c * 0.3) h);
+    --brand-ink:  oklch(from var(--brand) 0.42 calc(c * 0.85) h);
+    --hero-a:     oklch(from var(--brand) 0.53 calc(c * 0.96) h);
+    --hero-b:     oklch(from var(--brand) 0.40 calc(c * 0.77) calc(h + 10));
+    --hero-glow:  oklch(from var(--brand) 0.88 c calc(h - 17) / .5);
+    --hero-sh:    0 22px 44px -22px oklch(from var(--brand) 0.42 calc(c * 0.92) h / .7);
+    --hero-btn:   oklch(from var(--brand) 0.38 calc(c * 0.77) h);
+  }
+  .dark .mkt {
+    --brand-soft: oklch(from var(--brand) 0.29 calc(c * 0.46) h);
+    --brand-ink:  oklch(from var(--brand) 0.82 calc(c * 0.92) h);
+    --hero-a:     oklch(from var(--brand) 0.46 calc(c * 0.85) h);
+    --hero-b:     oklch(from var(--brand) 0.31 calc(c * 0.58) calc(h + 10));
+    --hero-glow:  oklch(from var(--brand) 0.78 calc(c * 1.08) calc(h - 12) / .32);
+    --hero-sh:    0 22px 50px -22px oklch(from var(--brand) 0.3 calc(c * 0.77) h / .9);
+  }
+}
+/* The default green accent: the design's colours exactly */
+:root:not([data-accent]) .mkt {
+  --brand: oklch(0.55 0.13 152); --brand-soft: oklch(0.94 0.04 152); --brand-ink: oklch(0.42 0.11 152);
+  --hero-a: oklch(0.53 0.125 152); --hero-b: oklch(0.40 0.10 162); --hero-glow: oklch(0.88 0.13 135 / .5);
+  --hero-sh: 0 22px 44px -22px oklch(0.42 0.12 152 / .7); --hero-btn: oklch(0.38 0.1 152);
+}
+:root.dark:not([data-accent]) .mkt {
+  --brand: oklch(0.68 0.14 152); --brand-soft: oklch(0.29 0.06 152); --brand-ink: oklch(0.82 0.12 152);
+  --hero-a: oklch(0.46 0.11 152); --hero-b: oklch(0.31 0.075 162); --hero-glow: oklch(0.78 0.14 140 / .32);
+  --hero-sh: 0 22px 50px -22px oklch(0.3 0.1 152 / .9);
+}
+@media (min-width: 1025px) {
+  .mkt {
+    --deskF: flex; --deskB: block; --deskI: inline; --phoneF: none; --phoneB: none; --phoneI: none;
+    --gap: 20px; --h1: 30px; --pad: 28px 32px 36px;
+    --heroPad: 26px 28px 24px; --heroNum: 46px; --statCols: repeat(3, minmax(0,1fr));
+    --rowCols: 36px minmax(0,1fr) 76px 116px 112px 16px; --rowPad: 12px 20px; --detailPad: 6px 20px 18px 68px; --hit: 32px;
+    --sheetPos: relative; --sheetMaxH: none; --panelM: 0 20px 14px; --panelR: 14px; --panelBg: var(--surface-2);
+    --panelPad: 12px; --panelSh: none;
+    --chipOrder: 0; --chipBasis: auto; --cx: 20px;
+    --chipsM: 0; --chipsP: 2px 0;
+  }
+}
+@media (min-width: 1280px) {
+  .mkt { --cols: minmax(0,1fr) 316px; --idxCard: block; --chips: none; }
+}
+.mkt button { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+.mkt input::placeholder { color: var(--text-4); }
+.mkt a { color: var(--brand-ink); }
+.mkt a:hover { color: var(--brand); }
+.mkt button:focus-visible, .mkt [role="button"]:focus-visible, .mkt a:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+@media (hover: hover) {
+  .mkt .mkt-hov:hover { background: var(--surface-2) !important; }
+  .mkt .mkt-res:hover { background: var(--surface-3) !important; }
+}
+.mkt-page { margin: -24px -28px -40px; }
+/* Same breakpoint as .main-content's phone padding */
+@media (max-width: 1024px) {
+  .mkt-page { margin: -16px -16px 0; }
+}
+/* The status pill sits beside the title on desktop and on its own line on phones */
+.mkt-status { order: var(--chipOrder); flex-basis: var(--chipBasis); }
+.mkt-chips { scrollbar-width: none; }
+.mkt-chips::-webkit-scrollbar { display: none; }
+@keyframes mkt-sheet { from { transform: translateY(100%) } to { transform: none } }
+@keyframes mkt-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .55 } }
+@media (max-width: 1024px) { .mkt-sheet { animation: mkt-sheet .32s cubic-bezier(0.32,0.72,0,1); } }
+.mkt-skel { animation: mkt-pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .mkt-sheet, .mkt-skel { animation: none; } }
+
 /* ── Net worth redesign ─────────────────────────────────────────────────────
    The design's own tokens, scoped to the Net Worth page and its sheets. Brand colours stay
    the user's accent; surfaces, text and the good/bad/warn pairs follow the design. */
