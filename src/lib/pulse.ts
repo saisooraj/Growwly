@@ -50,6 +50,36 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`
 }
 
+/** How far from createdAt to targetDate today is, 0 to 1. Null without a date, or when the date isn't after creation. */
+export function goalPace(g: Pick<SavingsGoal, 'targetDate' | 'createdAt'>, now: Date): number | null {
+  if (!g.targetDate) return null
+  const span = differenceInCalendarDays(parseISO(g.targetDate), parseISO(g.createdAt))
+  if (span <= 0) return null
+  return Math.min(Math.max(differenceInCalendarDays(now, parseISO(g.createdAt)) / span, 0), 1)
+}
+
+// A savings goal with a date is on track while it keeps up with the time passed (10% slack);
+// without a date, once it has started. A reached goal always is.
+export function isGoalOnTrack(g: Pick<SavingsGoal, 'targetAmount' | 'currentAmount' | 'targetDate' | 'createdAt'>, now: Date): boolean {
+  if (g.currentAmount >= g.targetAmount) return true
+  const pace = goalPace(g, now)
+  return pace !== null ? g.currentAmount >= g.targetAmount * pace * 0.9 : g.currentAmount > 0
+}
+
+/** The health score's Goals part: savings goals with a target, plus active projects, which are on track while within budget. */
+export function goalsOnTrack(savingsGoals: SavingsGoal[], projects: Project[], now: Date): { total: number; onTrack: number; note: string } {
+  const checks = [
+    ...savingsGoals.filter(g => g.targetAmount > 0).map(g => isGoalOnTrack(g, now)),
+    ...projects.filter(p => p.status === 'active' && p.totalBudget > 0).map(p => p.paid <= p.totalBudget),
+  ]
+  const total = checks.length
+  const onTrack = checks.filter(Boolean).length
+  const note = total === 0 ? 'No goals to track'
+    : onTrack === total ? `All ${plural(total, 'goal')} on track`
+    : `${total - onTrack} of ${plural(total, 'goal')} behind`
+  return { total, onTrack, note }
+}
+
 function computeHealthScore(
   snapshot: PulseSnapshot,
   plan: BudgetPlan,
@@ -134,33 +164,10 @@ function computeHealthScore(
     notes.savingsMomentum = 'No savings plan yet'
   }
 
-  // 4. Goals (15) — share on track. A savings goal with a date is on track while it
-  // keeps up with the time passed (10% slack); without a date, once it has started.
-  // A project is on track while it stays within its budget.
-  const goalChecks = [
-    ...savingsGoals.filter(g => g.targetAmount > 0).map(g => {
-      if (g.currentAmount >= g.targetAmount) return true
-      if (g.targetDate) {
-        const span = differenceInCalendarDays(parseISO(g.targetDate), parseISO(g.createdAt))
-        if (span > 0) {
-          const pace = Math.min(Math.max(differenceInCalendarDays(now, parseISO(g.createdAt)) / span, 0), 1)
-          return g.currentAmount >= g.targetAmount * pace * 0.9
-        }
-      }
-      return g.currentAmount > 0
-    }),
-    ...projects.filter(p => p.status === 'active' && p.totalBudget > 0).map(p => p.paid <= p.totalBudget),
-  ]
-  if (goalChecks.length === 0) {
-    breakdown.goalsProgress = 15
-    notes.goalsProgress = 'No goals to track'
-  } else {
-    const onTrack = goalChecks.filter(Boolean).length
-    breakdown.goalsProgress = Math.round(15 * onTrack / goalChecks.length)
-    notes.goalsProgress = onTrack === goalChecks.length
-      ? `All ${plural(goalChecks.length, 'goal')} on track`
-      : `${goalChecks.length - onTrack} of ${plural(goalChecks.length, 'goal')} behind`
-  }
+  // 4. Goals (15) — share on track (see goalsOnTrack)
+  const goalChecks = goalsOnTrack(savingsGoals, projects, now)
+  breakdown.goalsProgress = goalChecks.total === 0 ? 15 : Math.round(15 * goalChecks.onTrack / goalChecks.total)
+  notes.goalsProgress = goalChecks.note
 
   // 5. Debt (15) — only money you owe; money you lent is owed to you
   const owed = borrowings.filter(b => b.type === 'borrowed' && b.status !== 'repaid' && b.amount - b.repaidAmount > 0)

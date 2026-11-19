@@ -13,6 +13,7 @@ import {
   limit as fsLimit,
   startAfter,
   writeBatch,
+  deleteField,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import { db } from './firebase'
@@ -175,11 +176,17 @@ export async function addProject(
   return ref.id
 }
 
+/** Partial update where null clears the field (e.g. a removed end date) instead of keeping the old value */
+type Clearable<T> = { [K in keyof T]?: T[K] | null }
+function withCleared<T extends object>(data: Clearable<T>) {
+  return Object.fromEntries(Object.entries(data).map(([k, v]) => [k, v === null ? deleteField() : v]))
+}
+
 export async function updateProject(
   id: string,
-  data: Partial<Project>
+  data: Clearable<Project>
 ): Promise<void> {
-  await updateDoc(doc(db, 'projects', id), data)
+  await updateDoc(doc(db, 'projects', id), withCleared(data))
 }
 
 export async function deleteProject(id: string): Promise<void> {
@@ -389,9 +396,9 @@ export async function addSavingsGoal(
 
 export async function updateSavingsGoal(
   id: string,
-  data: Partial<SavingsGoal>
+  data: Clearable<SavingsGoal>
 ): Promise<void> {
-  await updateDoc(doc(db, 'savingsGoals', id), data)
+  await updateDoc(doc(db, 'savingsGoals', id), withCleared(data))
 }
 
 export async function deleteSavingsGoal(id: string): Promise<void> {

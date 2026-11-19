@@ -249,7 +249,8 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
   // Net Worth draws its own too: the Wealth title, price refresh and privacy switch.
   // Upcoming draws its own sticky header with tabs, search and the category filter.
   // Settings draws its own: a sticky header on desktop and a large title on phones.
-  if (pathname === '/transactions' || pathname === '/networth' || pathname === '/upcoming' || pathname === '/settings') return null
+  // Goals draws its own sticky header with the privacy switch, New and the All / Goals / Projects filter.
+  if (pathname === '/transactions' || pathname === '/networth' || pathname === '/upcoming' || pathname === '/settings' || pathname === '/goals') return null
 
   return (
     <header

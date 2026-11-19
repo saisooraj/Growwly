@@ -632,6 +632,62 @@ body[data-density="comfy"]   { --pad: 28px; --row-gap: 22px; }
   .set-page { margin: -16px -16px 0; }
 }
 
+/* ── Goals redesign ─────────────────────────────────────────────────────────
+   The design's neutrals and status colours, scoped to the Goals page and its sheets.
+   Brand comes from the app's accent; dark black swaps in a dark grey so white text on
+   the hero and buttons stays readable. */
+.gl {
+  --paper: #F4F0E8; --surface: #FFFDF8; --surface2: #F1ECE2; --line: rgba(40,36,28,.09);
+  --ink: #1E221F; --ink2: #4F554F; --ink3: #767C75;
+  --shadow: 0 1px 2px rgba(48,40,24,.05), 0 8px 24px rgba(48,40,24,.07);
+  --good: #2E8A57; --good-soft: #E2F1E7; --good-ink: #1D6640;
+  --warn: #C7861A; --warn-soft: #FAEFD7; --warn-ink: #875607;
+  --bad:  #CF4436; --bad-soft:  #FAE3DF; --bad-ink:  #9B2A1F;
+  --info: #2F6BCB; --info-soft: #E2EBFA; --info-ink: #1E4C96;
+  --scrim: rgba(30,26,20,.40);
+  --brand2: var(--brand-2);
+  --hero-shadow: 0 22px 44px -18px var(--brand);
+  color: var(--ink);
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-size: 14px; line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+.dark .gl {
+  --paper: #111311; --surface: #1A1D1A; --surface2: #252925; --line: rgba(255,255,255,.08);
+  --ink: #ECEEE8; --ink2: #B6BCB4; --ink3: #8A9189;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px rgba(0,0,0,.35);
+  --good: #4CB87A; --good-soft: #1C3326; --good-ink: #8FDCAE;
+  --warn: #E0A23C; --warn-soft: #3A2E16; --warn-ink: #F2C676;
+  --bad:  #E5604F; --bad-soft:  #3D1E1A; --bad-ink:  #F6A79D;
+  --info: #5B92E8; --info-soft: #1A2840; --info-ink: #A7C5F5;
+  --scrim: rgba(0,0,0,.6);
+}
+.dark[data-accent="black"] .gl {
+  --brand: #3E3E3C; --brand-2: #6E6D69; --brand-deep: #1F1F1E; --brand-soft: #2C2C2B; --brand-ink: #DAD8D2;
+}
+.gl button, .gl input, .gl textarea { font-family: inherit; -webkit-tap-highlight-color: transparent; }
+.gl button:disabled { cursor: default; }
+.gl input::placeholder, .gl textarea::placeholder { color: #8a8f88; }
+.gl-input:focus, .gl-field:focus-within { box-shadow: 0 0 0 2px var(--brand); }
+.gl input[type="date"] { color-scheme: light; }
+.dark .gl input[type="date"] { color-scheme: dark; }
+.gl-page { margin: -24px -28px -40px; background: var(--paper); min-height: 100dvh; }
+/* Same breakpoint as .main-content's phone padding */
+@media (max-width: 1024px) {
+  .gl-page { margin: -16px -16px 0; }
+}
+@media (hover: hover) {
+  .gl .gl-hov:hover { background: var(--surface2) !important; }
+}
+.gl-noselect { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.gl-sheet { animation: gl-sheet .32s var(--ease-drawer) both; }
+.gl-dialog { animation: gl-dialog .2s var(--ease-out) both; }
+.gl-scrim { animation: gl-fade .2s ease both; }
+@keyframes gl-sheet  { from { transform: translateY(100%) } to { transform: none } }
+@keyframes gl-dialog { from { opacity: 0; transform: translateY(8px) scale(.98) } to { opacity: 1; transform: none } }
+@keyframes gl-fade   { from { opacity: 0 } to { opacity: 1 } }
+@media (prefers-reduced-motion: reduce) { .gl-sheet, .gl-dialog, .gl-scrim { animation: none; } }
+
 /* ── Upcoming redesign ──────────────────────────────────────────────────────
    The design's own tokens, scoped to the Upcoming page and its sheets. Brand
    pieces mix from --brand, so they follow the accent colour. */
