@@ -1863,3 +1863,125 @@ button, a, [role="button"] {
 @keyframes gw-spin  { to { transform: rotate(360deg); } }
 @keyframes gw-in    { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes gw-pulse { 50% { opacity: .4; } }
+
+/* ── Borrowings redesign ────────────────────────────────────────────────────
+   The design's layout in the app's own look: Plus Jakarta Sans with Geist Mono figures,
+   paper and white surfaces from the app, borderless shadowed cards, and the user's accent
+   for the hero, buttons and selection (brand-ink mixes from --brand, as on the Overview). */
+.bw {
+  --paper: var(--bg); --surface: #FFFFFF; --surface-2: #F2F1EB; --sunk: #EFEDE6;
+  --line: rgba(28,27,24,.09); --line-2: rgba(28,27,24,.16);
+  --ink: #1C1B18; --ink-2: #68655C; --ink-3: #8A877E; --on-brand: #fff;
+  --brand-ink: color-mix(in oklch, var(--brand) 68%, black);
+  --hero: linear-gradient(155deg, var(--brand-deep), var(--brand) 58%, var(--brand-2));
+  --hero-shadow: 0 22px 44px -18px var(--brand);
+  --good: oklch(0.62 0.15 158); --good-soft: oklch(0.95 0.035 158); --good-ink: oklch(0.42 0.11 158);
+  --warn: oklch(0.74 0.14 75);  --warn-soft: oklch(0.95 0.05 80);   --warn-ink: oklch(0.46 0.1 65);
+  --bad:  oklch(0.6 0.18 25);   --bad-soft:  oklch(0.95 0.035 25);  --bad-ink:  oklch(0.5 0.17 25); --on-bad: #fff;
+  --info: oklch(0.6 0.13 245);  --info-soft: oklch(0.95 0.035 245); --info-ink: oklch(0.46 0.12 245);
+  /* Status tints that read on the accent hero */
+  --on-hero-warn: oklch(0.9 0.12 85); --on-hero-bad: oklch(0.86 0.1 25);
+  --scrim: rgba(20,21,26,.38);
+  --shadow: 0 1px 2px rgba(28,27,24,0.05), 0 12px 32px -14px rgba(28,27,24,0.14);
+  --sel-shadow: 0 1px 2px rgba(28,27,24,.08), 0 2px 8px -2px rgba(28,27,24,.12);
+  --sheet-shadow: 0 -10px 50px rgba(30,28,20,.18); --skel: #ECE9E1;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.dark .bw {
+  --surface: #16181D; --surface-2: #1E2026; --sunk: #21232A;
+  --line: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.15);
+  --ink: #ECEBE6; --ink-2: #A3A198; --ink-3: #7E7C75;
+  --brand-ink: color-mix(in oklch, var(--brand) 50%, white);
+  --brand-soft: color-mix(in oklch, var(--brand) 26%, var(--surface));
+  --hero-shadow: 0 22px 44px -22px color-mix(in oklch, var(--brand) 50%, transparent);
+  --good-soft: oklch(0.3 0.06 158);  --good-ink: oklch(0.82 0.12 158);
+  --warn-soft: oklch(0.28 0.05 70);  --warn-ink: oklch(0.86 0.11 80);
+  --bad-soft:  oklch(0.3 0.06 25);   --bad-ink:  oklch(0.8 0.12 25); --on-bad: #fff;
+  --info-soft: oklch(0.3 0.06 245);  --info-ink: oklch(0.82 0.09 245);
+  --scrim: rgba(0,0,0,.6);
+  --shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 12px 32px -14px rgba(0,0,0,0.7);
+  --sel-shadow: 0 1px 2px rgba(0,0,0,.4);
+  --sheet-shadow: 0 -10px 60px rgba(0,0,0,.6); --skel: #21232A;
+}
+@supports (color: oklch(from red l c h)) {
+  /* Scale chroma rather than set it, so a grey accent (black) stays grey instead of gaining a hue */
+  .bw       { --brand-ink: oklch(from var(--brand) 0.42 calc(c * 0.73) h); }
+  .dark .bw { --brand-ink: oklch(from var(--brand) 0.82 calc(c * 0.8) h); }
+}
+/* Dark black accent: a dark grey so white text on the hero and buttons stays readable (as on Goals) */
+.dark[data-accent="black"] .bw {
+  --brand: #3E3E3C; --brand-2: #6E6D69; --brand-deep: #1F1F1E; --brand-soft: #2C2C2B; --brand-ink: #DAD8D2;
+}
+
+/* Phone: bottom sheets, 44px targets; the list clears the nav pill, the Add record button and the AI button */
+.bw[data-device=phone] {
+  --hit: 44px; --field-h: 48px; --ov-align: flex-end; --sh-r: 24px 24px 0 0; --sh-max: 94%; --grab: flex; --pad: 16px;
+  --sum-cols: minmax(0,1fr) minmax(0,1fr); --net-span: 1 / -1; --att-flex: 0 0 248px; --att-wrap: nowrap;
+  --ld-cols: minmax(0,1fr); --btn-flex: 1 1 0; --toast-b: 164px; --list-pb: 64px; --sab: env(safe-area-inset-bottom, 0px);
+}
+.bw[data-device=desktop] {
+  --hit: 38px; --field-h: 46px; --ov-align: center; --sh-r: 24px; --sh-max: 88%; --grab: none; --pad: 32px;
+  --sum-cols: minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr); --net-span: auto; --att-flex: 1 1 220px; --att-wrap: wrap;
+  --ld-cols: minmax(0,400px) minmax(0,1fr); --btn-flex: 0 0 auto; --toast-b: 28px; --list-pb: 40px; --sab: 0px;
+}
+.bw-page { margin: -24px -28px -40px; min-height: 100%; background: var(--paper); }
+/* Same breakpoint as .main-content's phone padding */
+@media (max-width: 1024px) {
+  .bw-page { margin: -16px -16px 0; }
+}
+/* Sits beside the AI button, above the nav pill */
+.bw-fab { right: 74px; bottom: max(98px, calc(env(safe-area-inset-bottom, 0px) + 78px)); }
+/* Hero: a soft glow in the top-right corner, as on the Overview and Goals heroes */
+.bw-hero { position: relative; overflow: hidden; }
+.bw-hero::before {
+  content: ''; position: absolute; right: -90px; top: -140px; width: 340px; height: 340px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,.28), rgba(255,255,255,0) 68%); pointer-events: none;
+}
+.bw-hero > * { position: relative; }
+.bw-num { font-family: 'Geist Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+.bw button { font-family: inherit; color: inherit; -webkit-tap-highlight-color: transparent; }
+.bw input { font-family: inherit; color: var(--ink); }
+.bw input::placeholder { color: var(--ink-3); }
+.bw input[type="date"] { color-scheme: light; font-family: 'Geist Mono', ui-monospace, monospace; }
+.dark .bw input[type="date"] { color-scheme: dark; }
+.bw .bw-focus:focus, .bw .bw-field:focus-within { box-shadow: 0 0 0 2px var(--brand); }
+.bw [role="button"]:focus-visible, .bw button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+@media (hover: hover) {
+  .bw .bw-hov { transition: transform .14s var(--ease-out), box-shadow .18s var(--ease-out); }
+  .bw .bw-hov:hover { box-shadow: 0 1px 2px rgba(28,27,24,.06), 0 16px 36px -14px rgba(28,27,24,.2); }
+  .bw .bw-row:hover { background: var(--surface-2); }
+}
+.bw .bw-hov:active { transform: scale(0.985); }
+.bw [data-tone=good]    { --t: var(--good);  --ts: var(--good-soft);  --ti: var(--good-ink); }
+.bw [data-tone=bad]     { --t: var(--bad);   --ts: var(--bad-soft);   --ti: var(--bad-ink); }
+.bw [data-tone=warn]    { --t: var(--warn);  --ts: var(--warn-soft);  --ti: var(--warn-ink); }
+.bw [data-tone=info]    { --t: var(--info);  --ts: var(--info-soft);  --ti: var(--info-ink); }
+.bw [data-tone=brand]   { --t: var(--brand); --ts: var(--brand-soft); --ti: var(--brand-ink); }
+.bw [data-tone=neutral] { --t: var(--ink-3); --ts: var(--sunk);       --ti: var(--ink-2); }
+.bw [data-dim=true] { opacity: .62; }
+.bw [data-seg=true] { background: var(--surface) !important; color: var(--ink) !important; box-shadow: var(--sel-shadow); }
+.bw [data-pick=true] { background: var(--brand-soft) !important; box-shadow: inset 0 0 0 1.5px var(--brand) !important; }
+.bw [data-pick=true] * { color: var(--brand-ink) !important; }
+.bw [data-sw=true] { background: var(--brand) !important; }
+.bw [data-sw=true] > span { transform: translateX(12px); }
+.bw [data-sel=true] { box-shadow: 0 0 0 2px var(--brand), var(--shadow) !important; }
+.bw [data-err=true] { box-shadow: inset 0 0 0 1.5px var(--bad), 0 0 0 3px var(--bad-soft) !important; }
+.bw [data-off=true] { opacity: .42; pointer-events: none; }
+.bw-noscroll { scrollbar-width: none; }
+.bw-noscroll::-webkit-scrollbar { display: none; }
+@keyframes bw-pulse { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+@keyframes bw-up    { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes bw-pop   { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes bw-fade  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bw-toast { from { transform: translate(-50%, 32px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+.bw[data-device=phone] .bw-sheet { animation: bw-up .32s cubic-bezier(.32,.72,0,1); }
+.bw[data-device=desktop] .bw-sheet { animation: bw-pop .22s cubic-bezier(.23,1,.32,1); }
+@media (prefers-reduced-motion: reduce) {
+  .bw .bw-sheet, .bw [style*="bw-fade"], .bw [style*="bw-toast"], .bw [style*="bw-pulse"] { animation: none !important; }
+  .bw .bw-hov { transition: none; }
+}

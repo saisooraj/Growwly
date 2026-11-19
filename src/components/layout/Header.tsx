@@ -251,7 +251,8 @@ export default function Header({ title, scrolled = false, onAdd, onScan }: { tit
   // Settings draws its own: a sticky header on desktop and a large title on phones.
   // Market draws its own: the market status and the privacy switch.
   // Goals draws its own sticky header with the privacy switch, New and the All / Goals / Projects filter.
-  if (pathname === '/transactions' || pathname === '/networth' || pathname === '/upcoming' || pathname === '/settings' || pathname === '/market' || pathname === '/goals') return null
+  // Borrowings draws its own: search, the privacy switch, People and Add record.
+  if (pathname === '/transactions' || pathname === '/networth' || pathname === '/upcoming' || pathname === '/settings' || pathname === '/market' || pathname === '/goals' || pathname === '/borrowings') return null
 
   return (
     <header
