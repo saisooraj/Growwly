@@ -10,7 +10,7 @@ import type {
   PulseGoal, PulseBorrowingAlert, MonthlySummary,
 } from '@/types'
 import { buildBudgetPlan, type BudgetPlan } from './budgetPlan'
-import { buildMonthlySummary, computeCarryForward, getCycleMonth, getTransactionsForMonth, getLast6Months, EMERGENCY_FUND_VEHICLE, formatCurrencyFull } from './utils'
+import { buildMonthlySummary, computeCarryForward, getCycleMonth, getTransactionsForMonth, getLast6Months, EMERGENCY_FUND_VEHICLE, formatCurrencyFull, countsTowardProject } from './utils'
 
 export interface PulseSnapshot {
   transactions: Transaction[]
@@ -218,7 +218,7 @@ function computeAllocations(
          t.savingsVehicle === 'SIP / Investments'
   )
   const projectsFundedThisMonth = new Set(
-    monthTxs.filter(t => t.projectId).map(t => t.projectId!)
+    monthTxs.filter(t => t.projectId && countsTowardProject(t)).map(t => t.projectId!)
   )
 
   const allocations: PulseAllocation[] = []

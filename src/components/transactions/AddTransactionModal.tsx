@@ -767,6 +767,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   const isInc = activeTab === 'income'
   const isSav = activeTab === 'savings'
   const isTr  = activeTab === 'transfer'
+  const projectAllowed = isExp || (isSav && savingsKind !== 'savings_withdrawal')
   const amt   = Number(amount) || 0
   const canSplit = txType === 'expense' && !editTx?.splitApplied && !isRefundEdit
   const splitOn  = canSplit && splitEnabled && isExp
@@ -886,7 +887,8 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           ? { goldGrams: parseFloat(goldGrams), goldKarat, goldPricePerGram: parseFloat(goldPricePerGram) || 0 }
           : {}),
         ...(isFuel ? fuelPayload(fuelFinal) : {}),
-        ...(projectId && (txType === 'expense' || activeTab === 'savings') ? { projectId } : {}),
+        // A withdrawal never counts toward a project, so it doesn't carry one
+        ...(projectId && (txType === 'expense' || (activeTab === 'savings' && savingsKind !== 'savings_withdrawal')) ? { projectId } : {}),
         ...(txType === 'transfer' && loanPerson.trim() ? { loanPerson: loanPerson.trim() } : {}),
         ...(txType === 'expense' && settledPerson && finalSettleApplied > 0
           ? {
@@ -1392,7 +1394,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
   if (isExp && canSplit) tray.push({ k: 'split', label: 'Split', icon: 'call_split', summary: splitActive ? `${participants.length + 1} people` : null })
   if (!isTr && !isRefundEdit) tray.push({ k: 'tags', label: 'Tags', icon: 'sell', summary: tags.length ? String(tags.length) : null })
   if (isExp && (settleablePeople.length > 0 || settledPerson)) tray.push({ k: 'settle', label: 'Settle a debt', icon: 'handshake', summary: settledPerson ? settledPerson.split(' ')[0] : null })
-  if ((isExp || isSav) && projects.length > 0) tray.push({ k: 'project', label: 'Project', icon: 'folder', summary: project ? (cardOpen('project') || !autoLinked ? project.name : 'Auto') : null })
+  if (projectAllowed && projects.length > 0) tray.push({ k: 'project', label: 'Project', icon: 'folder', summary: project ? (cardOpen('project') || !autoLinked ? project.name : 'Auto') : null })
   if (isExp || isInc) tray.push({ k: 'repeat', label: 'Repeat monthly', icon: 'event_repeat', summary: null })
   if (editTx?.type === 'expense' && isExp) tray.push({ k: 'refunds', label: 'Refunds', icon: 'undo', summary: totalRefunded ? R(totalRefunded) : null })
 
@@ -2222,7 +2224,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                               </SheetCard>
                             )
                           }
-                          if (k === 'project' && (isExp || isSav) && projects.length > 0) {
+                          if (k === 'project' && projectAllowed && projects.length > 0) {
                             return (
                               <SheetCard key={k} card="project" icon="folder" title="Link to project" onClose={() => toggleCard('project')}
                                 badge={autoLinked && <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: 'var(--info-soft)', color: 'var(--info-ink)', whiteSpace: 'nowrap', flex: 'none' }}>Auto-linked</span>}>

@@ -455,10 +455,18 @@ export function computeLongestMoneyStreak(transactions: Transaction[], noSpendDa
   return longest
 }
 
+/** Whether a transaction moves money toward its project: expenses, refunds against them, and
+ *  savings contributions. A withdrawal is cash coming back, so it never counts — whatever it's
+ *  spent on is its own expense. */
+export function countsTowardProject(t: Pick<Transaction, 'type' | 'transferKind'>): boolean {
+  return t.type === 'expense' || t.type === 'refund' ||
+    (isSavingsTransfer(t) && t.transferKind !== 'savings_withdrawal' && t.transferKind !== 'ef_withdrawal')
+}
+
 /** Sum of all expense + savings_contribution amounts for a given project, net of refunds. */
 export function computeProjectPaid(transactions: Transaction[], projectId: string): number {
   return transactions
-    .filter(t => t.projectId === projectId && (t.type === 'expense' || t.type === 'refund' || isSavingsTransfer(t)))
+    .filter(t => t.projectId === projectId && countsTowardProject(t))
     .reduce((s, t) => s + (t.type === 'refund' ? -t.amount : t.amount), 0)
 }
 

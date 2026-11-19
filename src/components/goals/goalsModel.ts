@@ -7,7 +7,7 @@ import {
 } from '@tabler/icons-react'
 import { GOAL_ICONS, type TablerIconComponent } from '@/lib/categoryIcons'
 import { goalPace, isGoalOnTrack } from '@/lib/pulse'
-import { isSavingsTransfer } from '@/lib/utils'
+import { isSavingsTransfer, countsTowardProject } from '@/lib/utils'
 import type { Project, SavingsGoal, Transaction } from '@/types'
 
 export type TablerIcon = TablerIconComponent
@@ -144,7 +144,7 @@ export function projectView(project: Project, transactions: Transaction[]): Proj
   const budget = project.totalBudget
   const pct = (n: number) => (budget > 0 ? (n / budget) * 100 : 0)
   const own = transactions
-    .filter(t => t.projectId === project.id && (t.type === 'expense' || t.type === 'refund' || isSavingsTransfer(t)))
+    .filter(t => t.projectId === project.id && countsTowardProject(t))
     .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt))
   let cum = 0
   const rows = own.map(tx => {
