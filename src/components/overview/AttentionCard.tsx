@@ -196,7 +196,7 @@ function useRuleItems(M: (s: string) => string): Item[] {
   }, [transactions, budgets, month, emergencyFund, settings, borrowings, upcoming, payments, actions, M]) // actions.tick re-reads skip/seen flags
 }
 
-function Row({ a, first }: { a: Item; first: boolean }) {
+function Row({ a, first, onAct }: { a: Item; first: boolean; onAct?: () => void }) {
   const t = tone(a.sev === 'good' ? 'good' : (a.sev as Tone))
   const chip: React.CSSProperties = { fontSize: 12.5, fontWeight: 800, padding: '7px 11px', borderRadius: 999, whiteSpace: 'nowrap', ...t }
   return (
@@ -207,7 +207,7 @@ function Row({ a, first }: { a: Item; first: boolean }) {
         <div style={{ fontSize: 12.5, color: 'var(--ink2)', lineHeight: 1.35 }}>{a.detail}</div>
       </div>
       {a.cta && (a.action
-        ? <button onClick={a.action} className="ov-btn" style={chip}>{a.cta}</button>
+        ? <button onClick={() => { onAct?.(); a.action?.() }} className="ov-btn" style={chip}>{a.cta}</button>
         : a.href ? <Link href={a.href} className="ov-btn" style={chip}>{a.cta}</Link> : null)}
     </div>
   )
@@ -229,7 +229,8 @@ function AllSheet({ items, onClose }: { items: Item[]; onClose: () => void }) {
           <div className="ov-title" style={{ flex: 1 }}>Needs attention</div>
           <button onClick={onClose} aria-label="Close" className="ov-btn" style={{ width: 30, height: 30, borderRadius: 9, background: 'var(--surface2)', color: 'var(--ink2)', display: 'grid', placeItems: 'center' }}><X size={15} /></button>
         </div>
-        {items.map((a, i) => <Row key={a.id} a={a} first={i === 0} />)}
+        {/* Close first: this sheet sits above the popups its buttons open */}
+        {items.map((a, i) => <Row key={a.id} a={a} first={i === 0} onAct={onClose} />)}
       </div>
     </div>,
     document.body,
