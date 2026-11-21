@@ -45,6 +45,7 @@ export const CATEGORY_ICON_MAP: Record<string, TablerIconComponent> = {
   'Personal Care':        IconMassage,
   'Education':            IconBook,
   'Travel':               IconPlane,
+  'Trips & Holidays':     IconBeach,
   'Fitness':              IconBarbell,
   'Home & Maintenance':   IconHome,
   'Insurance':            IconShield,

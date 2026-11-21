@@ -16,6 +16,7 @@ export const CATEGORY_SHEET_META: Record<string, SheetMeta> = {
   'Personal Care':      { icon: 'spa', h: 350 },
   'Education':          { icon: 'school', h: 230 },
   'Travel':             { icon: 'flight', h: 210 },
+  'Trips & Holidays':   { icon: 'beach_access', h: 105 },
   'Fitness':            { icon: 'fitness_center', h: 150 },
   'Home & Maintenance': { icon: 'home_repair_service', h: 50 },
   'Insurance':          { icon: 'shield', h: 260 },
@@ -47,7 +48,7 @@ export const DEFAULT_TOP_EXPENSE = ['Food & Dining', 'Groceries', 'Transport', '
 export const EXPENSE_GROUPS: [string, string[]][] = [
   ['Everyday',      ['Food & Dining', 'Groceries', 'Transport', 'Fuel', 'Shopping', 'Utilities', 'Subscriptions', 'Personal Care']],
   ['Home & family', ['Living Expenses', 'Rent / Deposit', 'Home & Maintenance', 'Family', 'Family Events', 'Construction']],
-  ['Lifestyle',     ['Entertainment', 'Travel', 'Fitness', 'Treat', 'Food with Her', 'Relationship', 'Gifts & Donations']],
+  ['Lifestyle',     ['Entertainment', 'Travel', 'Trips & Holidays', 'Fitness', 'Treat', 'Food with Her', 'Relationship', 'Gifts & Donations']],
   ['Money & work',  ['Healthcare', 'Insurance', 'Education', 'Office Expense', 'Gold', 'Covered for Others', 'Other']],
 ]
 
