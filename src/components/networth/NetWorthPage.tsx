@@ -28,6 +28,7 @@ import MyAssetsSection, { holdingName } from './MyAssetsSection'
 import MutualFundProjection from './MutualFundProjection'
 import WealthTabs from './WealthTabs'
 import EmergencyFundTransactions, { useEfTransactions } from './EmergencyFundTransactions'
+import EfPaybackBanner from '@/components/emergency/EfPayback'
 import { DeleteSheet, HoldingSheet, LiabilitySheet, UnlinkedSheet, type LiabilityView } from './NetWorthSheets'
 import { CARD, EYEBROW, PILL_BTN, PrivacySwitch, Tap, ZoneHead, maskWith, monogram, pc, rs } from './nwUi'
 
@@ -573,6 +574,7 @@ export default function NetWorthPage() {
                   </div>
                 </div>
               )}
+              <div className="ov empty:hidden"><EfPaybackBanner compact /></div>
               <EmergencyFundTransactions transactions={efTransactions} open={efTxOpen} onToggle={() => setEfTxOpen(v => !v)} masked={masked} />
             </>) : (<>
               <div style={{ fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.45 }}>Set up your emergency fund to track your financial safety net.</div>

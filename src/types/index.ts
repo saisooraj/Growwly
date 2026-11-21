@@ -28,6 +28,8 @@ export interface Transaction {
   recurringDay?: number // day-of-month to repeat (1–31)
   transferKind?: TransferKind
   savingsVehicle?: string  // for savings transfers: which vehicle (Emergency Fund, SIP, Stocks…)
+  efPayback?: boolean      // an Emergency Fund contribution that repays an earlier withdrawal, not a regular top-up
+  efNoPayback?: boolean    // an Emergency Fund withdrawal the user chose not to count as owed back
   borrowingId?: string       // optional link to a single Borrowing record
   loanPerson?: string        // person name for loan transfers (used to reverse greedy allocation on delete)
   settledBorrowingId?: string // primary "lent" borrowing this expense offsets (first record in the allocation; kept for back-links)

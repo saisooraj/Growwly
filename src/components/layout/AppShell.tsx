@@ -12,6 +12,7 @@ import BillScannerModal from '@/components/transactions/BillScannerModal'
 import BadgeCelebrationModal from '@/components/ui/BadgeCelebrationModal'
 import OnboardingTourModal from '@/components/onboarding/OnboardingTourModal'
 import SpotlightModal from '@/components/announcements/SpotlightModal'
+import { EfPaybackPrompt } from '@/components/emergency/EfPayback'
 import { useAppStore } from '@/store/appStore'
 import { PullToRefreshContext } from './PullToRefresh'
 import LoadingDrop from '@/components/ui/LoadingDrop'
@@ -570,6 +571,7 @@ export default function AppShell({ title, children, fillPage }: Props) {
       {/* Global add-transaction modal — lives outside the scroll/transform tree */}
       <AddTransactionModal open={addOpen} onClose={() => setAddOpen(false)} />
       <BillScannerModal open={scanOpen} onClose={() => setScanOpen(false)} />
+      <EfPaybackPrompt />
 
       {/* Badge celebration — shown once per newly earned badge */}
       <BadgeCelebrationModal

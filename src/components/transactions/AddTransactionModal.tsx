@@ -6,6 +6,7 @@ import { differenceInCalendarDays, format, parseISO, subDays } from 'date-fns'
 import { addTransaction, updateTransaction, deleteTransaction, updateProject, updateSavingsGoal, addBorrowing, updateBorrowing, setUserSettings, setEmergencyFund, getRefundsOf, getUserAssets, updateAsset } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
+import { buildEfPayback } from '@/lib/efPayback'
 import { TRANSFER_KINDS, SAVINGS_VEHICLES, EMERGENCY_FUND_VEHICLE, isSavingsTransfer, buildMonthlySummary, EXPENSE_CATEGORIES, INCOME_CATEGORIES, computeProjectPaid, formatCurrencyFull } from '@/lib/utils'
 import { getCategoryDisplayName, ICON_PALETTE, buildCustomCategory } from '@/lib/categoryIcons'
 import { applyLink, removeLink, findLinkedAsset, linkedContribution, linkSummary, defaultHoldingFor, vehicleKinds, isLinkable, type LinkMode, type LinkInput } from '@/lib/holdingLinks'
@@ -183,6 +184,8 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
     editTx?.transferKind === 'savings_withdrawal' || editTx?.transferKind === 'ef_withdrawal' ? 'savings_withdrawal' : 'savings_contribution'
   )
   const [savingsVehicle, setSavingsVehicle] = useState<string>(editTx?.savingsVehicle ?? EMERGENCY_FUND_VEHICLE)
+  const [efPayback, setEfPayback] = useState(editTx?.efPayback ?? false)
+  const efOwed = useMemo(() => (open ? buildEfPayback(transactions).owed : 0), [open, transactions])
   // Gold savings transfers: grams/karat/price — synced into the Gold net-worth asset on create
   const [goldGrams, setGoldGrams]                 = useState(editTx?.goldGrams ? String(editTx.goldGrams) : '')
   const [goldKarat, setGoldKarat]                 = useState<18 | 22 | 24>(editTx?.goldKarat ?? 22)
@@ -424,6 +427,7 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
       setSavingsVehicle(src?.savingsVehicle ?? initialSavingsVehicle ?? EMERGENCY_FUND_VEHICLE)
       setDate(src?.date ?? pre?.date ?? todayStr())
     }
+    setEfPayback(src?.efPayback ?? false)
     setGoldGrams(src?.goldGrams ? String(src.goldGrams) : '')
     setGoldKarat(src?.goldKarat ?? 22)
     setGoldPricePerGram(src?.goldPricePerGram ? String(src.goldPricePerGram) : '')
@@ -883,6 +887,9 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
           : txType === 'transfer'
             ? { transferKind, category: 'Other' }
             : { category }),
+        ...(activeTab === 'savings' && savingsVehicle === EMERGENCY_FUND_VEHICLE && savingsKind === 'savings_contribution' && (efPayback || editTx?.efPayback)
+          ? { efPayback }
+          : {}),
         ...(showGoldFields && parseFloat(goldGrams) > 0
           ? { goldGrams: parseFloat(goldGrams), goldKarat, goldPricePerGram: parseFloat(goldPricePerGram) || 0 }
           : {}),
@@ -1875,6 +1882,22 @@ export default function AddTransactionModal({ open, onClose, editTx, initialTab,
                       <>
                         {isFuel && (
                           <FuelFields value={fuel} onChange={patchFuel} auto={fuelAuto} paid={Number(amount) || 0} date={date} editId={editTx?.id} />
+                        )}
+
+                        {/* A top-up can repay what was taken out of the Emergency Fund */}
+                        {isSav && savingsVehicle === EMERGENCY_FUND_VEHICLE && savingsKind === 'savings_contribution' && (efOwed >= 1 || editTx?.efPayback) && (
+                          <div style={{ paddingTop: 14 }}>
+                            <button type="button" role="switch" aria-checked={efPayback} onClick={() => setEfPayback(v => !v)}
+                              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, minHeight: 56, padding: '8px 12px', borderRadius: 14, background: 'var(--card)', border: '1px solid var(--line)', cursor: 'pointer', textAlign: 'left' }}>
+                              <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--t1)' }}>This is paying back what I took</span>
+                                <span style={{ fontSize: 12, color: 'var(--t3)' }}>{efOwed >= 1 ? `${R(efOwed)} still to put back` : 'Counts toward your payback'}</span>
+                              </span>
+                              <span aria-hidden style={{ width: 40, height: 24, borderRadius: 999, padding: 2, flex: 'none', background: efPayback ? 'var(--brand)' : 'var(--sunk)', display: 'flex', justifyContent: efPayback ? 'flex-end' : 'flex-start' }}>
+                                <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#fff' }} />
+                              </span>
+                            </button>
+                          </div>
                         )}
 
                         {/* Net Worth holding */}

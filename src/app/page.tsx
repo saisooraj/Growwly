@@ -27,6 +27,7 @@ import TrendsCard from '@/components/overview/TrendsCard'
 import { OverviewSkeleton, PrivacyBar, SetupTray, type TrayChip } from '@/components/overview/Extras'
 import { OverviewCtx, scrollToBlock, useMediaQuery, type OverviewActions } from '@/components/overview/ui'
 
+import EfPaybackBanner from '@/components/emergency/EfPayback'
 import PulseSheet from '@/components/pulse/PulseSheet'
 import MonthlyRecap from '@/components/dashboard/MonthlyRecap'
 import RecurringPromptModal from '@/components/dashboard/RecurringPromptModal'
@@ -167,6 +168,7 @@ function DashboardPage() {
           {loading ? <OverviewSkeleton /> : (
             <div className="ov-grid">
               {masked && <div className="ov-in"><PrivacyBar /></div>}
+              <div className="ov-in"><CardErrorBoundary label="Emergency fund payback"><EfPaybackBanner /></CardErrorBoundary></div>
               {layout.map(({ id, span }, i) => (
                 <div
                   key={id} id={`ov-${id}`}
