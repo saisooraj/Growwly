@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { format, parseISO } from 'date-fns'
-import { ShieldAlert, X } from 'lucide-react'
+import { ChevronDown, ShieldAlert, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
@@ -17,6 +17,7 @@ import { Amt, inr, useMask } from '@/components/overview/ui'
 import type { Transaction } from '@/types'
 
 const SEEN_KEY = 'gw-ef-payback-seen'
+const EXPANDED_KEY = 'gw-ef-payback-expanded'
 
 function readSeen(): string | null {
   try { return localStorage.getItem(SEEN_KEY) } catch { return null }
@@ -201,46 +202,60 @@ function PaybackSheet({ info, moneyIn, onClose }: { info: EfPaybackInfo; moneyIn
   )
 }
 
-/** Stays on screen until the money is back. There is deliberately no dismiss. */
+/** Stays on screen until the money is back: slim by default, with no dismiss. */
 export default function EfPaybackBanner({ compact = false }: { compact?: boolean }) {
   const info = useEfPayback()
   const { M } = useMask()
   const [open, setOpen] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  useEffect(() => {
+    try { setExpanded(localStorage.getItem(EXPANDED_KEY) === '1') } catch { /* stays collapsed */ }
+  }, [])
   if (info.owed < 1) return null
+
+  function toggle() {
+    const next = !expanded
+    setExpanded(next)
+    try { localStorage.setItem(EXPANDED_KEY, next ? '1' : '0') } catch { /* applies until reload */ }
+  }
 
   const oldest = info.open[0]?.tx
   return (
     <>
-      <div className="ov-card" style={{ background: 'var(--bad-soft)', gap: 12, ...(compact ? { padding: 14, boxShadow: 'none', border: 'none' } : {}) }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', gap: 12 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: 'var(--bad)', color: '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>
-              <ShieldAlert size={19} strokeWidth={2.2} />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--bad-ink)' }}>You owe your emergency fund</div>
-              <Amt value={info.owed} countUp className="ov-mono" style={{ display: 'block', fontSize: compact ? 22 : 28, fontWeight: 700, letterSpacing: '-0.03em', color: 'var(--bad-ink)', lineHeight: 1.2 }} />
-              {!compact && (
-                <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.45, marginTop: 4 }}>
-                  This was your safety net, not spare cash. Put it back before you spend on anything else.
-                </div>
-              )}
-              <div style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.45, marginTop: 3 }}>
+      <div className="ov-card" style={{ background: 'var(--bad-soft)', gap: 0, padding: '10px 12px', ...(compact ? { boxShadow: 'none', border: 'none' } : {}) }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={toggle} aria-expanded={expanded} aria-label={expanded ? 'Hide payback details' : 'Show payback details'} className="ov-btn"
+            style={{ flex: 1, minWidth: 0, minHeight: 44, display: 'flex', alignItems: 'center', gap: 10, padding: 0, background: 'none', color: 'inherit', textAlign: 'left' }}
+          >
+            <span style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--bad)', color: '#fff', display: 'grid', placeItems: 'center', flex: 'none' }}>
+              <ShieldAlert size={16} strokeWidth={2.2} />
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 12, fontWeight: 800, color: 'var(--bad-ink)', lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Owed to emergency fund</span>
+              <Amt value={info.owed} countUp className="ov-mono" style={{ display: 'block', fontSize: 17, fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--bad-ink)', lineHeight: 1.25 }} />
+            </span>
+            <ChevronDown size={17} style={{ flex: 'none', color: 'var(--bad-ink)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 200ms var(--ease-out)' }} />
+          </button>
+          <button onClick={() => setOpen(true)} className="ov-btn" style={{ flex: 'none', minHeight: 38, padding: '0 14px', borderRadius: 999, fontSize: 13, fontWeight: 800, background: 'var(--bad)', color: '#fff', whiteSpace: 'nowrap' }}>
+            Put back
+          </button>
+        </div>
+        {info.repaid > 0 && <div style={{ marginTop: 6 }}><Progress repaid={info.repaid} taken={info.taken} /></div>}
+        <div aria-hidden={!expanded} style={{ display: 'grid', gridTemplateRows: expanded ? '1fr' : '0fr', transition: 'grid-template-rows 220ms var(--ease-out)' }}>
+          <div style={{ minHeight: 0, overflow: 'hidden' }}>
+            <div style={{ paddingTop: 8, paddingBottom: 2, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {info.repaid > 0 && <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--ink2)' }}>{M(inr(info.repaid))} of {M(inr(info.taken))} put back</div>}
+              <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.45 }}>
+                This was your safety net, not spare cash. Put it back before you spend on anything else.
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.45 }}>
                 {oldest ? `Oldest: ${nameOf(oldest)}, ${ago(info.oldestDays)}. ` : ''}
                 {info.freeCash >= 1 ? `You have ${M(inr(info.freeCash))} free right now.` : 'No free cash right now, so the next money in goes here first.'}
               </div>
             </div>
           </div>
-          <button onClick={() => setOpen(true)} className="ov-btn" style={{ minHeight: 44, padding: '0 18px', borderRadius: 999, fontSize: 13.5, fontWeight: 800, background: 'var(--bad)', color: '#fff', whiteSpace: 'nowrap' }}>
-            {info.suggested > 0 ? `Put back ${M(inr(info.suggested))}` : 'Put it back'}
-          </button>
         </div>
-        {info.repaid > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <Progress repaid={info.repaid} taken={info.taken} />
-            <div style={{ fontSize: 12, color: 'var(--ink2)' }}>{M(inr(info.repaid))} of {M(inr(info.taken))} put back</div>
-          </div>
-        )}
       </div>
       {open && <PaybackSheet info={info} onClose={() => setOpen(false)} />}
     </>
