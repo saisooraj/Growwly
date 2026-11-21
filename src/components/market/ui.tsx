@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useId, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
+import { Fragment, useId, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import { TONE, dirOf, inr, pctOf, signedInr, signedPct } from './format'
 
 // Shared pieces of the market cards: header, tag, summary, stat grid, rows, charts and the add panel
@@ -41,8 +41,8 @@ export const cardStyle: CSSProperties = {
 
 export function CardHeader({ title, tag, cadence, refreshing, onRefresh, add, padBottom = 14, noWrap }: {
   title: string
-  tag: { label: string; bg: string; ink: string }
-  cadence: string
+  tag?: { label: string; bg: string; ink: string }
+  cadence?: string
   refreshing: boolean
   onRefresh: () => void
   add?: { open: boolean; toggle: () => void }
@@ -52,9 +52,11 @@ export function CardHeader({ title, tag, cadence, refreshing, onRefresh, add, pa
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: `16px var(--cx) ${padBottom}px` }}>
       <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-0.01em', whiteSpace: noWrap ? 'nowrap' : undefined }}>{title}</div>
-      <span style={{ font: "500 10.5px/1 'Geist Mono', monospace", letterSpacing: '.05em', textTransform: 'uppercase', padding: '4px 7px', borderRadius: 6, background: tag.bg, color: tag.ink, flex: 'none' }}>
-        {tag.label}
-      </span>
+      {tag && (
+        <span style={{ font: "500 10.5px/1 'Geist Mono', monospace", letterSpacing: '.05em', textTransform: 'uppercase', padding: '4px 7px', borderRadius: 6, background: tag.bg, color: tag.ink, flex: 'none' }}>
+          {tag.label}
+        </span>
+      )}
       <span style={{ fontSize: 12.5, color: 'var(--text-3)', flex: 1, ...clip }}>{refreshing ? 'Refreshing…' : cadence}</span>
       <button onClick={onRefresh} title="Refresh" aria-label={`Refresh ${title.toLowerCase()}`} style={{
         width: 'var(--hit)', height: 'var(--hit)', borderRadius: 10, display: 'grid', placeItems: 'center',
@@ -359,9 +361,13 @@ export function Spark({ values, color, format }: { values: number[]; color: stri
 
 export const change30 = (values: number[]) => values.length > 1 && values[0] ? (values[values.length - 1] / values[0] - 1) * 100 : 0
 
-export function AreaChart({ values, dates, color, formatY, formatValue, height, gutter, avg, avgLabel }: {
+// A point plotted on top of the line, such as a purchase at the price paid
+export interface ChartMark { index: number; value: number; color: string; label: string }
+
+export function AreaChart({ values, dates, axisDates, color, formatY, formatValue, height, gutter, avg, avgLabel, marks = [] }: {
   values: number[]
   dates: string[]
+  axisDates?: string[]
   color: string
   formatY: (v: number) => string
   formatValue: (v: number) => string
@@ -369,6 +375,7 @@ export function AreaChart({ values, dates, color, formatY, formatValue, height, 
   gutter: number
   avg?: number
   avgLabel?: string
+  marks?: ChartMark[]
 }) {
   const gid = `mkt${useId().replace(/[^a-zA-Z0-9]/g, '')}`
   const [hover, setHover] = useState<number | null>(null)
@@ -376,6 +383,19 @@ export function AreaChart({ values, dates, color, formatY, formatValue, height, 
   if (n < 2) return null
   let lo = Math.min(...values), hi = Math.max(...values)
   if (avg != null) { lo = Math.min(lo, avg); hi = Math.max(hi, avg) }
+  for (const m of marks) { lo = Math.min(lo, m.value); hi = Math.max(hi, m.value) }
+  // Follows the pointer or a tap, snapping to a nearby mark so small dots are easy to hit
+  const pick = (e: PointerEvent<HTMLDivElement>) => {
+    const box = e.currentTarget.getBoundingClientRect()
+    const raw = Math.max(0, Math.min(n - 1, Math.round((e.clientX - box.left) / box.width * (n - 1))))
+    let best = raw, gap = Math.max(1, Math.round(n * 0.02)) + 1
+    for (const m of marks) {
+      const dist = Math.abs(m.index - raw)
+      if (dist < gap) { gap = dist; best = m.index }
+    }
+    setHover(best)
+  }
+  const hoverMarks = hover !== null ? marks.filter(m => m.index === hover) : []
   const pad = (hi - lo) * 0.14 || 1
   const L = lo - pad, H = hi + pad
   const X = (i: number) => i / (n - 1) * 100
@@ -413,6 +433,12 @@ export function AreaChart({ values, dates, color, formatY, formatValue, height, 
             </span>
           </>
         )}
+        {marks.map((m, i) => (
+          <div key={i} style={{
+            position: 'absolute', left: `${X(m.index)}%`, top: `${Y(m.value)}%`, width: 9, height: 9, borderRadius: '50%',
+            background: m.color, boxShadow: '0 0 0 1.5px var(--surface)', transform: 'translate(-50%,-50%)', pointerEvents: 'none', zIndex: 2,
+          }} />
+        ))}
         {hover !== null && (
           <>
             <div style={{ position: 'absolute', top: 0, bottom: 0, left: `${hx}%`, borderLeft: '1px solid var(--text-4)' }} />
@@ -422,17 +448,17 @@ export function AreaChart({ values, dates, color, formatY, formatValue, height, 
               background: 'var(--text)', color: 'var(--bg)', borderRadius: 8, padding: '5px 8px', fontSize: 12, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 3, ...num,
             }}>
               <span style={{ opacity: 0.7 }}>{dates[hover]}</span> · <b>{formatValue(values[hover])}</b>
+              {hoverMarks.slice(0, 3).map((m, i) => <div key={i} style={{ marginTop: 2 }}>{m.label}</div>)}
+              {hoverMarks.length > 3 && <div style={{ marginTop: 2, opacity: 0.7 }}>+{hoverMarks.length - 3} more</div>}
             </div>
           </>
         )}
-        <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
-          {values.map((_, i) => <div key={i} onMouseEnter={() => setHover(i)} style={{ flex: 1 }} />)}
-        </div>
+        <div onPointerDown={pick} onPointerMove={pick} style={{ position: 'absolute', inset: 0, touchAction: 'pan-y', zIndex: 2 }} />
       </div>
       <div style={{ position: 'relative', height: 18, marginTop: 6 }}>
         {xIdx.map((i, k) => (
           <span key={k} style={{ position: 'absolute', left: `${X(i)}%`, transform: `translateX(${k === 0 ? '0' : k === 3 ? '-100%' : '-50%'})`, fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
-            {dates[i]}
+            {(axisDates ?? dates)[i]}
           </span>
         ))}
       </div>
@@ -440,11 +466,11 @@ export function AreaChart({ values, dates, color, formatY, formatValue, height, 
   )
 }
 
-export function ChartTitle({ label, change }: { label: string; change: number }) {
+export function ChartTitle({ label, change, period = 'in 30 days' }: { label: string; change: number; period?: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
       <span style={sectionLabel}>{label}</span>
-      <span style={{ fontSize: 12.5, fontWeight: 600, color: TONE[dirOf(change)].ink, ...num }}>{signedPct(change)} in 30 days</span>
+      <span style={{ fontSize: 12.5, fontWeight: 600, color: TONE[dirOf(change)].ink, ...num }}>{signedPct(change)} {period}</span>
     </div>
   )
 }

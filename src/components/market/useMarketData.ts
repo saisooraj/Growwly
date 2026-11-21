@@ -1,10 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, subYears } from 'date-fns'
 import { useAppStore } from '@/store/appStore'
 import { computeValue, type LivePrices } from '@/lib/assetValuation'
-import { legacyGoldPurchases, priceForKarat, type GoldPrices } from '@/lib/gold'
+import { goldBuys, goldPricesFrom22k, legacyGoldPurchases, priceForKarat, type GoldDayPrice } from '@/lib/gold'
 import type { Asset, GoldPurchase } from '@/types'
 import { useWatchlist, type WatchItem } from './useWatchlist'
 
@@ -361,10 +361,10 @@ export interface GoldData {
   price22kPerGram: number
   sovereign: number
   tenGram: number
-  avg30Day: number
-  signal: 'buy' | 'hold' | 'wait'
-  signalText: string
-  history: { date: string; price22k: number }[]
+  avg30Day: number | null // null when there isn't enough history for a real 30-day average
+  signal: 'buy' | 'hold' | 'wait' | null
+  signalText: string | null
+  history: GoldDayPrice[]
   updatedAt: string
 }
 
@@ -384,11 +384,7 @@ const KARATS = [24, 22, 18] as const
 
 // The user's gold at today's rates: the same per-karat rates Net Worth values it at
 function goldHoldings(assets: Asset[], data: GoldData) {
-  const prices: GoldPrices = {
-    price22k: data.price22kPerGram,
-    price24k: parseFloat((data.price22kPerGram * 24 / 22).toFixed(2)),
-    price18k: parseFloat((data.price22kPerGram * 18 / 22).toFixed(2)),
-  }
+  const prices = goldPricesFrom22k(data.price22kPerGram)
 
   let invested = 0, current = 0
   for (const a of assets) {
@@ -426,6 +422,48 @@ function goldHoldings(assets: Asset[], data: GoldData) {
     grams: lots.reduce((s, p) => s + p.grams, 0),
     byKarat, prices,
   }
+}
+
+// The long gold chart: one year, or back to the first purchase if that is older. Loads the
+// first time the History view is opened.
+export function useGoldHistory(enabled: boolean) {
+  const assets = useAppStore(s => s.assets)
+  const transactions = useAppStore(s => s.transactions)
+  const { buys, unplotted } = useMemo(() => goldBuys(assets, transactions), [assets, transactions])
+  const from = useMemo(() => {
+    const yearAgo = format(subYears(new Date(), 1), 'yyyy-MM-dd')
+    return buys.length && buys[0].date < yearAgo ? buys[0].date : yearAgo
+  }, [buys])
+
+  const [history, setHistory] = useState<GoldDayPrice[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  const loadedFrom = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!enabled || loadedFrom.current === from) return
+    let stale = false
+    setLoading(true)
+    setError(false)
+    fetch(`/api/market/gold?historyFrom=${from}`)
+      .then(res => res.json())
+      .then(json => {
+        if (stale) return
+        if (!Array.isArray(json.longHistory) || json.longHistory.length < 2) throw new Error('No gold history')
+        loadedFrom.current = from
+        setHistory(json.longHistory)
+        setLoading(false)
+      })
+      .catch(() => {
+        if (stale) return
+        setError(true)
+        setLoading(false)
+      })
+    return () => { stale = true }
+  }, [enabled, from, attempt])
+
+  return { history, loading, error, retry: () => setAttempt(a => a + 1), buys, unplotted }
 }
 
 export function useGold() {

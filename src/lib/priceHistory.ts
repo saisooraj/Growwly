@@ -27,9 +27,14 @@ export function valueBefore<T>(rows: T[], dateOf: (r: T) => string, valueOf: (r:
   return best?.value ?? null
 }
 
-// Daily closes for a Yahoo symbol over the last three months (enough for any salary cycle).
-export async function yahooDailyCloses(symbol: string): Promise<{ closes: { date: string; close: number }[]; price: number }> {
-  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=3mo`
+// Daily closes for a Yahoo symbol: the last three months (enough for any salary cycle), or
+// everything from `fromDay` when one is given.
+export async function yahooDailyCloses(symbol: string, fromDay?: string): Promise<{ closes: { date: string; close: number }[]; price: number }> {
+  // The end is whole days so repeat requests share the hourly cache
+  const span = fromDay
+    ? `period1=${Math.floor(Date.parse(`${fromDay}T00:00:00Z`) / 1000)}&period2=${(Math.floor(Date.now() / 86400000) + 1) * 86400}`
+    : 'range=3mo'
+  const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&${span}`
   const res = await fetch(url, { headers: YAHOO_HEADERS, next: { revalidate: 3600 } })
   const json = await res.json()
   const result = json.chart?.result?.[0]
