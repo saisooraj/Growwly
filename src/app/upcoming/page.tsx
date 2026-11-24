@@ -15,19 +15,29 @@ import {
   MONTHS, RECURRING_MODE, addDays, catColor, catName, derive, dueText, endOfMonth, firstOfNextMonth, makeMoney,
   monthName, nextMonth, pd, plural, r2, sh, todayIso, type Derived,
 } from '@/components/upcoming/upView'
-import { addNextMonth, deleteItem, logPayment, saveItem, settleRemainder, type NewPayment } from '@/components/upcoming/upActions'
+import {
+  addNextMonth, cancelSubscription, deleteItem, dismissSpotted, freshSubscription, linkTransactions, logPayment, nextDueOf,
+  restoreSubscription, saveItem, saveSubscription, settleRemainder, undoCancelledTrial, unlinkCharge, type NewPayment, type SubDraft,
+} from '@/components/upcoming/upActions'
+import SubscriptionsView from '@/components/upcoming/SubscriptionsView'
+import { LinkTransactionsSheet, SubscriptionFormSheet, SubscriptionSheet, blankSubDraft } from '@/components/upcoming/SubscriptionSheets'
+import { buildSubscriptions, cycleOf, findSubscription, serviceById, sortSubscriptions, spotSubscriptions, type Charge, type SpottedSubscription, type Subscription } from '@/lib/subscriptions'
 import { deleteUpcomingPayment, updateUpcomingPayment } from '@/lib/firestore'
 import { useAuth } from '@/context/AuthContext'
 import { useRefreshData } from '@/hooks/useData'
 import { useAppStore } from '@/store/appStore'
 import { usePrivacy } from '@/store/privacyStore'
-import type { UpcomingExpense, UpcomingPayment } from '@/types'
+import type { Transaction, UpcomingExpense, UpcomingPayment } from '@/types'
 
 type Sheet =
   | { kind: 'detail'; id: string }
   | { kind: 'form'; editId: string | null; draft: ItemDraft; from?: 'detail' }
-  | { kind: 'pay'; id: string; payId: string | null; from?: 'detail' }
+  | { kind: 'pay'; id: string; payId: string | null; from?: 'detail' | 'sub' }
   | { kind: 'filter' }
+  | { kind: 'sub'; id: string }                                   // any item in the subscription's chain
+  | { kind: 'subForm'; editId: string | null; draft: SubDraft; from?: 'detail' | 'sub'; spottedKey?: string; spottedTxnIds?: string[] }
+  | { kind: 'link'; id: string }                                  // link old transactions to this subscription
+type Tab = 'bills' | 'subs'
 type Toast = { msg: string; action?: { label: string; on: () => void } }
 type Segment = 'all' | 'bills' | 'income'
 
@@ -47,7 +57,7 @@ export default function UpcomingPage() {
   const desktop = useIsDesktop(), phone = !desktop
   const { user } = useAuth()
   const refresh = useRefreshData()
-  const { upcomingExpenses: items, upcomingPayments: payments, projects, emergencyFund, initialized } = useAppStore()
+  const { upcomingExpenses: items, upcomingPayments: payments, projects, emergencyFund, initialized, transactions, settings } = useAppStore()
   const masked = usePrivacy(s => s.masked)
   const toggleMask = usePrivacy(s => s.toggle)
   const hydratePrivacy = usePrivacy(s => s.hydrate)
@@ -55,6 +65,7 @@ export default function UpcomingPage() {
   const { money, signed } = useMemo(() => makeMoney(masked), [masked])
   const today = todayIso()
 
+  const [tab, setTab] = useState<Tab>('bills')
   const [segment, setSegment] = useState<Segment>('all')
   const [view, setView] = useState<'pending' | 'settled'>('pending')
   const [q, setQ] = useState('')
@@ -93,6 +104,28 @@ export default function UpcomingPage() {
 
   // ── Derived data ──────────────────────────────────────────────────────────
   const all = useMemo(() => items.map(it => derive(it, payments, today)), [items, payments, today])
+  const subs = useMemo(() => sortSubscriptions(buildSubscriptions(items, payments, today)), [items, payments, today])
+  const spotted = useMemo(() => spotSubscriptions(transactions, items, settings?.dismissedSubscriptions, today), [transactions, items, settings?.dismissedSubscriptions, today])
+  const subAlerts = subs.filter(s => s.status.kind === 'trial-ended' || s.status.kind === 'due' || (s.status.kind === 'trial' && s.status.days <= 3)).length + spotted.length
+
+  // ?tab=subscriptions opens the Subscriptions tab; &sub=<id> also opens that subscription (links from Overview)
+  const linked = useRef(false)
+  useEffect(() => {
+    if (linked.current || !initialized) return
+    linked.current = true
+    const q = new URLSearchParams(window.location.search)
+    if (q.get('tab') === 'subscriptions') setTab('subs')
+    const id = q.get('sub')
+    if (id && items.some(i => i.id === id)) { setTab('subs'); setSheet({ kind: 'sub', id }); setSheetKey(k => k + 1) }
+  }, [initialized, items])
+  const switchTab = (t: Tab) => {
+    setTab(t)
+    const url = new URL(window.location.href)
+    if (t === 'subs') url.searchParams.set('tab', 'subscriptions'); else url.searchParams.delete('tab')
+    url.searchParams.delete('sub')
+    window.history.replaceState(null, '', url.toString())
+    window.scrollTo(0, 0)
+  }
   const ql = q.trim().toLowerCase()
   const filtering = !!ql || cats.length > 0
   const ok = (x: Derived) =>
@@ -154,14 +187,23 @@ export default function UpcomingPage() {
     kind: 'form', editId: null,
     draft: { flow: 'expense', label: '', amount: '', date: firstOfNextMonth(today), cat: 'Food & Dining', project: null, notes: '', recurring: false, ...pre },
   })
-  const openEdit = (it: UpcomingExpense) => open({
+  const subDraftOf = (it: UpcomingExpense): SubDraft => ({
+    label: it.label, amount: String(it.amount), cycle: cycleOf(it), trial: !!it.isTrial, date: it.dueDate,
+    cat: it.category ?? 'Subscriptions', notes: it.notes ?? '',
+  })
+  const openSubAdd = (pre?: Partial<SubDraft>, spotted?: SpottedSubscription) => open({ kind: 'subForm', editId: null, draft: blankSubDraft(firstOfNextMonth(today), pre), spottedKey: spotted?.key, spottedTxnIds: spotted?.txnIds })
+  const openEdit = (it: UpcomingExpense) => it.isSubscription ? open({ kind: 'subForm', editId: it.id, from: 'detail', draft: subDraftOf(it) }) : open({
     kind: 'form', editId: it.id, from: 'detail',
     draft: { flow: it.flowType ?? 'expense', label: it.label, amount: String(it.amount), date: it.dueDate, cat: it.category ?? 'Other', project: it.projectId ?? null, notes: it.notes ?? '', recurring: !!it.isRecurring },
   })
   const closeSheet = useCallback(() => {
-    setSheet(s => (s && (s.kind === 'pay' || s.kind === 'form') && s.from === 'detail'
-      ? (() => { const id = s.kind === 'pay' ? s.id : s.editId; return id && items.some(i => i.id === id) ? { kind: 'detail', id } as Sheet : null })()
-      : null))
+    setSheet(s => {
+      if (s?.kind === 'link') return items.some(i => i.id === s.id) ? { kind: 'sub', id: s.id } : null
+      if (!s || !(s.kind === 'pay' || s.kind === 'form' || s.kind === 'subForm') || !s.from) return null
+      const id = s.kind === 'pay' ? s.id : s.editId
+      if (!id || !items.some(i => i.id === id)) return null
+      return s.from === 'sub' ? { kind: 'sub', id } : { kind: 'detail', id }
+    })
   }, [items])
 
   async function run(fn: () => Promise<void>) {
@@ -173,16 +215,18 @@ export default function UpcomingPage() {
   async function addNext(it: UpcomingExpense) {
     if (!user || it.nextUpcomingId) return
     await run(async () => {
-      const next = nextMonth(it.dueDate)
+      const next = nextDueOf(it)
       await addNextMonth(user.uid, it)
       await refresh()
-      notify(`${monthName(next)}’s ${it.label} added · ${sh(next)}`)
+      notify(it.isSubscription ? `Next ${it.label} renewal added · ${sh(next)}` : `${monthName(next)}’s ${it.label} added · ${sh(next)}`)
     })
   }
 
-  // A recurring item just got settled: add next month's now, or offer to
+  // A recurring item just got settled: add next month's now, or offer to.
+  // Subscriptions renew on their own, so their next renewal is always added.
   async function afterSettle(it: UpcomingExpense): Promise<{ extra: string; action?: Toast['action'] }> {
-    if (!user || !it.isRecurring || it.nextUpcomingId) return { extra: '' }
+    if (!user || !it.isRecurring || it.nextUpcomingId || it.cancelledOn) return { extra: '' }
+    if (it.isSubscription) { await addNextMonth(user.uid, it); return { extra: ` · renews ${sh(nextDueOf(it))}` } }
     const m = monthName(nextMonth(it.dueDate))
     if (RECURRING_MODE === 'auto') { await addNextMonth(user.uid, it); return { extra: ` · ${m}’s added` } }
     return { extra: '', action: { label: `Add ${m}’s`, on: () => { setToastState(null); addNext(it) } } }
@@ -199,14 +243,14 @@ export default function UpcomingPage() {
     })
   }
 
-  const onSavePay = (x: Derived, p: NewPayment, from?: 'detail') => {
+  const onSavePay = (x: Derived, p: NewPayment, from?: 'detail' | 'sub') => {
     if (!user) return
     run(async () => {
       await logPayment(user.uid, x.it, p, emergencyFund)
       let msg = x.inc ? 'Receipt logged' : 'Payment logged', action: Toast['action']
       if (x.it.amount > 0 && r2(x.paid + p.amount) >= x.it.amount) { const r = await afterSettle(x.it); msg += r.extra; action = r.action }
       await refresh()
-      setSheet(from === 'detail' ? { kind: 'detail', id: x.it.id } : null)
+      setSheet(from === 'detail' ? { kind: 'detail', id: x.it.id } : from === 'sub' ? { kind: 'sub', id: x.it.id } : null)
       notify(msg, action)
     })
   }
@@ -225,6 +269,68 @@ export default function UpcomingPage() {
       const r = await afterSettle(x.it)
       await refresh()
       notify(`Marked settled${r.extra}`, r.action)
+    })
+  }
+
+  // ── Subscriptions ──
+  const onSaveSub = (f: SubDraft, linkPast: boolean) => {
+    if (!user || sheet?.kind !== 'subForm') return
+    const { editId, from, spottedKey, spottedTxnIds } = sheet
+    run(async () => {
+      const id = await saveSubscription(user.uid, editId, f)
+      // Tracked from a suggestion: don't suggest it again even if the name was changed
+      if (spottedKey) await dismissSpotted(user.uid, spottedKey, settings?.dismissedSubscriptions)
+      const past = linkPast && !editId ? transactions.filter(t => spottedTxnIds?.includes(t.id)) : []
+      if (past.length) await linkTransactions(user.uid, freshSubscription(user.uid, id, f, today), past, payments)
+      await refresh()
+      if (editId) { setSheet(from === 'detail' ? { kind: 'detail', id: editId } : { kind: 'sub', id: editId }); notify('Updated') }
+      else {
+        setSheet(null); if (tab !== 'subs') switchTab('subs')
+        notify(`${f.label.trim()} added${past.length ? ` · ${plural(past.length, 'past charge')} linked` : f.trial ? ' · we’ll flag it before the trial ends' : ''}`)
+      }
+    })
+  }
+  const onLinkTxns = (sub: Subscription, txns: Transaction[]) => {
+    if (!user) return
+    run(async () => {
+      await linkTransactions(user.uid, sub, txns, payments)
+      await refresh()
+      setSheet({ kind: 'sub', id: sub.head.id })
+      notify(`${plural(txns.length, 'charge')} linked to ${sub.head.label}`)
+    })
+  }
+  const onUnlink = (sub: Subscription, c: Charge) => {
+    run(async () => {
+      await unlinkCharge(c, sub)
+      await refresh()
+      // Reopen through a renewal that's still there: a past charge made by linking is deleted with it
+      const keep = sub.chain.find(i => i.id !== c.upcomingId)
+      setSheet(keep ? { kind: 'sub', id: keep.id } : null)
+      notify('Unlinked · the expense stays in Transactions')
+    })
+  }
+  const onCancelSub = (sub: Subscription) => {
+    if (!user) return
+    run(async () => {
+      const { removed } = await cancelSubscription(sub, today)
+      await refresh()
+      setSheet(null)
+      const label = sub.head.label
+      notify(`${label} marked cancelled`, removed ? { label: 'Undo', on: () => { setToastState(null); run(async () => { await undoCancelledTrial(user.uid, removed); await refresh(); notify(`${label} is back`) }) } } : undefined)
+    })
+  }
+  const onRestoreSub = (sub: Subscription) => {
+    if (!user) return
+    run(async () => { await restoreSubscription(user.uid, sub); await refresh(); notify(`${sub.head.label} restored`) })
+  }
+  const onTrack = (sp: SpottedSubscription) => openSubAdd({
+    label: sp.service?.name ?? sp.label, amount: String(sp.amount), date: sp.nextDate, cat: sp.category,
+  }, sp)
+  const onDismiss = (sp: SpottedSubscription) => {
+    if (!user) return
+    run(async () => {
+      await dismissSpotted(user.uid, sp.key, settings?.dismissedSubscriptions)
+      notify(`${sp.label} won’t be suggested again`)
     })
   }
 
@@ -291,8 +397,8 @@ export default function UpcomingPage() {
   const settledRow = (x: Derived, i: number, compact: boolean) => {
     const { it, paid, inc } = x
     const over = r2(paid - it.amount)
-    const nm = monthName(nextMonth(it.dueDate))
-    const canNext = RECURRING_MODE === 'prompt' && !!it.isRecurring && !it.nextUpcomingId
+    const nm = monthName(nextDueOf(it))
+    const canNext = RECURRING_MODE === 'prompt' && !!it.isRecurring && !it.nextUpcomingId && !it.cancelledOn
     const nxt = it.nextUpcomingId ? findItem(it.nextUpcomingId) : undefined
     const sub = `${inc ? 'Received' : 'Paid'} ${sh(x.last ?? it.dueDate)}`
     const amountTxt = (inc ? '+' : '') + money(paid > it.amount ? paid : it.amount)
@@ -364,11 +470,33 @@ export default function UpcomingPage() {
     }
   } else if (sheet?.kind === 'filter') {
     sheetEl = <FilterSheet segs={segs} cats={catOpts} shown={shownCount} onClear={clearFilters} onClose={closeSheet} />
+  } else if (sheet?.kind === 'sub') {
+    const sub = findSubscription(subs, sheet.id)
+    if (sub) {
+      sheetEl = (
+        <SubscriptionSheet
+          key={sheetKey} desktop={desktop} sub={sub} money={money} onClose={closeSheet}
+          onEdit={() => open({ kind: 'subForm', editId: sub.head.id, from: 'sub', draft: subDraftOf(sub.head) })}
+          onPay={() => open({ kind: 'pay', id: sub.head.id, payId: null, from: 'sub' })}
+          onAddNext={() => addNext(sub.head)}
+          onCancel={() => onCancelSub(sub)} onRestore={() => onRestoreSub(sub)}
+          onLink={() => open({ kind: 'link', id: sub.head.id })} onUnlink={c => onUnlink(sub, c)}
+        />
+      )
+    }
+  } else if (sheet?.kind === 'subForm') {
+    const pastCount = sheet.spottedTxnIds ? transactions.filter(t => sheet.spottedTxnIds!.includes(t.id)).length : 0
+    sheetEl = <SubscriptionFormSheet key={sheetKey} desktop={desktop} editing={!!sheet.editId} initial={sheet.draft} today={today} saving={saving} pastCount={pastCount} onClose={closeSheet} onSave={onSaveSub} />
+  } else if (sheet?.kind === 'link') {
+    const sub = findSubscription(subs, sheet.id)
+    if (sub) sheetEl = <LinkTransactionsSheet key={sheetKey} desktop={desktop} sub={sub} transactions={transactions} payments={payments} money={money} saving={saving} onClose={closeSheet} onLink={txns => onLinkTxns(sub, txns)} />
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
   const iconBtn: CSSProperties = { position: 'relative', width: 44, height: 44, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }
-  const showControls = hasItems && !loading
+  const showControls = hasItems && !loading && tab === 'bills'
+  const subsTab = tab === 'subs'
+  const addNow = () => (subsTab ? openSubAdd() : openAdd())
   const catLabel = cats.length ? cats.length === 1 ? catName(cats[0]) : `${cats.length} categories` : 'Category'
   const caughtUpSub = setl.length
     ? `Nothing pending${segment === 'bills' ? ' in bills' : segment === 'income' ? ' in expected income' : ''}. ${setl.length} settled items are kept below.`
@@ -383,7 +511,7 @@ export default function UpcomingPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h1 style={{ margin: 0, fontSize: phone ? 26 : 28, fontWeight: 600, letterSpacing: '-0.02em', lineHeight: 1.15 }}>Upcoming</h1>
-                {desktop && <div style={{ color: 'var(--text-3)', marginTop: 3 }}>Bills, EMIs and money you expect, in the order they land.</div>}
+                {desktop && <div style={{ color: 'var(--text-3)', marginTop: 3 }}>{subsTab ? 'Every subscription, when it renews and what it costs you.' : 'Bills, EMIs and money you expect, in the order they land.'}</div>}
               </div>
               {masked && (
                 <button onClick={toggleMask} aria-label="Show amounts" style={{ display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 10px', borderRadius: 99, border: 0, background: 'var(--surface-2)', color: 'var(--text-2)', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', cursor: 'pointer' }}>
@@ -391,8 +519,8 @@ export default function UpcomingPage() {
                 </button>
               )}
               {desktop && (
-                <button onClick={() => openAdd()} style={{ height: 42, padding: '0 18px', borderRadius: 12, border: 0, background: 'var(--brand)', color: 'var(--on-brand)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', boxShadow: '0 6px 16px -8px var(--brand)' }}>
-                  <Plus size={17} strokeWidth={2.2} />Add item
+                <button onClick={addNow} style={{ height: 42, padding: '0 18px', borderRadius: 12, border: 0, background: 'var(--brand)', color: 'var(--on-brand)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', boxShadow: '0 6px 16px -8px var(--brand)' }}>
+                  <Plus size={17} strokeWidth={2.2} />{subsTab ? 'Add subscription' : 'Add item'}
                 </button>
               )}
               {phone && showControls && (
@@ -405,7 +533,15 @@ export default function UpcomingPage() {
                 </>
               )}
             </div>
-            {phone && searchOpen && hasItems && (
+            <div role="tablist" aria-label="Upcoming views" style={{ display: 'flex', gap: 22, marginTop: -2, marginBottom: showControls ? 0 : phone ? -12 : -14 }}>
+              {([['bills', 'Bills', 0], ['subs', 'Subscriptions', subAlerts]] as const).map(([k, label, badge]) => (
+                <button key={k} role="tab" aria-selected={tab === k} onClick={() => switchTab(k)} style={{ height: 40, padding: 0, border: 0, background: 'transparent', borderBottom: `2.5px solid ${tab === k ? 'var(--text)' : 'transparent'}`, color: tab === k ? 'var(--text)' : 'var(--text-3)', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 }}>
+                  {label}
+                  {badge > 0 && <span style={{ minWidth: 18, height: 18, padding: '0 5px', borderRadius: 99, background: 'var(--bad)', color: '#fff', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>{badge}</span>}
+                </button>
+              ))}
+            </div>
+            {phone && searchOpen && hasItems && !subsTab && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 44, padding: '0 12px', borderRadius: 12, border: '1px solid var(--border-strong)', background: 'var(--surface)' }}>
                 <Search size={17} strokeWidth={2} style={{ flexShrink: 0, color: 'var(--text-3)' }} />
                 <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search bills, income, notes" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', fontSize: 16 }} />
@@ -480,7 +616,16 @@ export default function UpcomingPage() {
             </div>
           )}
 
-          {!loading && !hasItems && (
+          {!loading && subsTab && (
+            <SubscriptionsView
+              desktop={desktop} subs={subs} payments={payments} spotted={spotted} today={today} money={money} stickyTop={headH + 16}
+              onOpen={id => open({ kind: 'sub', id })}
+              onAdd={serviceId => { const svc = serviceId ? serviceById(serviceId) : undefined; openSubAdd(svc ? { label: svc.name, cat: svc.category } : undefined) }}
+              onTrack={onTrack} onDismiss={onDismiss}
+            />
+          )}
+
+          {!loading && !subsTab && !hasItems && (
             <div style={{ ...card, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 14, padding: phone ? '44px 20px' : '72px 24px' }}>
               <div style={{ width: 64, height: 64, borderRadius: 20, background: 'var(--brand-soft)', color: 'var(--brand-ink)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Calendar size={28} strokeWidth={1.8} /></div>
               <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.01em' }}>Nothing planned yet</div>
@@ -497,7 +642,7 @@ export default function UpcomingPage() {
             </div>
           )}
 
-          {!loading && hasItems && (
+          {!loading && !subsTab && hasItems && (
             <div style={{ display: 'grid', gridTemplateColumns: desktop ? 'minmax(0,1fr) 288px' : 'minmax(0,1fr)', gap: 24, alignItems: 'start' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 22, minWidth: 0 }}>
 
@@ -644,7 +789,7 @@ export default function UpcomingPage() {
 
       {/* Phone: add sits beside the AI button, so nothing stacks */}
       {phone && (
-        <button onClick={() => openAdd()} aria-label="Add upcoming item" className="up" style={{ position: 'fixed', zIndex: 40, right: 74, bottom: 'calc(max(100px, calc(env(safe-area-inset-bottom, 0px) + 80px)) - 5px)', width: 60, height: 60, borderRadius: 20, border: 0, background: 'var(--brand)', color: 'var(--on-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 12px 26px -10px var(--brand)' }}>
+        <button onClick={addNow} aria-label={subsTab ? 'Add subscription' : 'Add upcoming item'} className="up" style={{ position: 'fixed', zIndex: 40, right: 74, bottom: 'calc(max(100px, calc(env(safe-area-inset-bottom, 0px) + 80px)) - 5px)', width: 60, height: 60, borderRadius: 20, border: 0, background: 'var(--brand)', color: 'var(--on-brand)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 12px 26px -10px var(--brand)' }}>
           <Plus size={26} strokeWidth={2.2} />
         </button>
       )}

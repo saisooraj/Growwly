@@ -170,6 +170,7 @@ export interface UserSettings {
   dashboardHiddenCards?: string[]                 // dashboard block IDs the user turned off
   vehicles?: Vehicle[]                             // for fuel fill-ups
   defaultVehicleId?: string                        // preselected on the next fill-up — the last one used
+  dismissedSubscriptions?: string[]                // keys of spotted subscriptions the user said aren't subscriptions
   dateOfBirth?: string                             // YYYY-MM-DD, used by the FIRE planner for ages
   fire?: FireSettings                              // FIRE planner assumptions and overrides
   createdAt: string
@@ -288,8 +289,17 @@ export interface UpcomingExpense {
   notes?: string
   isRecurring?: boolean
   nextUpcomingId?: string  // next month's copy of a recurring item, once added
+  // Subscriptions: a recurring item shown on Upcoming's Subscriptions tab. Each renewal is its own
+  // item, chained through nextUpcomingId; the newest one carries the subscription's current state.
+  isSubscription?: boolean
+  billingCycle?: BillingCycle  // how often it renews (default monthly)
+  isTrial?: boolean            // this item's due date is when a free trial ends and the first charge lands
+  cancelledOn?: string         // YYYY-MM-DD the subscription was stopped; no more renewals are added
+  pastCharge?: boolean         // a past renewal added by linking an old transaction to the subscription
   createdAt: string
 }
+
+export type BillingCycle = 'monthly' | 'quarterly' | 'yearly'
 
 export interface MonthlySummary {
   month: string

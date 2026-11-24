@@ -14,6 +14,7 @@ import { getDueRecurring, isRecurringSkipped } from '@/components/dashboard/Recu
 import { isRecapPending } from '@/components/dashboard/MonthlyRecap'
 import { Pill, inr, pct, scrollToBlock, tone, useIsDesk, useMask, useOverviewActions, type Tone } from './ui'
 import { computeStreak, restorableDays } from './streak'
+import { spotSubscriptions } from '@/lib/subscriptions'
 
 // Claude mode, supplied on the laptop only by a wrapper (the same shape as Smart Insights' AI mode)
 export interface AttentionAi {
@@ -154,12 +155,38 @@ function useRuleItems(M: (s: string) => string): Item[] {
       const left = u.amount - (paid.get(u.id) ?? 0)
       if (left <= 0) continue
       const days = differenceInCalendarDays(parseISO(u.dueDate), today0)
+      // A free trial gets a 3-day heads-up, worded around the trial rather than a bill
+      if (u.isTrial && u.isSubscription) {
+        if (days > 3) continue
+        const ended = days < 0
+        items.push({
+          id: `trial-${u.id}`, sev: days <= 1 ? 'bad' : 'warn', icon: '!',
+          title: ended ? `${u.label} trial ended` : `${u.label} trial ends ${days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`}`,
+          detail: ended ? `${M(inr(left))} is charged from ${format(parseISO(u.dueDate), 'MMM d')} · keep or cancel` : `Then ${M(inr(left))} is charged · cancel before ${format(parseISO(u.dueDate), 'EEE, MMM d')} if you don’t want it`,
+          cta: 'Review', href: `/upcoming?tab=subscriptions&sub=${u.id}`,
+        })
+        continue
+      }
       if (days > 2) continue
       const when = days < 0 ? 'is overdue' : days === 0 ? 'due today' : days === 1 ? 'due tomorrow' : 'due in 2 days'
       items.push({
         id: `due-${u.id}`, sev: days <= 1 ? 'bad' : 'warn', icon: '!',
         title: `${u.label} ${when}`, detail: `${M(inr(left))} · ${format(parseISO(u.dueDate), 'EEE, MMM d')}`,
         cta: 'Pay', action: () => actions.openPay(u.id),
+      })
+    }
+
+    // Subscriptions found in recent spending that aren't tracked yet
+    const spotted = spotSubscriptions(transactions, upcoming, settings?.dismissedSubscriptions, format(today0, 'yyyy-MM-dd'))
+    if (spotted.length > 0) {
+      const one = spotted[0]
+      items.push({
+        id: 'subs-spotted', sev: 'info', icon: '↻',
+        title: spotted.length === 1 ? `New subscription spotted: ${one.label}` : `${spotted.length} new subscriptions spotted`,
+        detail: spotted.length === 1
+          ? `${M(inr(one.amount))} on ${format(parseISO(one.lastDate), 'MMM d')} · track its renewals`
+          : `${spotted.slice(0, 3).map(s => s.label).join(', ')}${spotted.length > 3 ? ` and ${spotted.length - 3} more` : ''}`,
+        cta: 'Review', href: '/upcoming?tab=subscriptions',
       })
     }
 

@@ -9,7 +9,8 @@ import {
   RECURRING_MODE, catColor, catName, dueText, endOfMonth, firstOfNextMonth, fullD, monthName, nextMonth,
   num, plainInr, r2, sh, words, wsh, type Derived,
 } from './upView'
-import type { NewPayment } from './upActions'
+import { nextDueOf, type NewPayment } from './upActions'
+import { CYCLE_LABEL, cycleOf } from '@/lib/subscriptions'
 
 type Money = (n: number, round?: boolean) => string
 
@@ -100,7 +101,8 @@ export function DetailSheet({ desktop, x, money, masked, projects, nextItem, onC
   else { status = 'Planned'; stBg = 'var(--surface-2)'; stInk = 'var(--text-2)' }
 
   const dueV = settled ? `${inc ? 'Received' : 'Paid'} ${sh(x.last ?? it.dueDate)}` : dueText(x, it.dueDate, false)
-  const nxDate = nextMonth(it.dueDate), nxM = monthName(nxDate)
+  const nxDate = nextDueOf(it), nxM = monthName(nxDate)
+  const cyc = it.isSubscription ? CYCLE_LABEL[cycleOf(it)] : 'Monthly'
   const metas: { k: string; v: string; sub?: string; color?: string; dot?: string }[] = [
     { k: inc ? 'Expected' : 'Due', v: dueV, sub: settled ? `Was due ${fullD(it.dueDate)}` : fullD(it.dueDate), color: overdue ? 'var(--bad-ink)' : soon ? 'var(--warn-ink)' : undefined },
     { k: 'Category', v: catName(it.category), dot: catColor(it.category) },
@@ -108,8 +110,9 @@ export function DetailSheet({ desktop, x, money, masked, projects, nextItem, onC
   if (it.projectId) metas.push({ k: 'Project', v: projects.find(p => p.id === it.projectId)?.name ?? 'Project' })
   if (it.isRecurring) metas.push({
     k: 'Repeats',
-    v: nextItem ? `Monthly · Next added for ${sh(nextItem.dueDate)}` : `Monthly · Next: ${sh(nxDate)}`,
-    sub: RECURRING_MODE === 'auto' ? `${nxM}’s item is added automatically once this one is settled.` : `When this is settled, we’ll offer to add ${nxM}’s.`,
+    v: nextItem ? `${cyc} · Next added for ${sh(nextItem.dueDate)}` : `${cyc} · Next: ${sh(nxDate)}`,
+    sub: it.isSubscription ? 'A subscription: the next renewal is added once this one is paid.'
+      : RECURRING_MODE === 'auto' ? `${nxM}’s item is added automatically once this one is settled.` : `When this is settled, we’ll offer to add ${nxM}’s.`,
   })
   if (it.notes) metas.push({ k: 'Notes', v: it.notes })
 
@@ -133,7 +136,7 @@ export function DetailSheet({ desktop, x, money, masked, projects, nextItem, onC
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 12, fontWeight: 600, padding: '3px 9px', borderRadius: 99, background: stBg, color: stInk }}>{status}</span>
-            {it.isRecurring && <span style={{ fontSize: 12, fontWeight: 500, padding: '3px 9px', borderRadius: 99, background: 'var(--surface-2)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 5 }}><Repeat size={12} strokeWidth={2} />Monthly</span>}
+            {it.isRecurring && <span style={{ fontSize: 12, fontWeight: 500, padding: '3px 9px', borderRadius: 99, background: 'var(--surface-2)', color: 'var(--text-2)', display: 'flex', alignItems: 'center', gap: 5 }}><Repeat size={12} strokeWidth={2} />{cyc}</span>}
             <span style={{ fontSize: 12, fontWeight: 500, padding: '3px 9px', borderRadius: 99, background: 'var(--surface-2)', color: 'var(--text-2)' }}>{inc ? 'Income' : 'Expense'}</span>
           </div>
           <div style={{ fontSize: 19, fontWeight: 600, letterSpacing: '-0.01em', textWrap: 'pretty', overflowWrap: 'anywhere', lineHeight: 1.3 } as CSSProperties}>{it.label}</div>
